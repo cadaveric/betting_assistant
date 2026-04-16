@@ -1,0 +1,1725 @@
+[
+  {
+    "createdAt": "2026-04-14T13:21:14.285887+00:00",
+    "competition": "CL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 40,
+    "awayTeamId": 85,
+    "homeTeam": "Liverpool",
+    "awayTeam": "Paris Saint Germain",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 46,
+    "probabilities": {
+      "home": 46,
+      "draw": 25,
+      "away": 29
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 82,
+      "over25": 58,
+      "over35": 35,
+      "btts": 62,
+      "htOver05": 74,
+      "cornersOver85": 24,
+      "cardsOver25": 71
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "5d021894a3fce638",
+    "actual": {
+      "home": 0,
+      "away": 2,
+      "outcome": "A",
+      "utcDate": "2026-04-14T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.7782
+    },
+    "gradedAt": "2026-04-15T05:57:17.831980+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:22:04.387231+00:00",
+    "competition": "CL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 530,
+    "awayTeamId": 529,
+    "homeTeam": "Atletico Madrid",
+    "awayTeam": "Barcelona",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 55,
+    "probabilities": {
+      "home": 23,
+      "draw": 22,
+      "away": 55
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 2
+    },
+    "markets": {
+      "over15": 88,
+      "over25": 70,
+      "over35": 48,
+      "btts": 65,
+      "htOver05": 80,
+      "cornersOver85": 75,
+      "cardsOver25": 65
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "859ea627943448e2",
+    "actual": {
+      "home": 1,
+      "away": 2,
+      "outcome": "A",
+      "utcDate": "2026-04-14T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": true,
+      "brier": 0.3038
+    },
+    "gradedAt": "2026-04-15T05:57:18.027245+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:23:06.216953+00:00",
+    "competition": "ELC",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1355,
+    "awayTeamId": 57,
+    "homeTeam": "Portsmouth",
+    "awayTeam": "Ipswich",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 65,
+    "probabilities": {
+      "home": 11,
+      "draw": 24,
+      "away": 65
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 2
+    },
+    "markets": {
+      "over15": 68,
+      "over25": 41,
+      "over35": 20,
+      "btts": 36,
+      "htOver05": 65,
+      "cornersOver85": 18,
+      "cardsOver25": 58
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Estimated",
+      "cls": "weak",
+      "hint": "standings/form model with limited rich data"
+    },
+    "status": "graded",
+    "id": "8a7042186d202469",
+    "actual": {
+      "home": 2,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-14T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 1.2722
+    },
+    "gradedAt": "2026-04-15T05:57:18.443143+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:23:37.837951+00:00",
+    "competition": "ELC",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 41,
+    "awayTeamId": 67,
+    "homeTeam": "Southampton",
+    "awayTeam": "Blackburn",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 73,
+    "probabilities": {
+      "home": 73,
+      "draw": 20,
+      "away": 7
+    },
+    "predictedScore": {
+      "home": 2,
+      "away": 0
+    },
+    "markets": {
+      "over15": 78,
+      "over25": 53,
+      "over35": 31,
+      "btts": 42,
+      "htOver05": 72,
+      "cornersOver85": 67,
+      "cardsOver25": 88
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "8baf317562fd00f1",
+    "actual": {
+      "home": 3,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-14T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.1178
+    },
+    "gradedAt": "2026-04-15T05:57:18.641346+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:24:02.939813+00:00",
+    "competition": "ELC",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1355,
+    "awayTeamId": 57,
+    "homeTeam": "Portsmouth",
+    "awayTeam": "Ipswich",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 69,
+    "probabilities": {
+      "home": 9,
+      "draw": 22,
+      "away": 69
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 2
+    },
+    "markets": {
+      "over15": 69,
+      "over25": 41,
+      "over35": 21,
+      "btts": 30,
+      "htOver05": 65,
+      "cornersOver85": 21,
+      "cardsOver25": 94
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "207fbfcc79ab135e",
+    "actual": {
+      "home": 2,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-14T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 1.3526
+    },
+    "gradedAt": "2026-04-15T05:57:18.836806+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:24:59.253653+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 37,
+    "awayTeamId": 43,
+    "homeTeam": "Huddersfield",
+    "awayTeam": "Cardiff",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 64,
+    "probabilities": {
+      "home": 19,
+      "draw": 17,
+      "away": 64
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 3
+    },
+    "markets": {
+      "over15": 96,
+      "over25": 86,
+      "over35": 71,
+      "btts": 73,
+      "htOver05": 89,
+      "cornersOver85": 100,
+      "cardsOver25": 58
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "e7e6403692ad33f1",
+    "actual": {
+      "home": 1,
+      "away": 1,
+      "outcome": "D",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 1.1346
+    },
+    "gradedAt": "2026-04-15T05:57:19.285556+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:25:17.572843+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 68,
+    "awayTeamId": 1368,
+    "homeTeam": "Bolton",
+    "awayTeam": "Stevenage",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 58,
+    "probabilities": {
+      "home": 22,
+      "draw": 20,
+      "away": 58
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 2
+    },
+    "markets": {
+      "over15": 67,
+      "over25": 39,
+      "over35": 19,
+      "btts": 23,
+      "htOver05": 64,
+      "cornersOver85": 11,
+      "cardsOver25": 50
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "9b206edb8c5fda31",
+    "actual": {
+      "home": 5,
+      "away": 1,
+      "outcome": "H",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.9848
+    },
+    "gradedAt": "2026-04-15T05:57:19.403877+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:25:35.249197+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1373,
+    "awayTeamId": 1374,
+    "homeTeam": "Leyton Orient",
+    "awayTeam": "Mansfield Town",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 41,
+    "probabilities": {
+      "home": 33,
+      "draw": 26,
+      "away": 41
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 79,
+      "over25": 54,
+      "over35": 32,
+      "btts": 59,
+      "htOver05": 72,
+      "cornersOver85": 56,
+      "cardsOver25": 88
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "c587e70baf97bdd1",
+    "actual": {
+      "home": 0,
+      "away": 0,
+      "outcome": "D",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.8246
+    },
+    "gradedAt": "2026-04-15T05:57:19.507894+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:26:02.586981+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1351,
+    "awayTeamId": 747,
+    "homeTeam": "Port Vale",
+    "awayTeam": "Barnsley",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 41,
+    "probabilities": {
+      "home": 41,
+      "draw": 25,
+      "away": 34
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 77,
+      "over25": 51,
+      "over35": 29,
+      "btts": 53,
+      "htOver05": 70,
+      "cornersOver85": 20,
+      "cardsOver25": 68
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "7cca2c7ee497fa09",
+    "actual": {
+      "home": 0,
+      "away": 0,
+      "outcome": "D",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.8462
+    },
+    "gradedAt": "2026-04-15T05:57:19.612722+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:26:17.641556+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 61,
+    "awayTeamId": 73,
+    "homeTeam": "Wigan",
+    "awayTeam": "Rotherham",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 55,
+    "probabilities": {
+      "home": 55,
+      "draw": 23,
+      "away": 22
+    },
+    "predictedScore": {
+      "home": 2,
+      "away": 1
+    },
+    "markets": {
+      "over15": 85,
+      "over25": 64,
+      "over35": 41,
+      "btts": 63,
+      "htOver05": 77,
+      "cornersOver85": 69,
+      "cardsOver25": 58
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "53bb024b4c631c89",
+    "actual": {
+      "home": 3,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.3038
+    },
+    "gradedAt": "2026-04-15T05:57:19.722368+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:26:44.392550+00:00",
+    "competition": "L2",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1819,
+    "awayTeamId": 1349,
+    "homeTeam": "Barrow",
+    "awayTeam": "Oldham",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 49,
+    "probabilities": {
+      "home": 24,
+      "draw": 27,
+      "away": 49
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 70,
+      "over25": 43,
+      "over35": 22,
+      "btts": 48,
+      "htOver05": 66,
+      "cornersOver85": 43,
+      "cardsOver25": 46
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "d048015aef5ee754",
+    "actual": {
+      "home": 3,
+      "away": 2,
+      "outcome": "H",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.8906
+    },
+    "gradedAt": "2026-04-15T05:57:19.958551+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:27:04.996906+00:00",
+    "competition": "L2",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1372,
+    "awayTeamId": 1347,
+    "homeTeam": "Cheltenham",
+    "awayTeam": "Gillingham",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "A",
+    "confidence": 47,
+    "probabilities": {
+      "home": 22,
+      "draw": 31,
+      "away": 47
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 1
+    },
+    "markets": {
+      "over15": 47,
+      "over25": 20,
+      "over35": 7,
+      "btts": 27,
+      "htOver05": 50,
+      "cornersOver85": 19,
+      "cardsOver25": 58
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "d3b71e83ac7b564a",
+    "actual": {
+      "home": 2,
+      "away": 1,
+      "outcome": "H",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.9254
+    },
+    "gradedAt": "2026-04-15T05:57:20.065546+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:27:20.680429+00:00",
+    "competition": "L2",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1345,
+    "awayTeamId": 1365,
+    "homeTeam": "Chesterfield",
+    "awayTeam": "Grimsby",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "D",
+    "confidence": 40,
+    "probabilities": {
+      "home": 35,
+      "draw": 40,
+      "away": 25
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 0
+    },
+    "markets": {
+      "over15": 20,
+      "over25": 5,
+      "over35": 1,
+      "btts": 11,
+      "htOver05": 31,
+      "cornersOver85": 5,
+      "cardsOver25": 58
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "766188f87106b2fe",
+    "actual": {
+      "home": 2,
+      "away": 1,
+      "outcome": "H",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.645
+    },
+    "gradedAt": "2026-04-15T05:57:20.170764+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:27:43.014231+00:00",
+    "competition": "L2",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1361,
+    "awayTeamId": 1360,
+    "homeTeam": "Colchester",
+    "awayTeam": "Accrington ST",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 51,
+    "probabilities": {
+      "home": 51,
+      "draw": 27,
+      "away": 22
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 0
+    },
+    "markets": {
+      "over15": 54,
+      "over25": 26,
+      "over35": 10,
+      "btts": 28,
+      "htOver05": 55,
+      "cornersOver85": 77,
+      "cardsOver25": 76
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "5025dac208153029",
+    "actual": {
+      "home": 2,
+      "away": 1,
+      "outcome": "H",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.3614
+    },
+    "gradedAt": "2026-04-15T05:57:20.278849+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:50:09.629782+00:00",
+    "competition": "SB",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1687,
+    "awayTeamId": 899,
+    "homeTeam": "Catanzaro",
+    "awayTeam": "Modena",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 49,
+    "probabilities": {
+      "home": 49,
+      "draw": 23,
+      "away": 28
+    },
+    "predictedScore": {
+      "home": 2,
+      "away": 1
+    },
+    "markets": {
+      "over15": 87,
+      "over25": 66,
+      "over35": 44,
+      "btts": 65,
+      "htOver05": 78,
+      "cornersOver85": 61,
+      "cardsOver25": 97
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "25289dffc8ba1783",
+    "actual": {
+      "home": 2,
+      "away": 2,
+      "outcome": "D",
+      "utcDate": "2026-04-14T17:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.9114
+    },
+    "gradedAt": "2026-04-15T05:56:08.901963+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:52:32.469873+00:00",
+    "competition": "SC1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 4668,
+    "awayTeamId": 1388,
+    "homeTeam": "Airdrie United",
+    "awayTeam": "Dunfermline",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 37,
+    "probabilities": {
+      "home": 37,
+      "draw": 28,
+      "away": 35
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 67,
+      "over25": 39,
+      "over35": 19,
+      "btts": 46,
+      "htOver05": 64,
+      "cornersOver85": 32,
+      "cardsOver25": 53
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Estimated",
+      "cls": "weak",
+      "hint": "standings/form model with limited rich data"
+    },
+    "status": "graded",
+    "id": "85a5a58a9f61565c",
+    "actual": {
+      "home": 2,
+      "away": 2,
+      "outcome": "D",
+      "utcDate": "2026-04-14T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.7778
+    },
+    "gradedAt": "2026-04-15T05:57:20.507307+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T13:52:53.252137+00:00",
+    "competition": "SC1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 258,
+    "awayTeamId": 901,
+    "homeTeam": "ST Johnstone",
+    "awayTeam": "Partick",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 48,
+    "probabilities": {
+      "home": 48,
+      "draw": 30,
+      "away": 22
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 0
+    },
+    "markets": {
+      "over15": 53,
+      "over25": 25,
+      "over35": 10,
+      "btts": 32,
+      "htOver05": 54,
+      "cornersOver85": 13,
+      "cardsOver25": 53
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Estimated",
+      "cls": "weak",
+      "hint": "standings/form model with limited rich data"
+    },
+    "status": "pending",
+    "id": "925017eaedf26779"
+  },
+  {
+    "createdAt": "2026-04-14T13:59:07.437698+00:00",
+    "competition": "NOR",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 325,
+    "awayTeamId": 321,
+    "homeTeam": "Tromso",
+    "awayTeam": "Lillestrom",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 58,
+    "probabilities": {
+      "home": 58,
+      "draw": 25,
+      "away": 17
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 75,
+      "over25": 48,
+      "over35": 26,
+      "btts": 50,
+      "htOver05": 69,
+      "cornersOver85": 83,
+      "cardsOver25": 44
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "81a1d74eff14d6ae",
+    "actual": {
+      "home": 0,
+      "away": 0,
+      "outcome": "D",
+      "utcDate": "2026-04-15T17:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.9278
+    },
+    "gradedAt": "2026-04-15T21:10:27.148794+00:00"
+  },
+  {
+    "createdAt": "2026-04-14T14:29:28.360819+00:00",
+    "competition": "FL2",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1298,
+    "awayTeamId": 99,
+    "homeTeam": "Le Mans",
+    "awayTeam": "Clermont Foot",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "pick": "H",
+    "confidence": 73,
+    "probabilities": {
+      "home": 73,
+      "draw": 15,
+      "away": 12
+    },
+    "predictedScore": {
+      "home": 4,
+      "away": 1
+    },
+    "markets": {
+      "over15": 98,
+      "over25": 91,
+      "over35": 80,
+      "btts": 77,
+      "htOver05": 92,
+      "cornersOver85": 100,
+      "cardsOver25": 47
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "23a8449bb14ac92a"
+  },
+  {
+    "createdAt": "2026-04-15T06:13:05.860083+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1333,
+    "awayTeamId": 4686,
+    "homeTeam": "AFC Wimbledon",
+    "awayTeam": "Stockport County",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "A",
+    "confidence": 71,
+    "probabilities": {
+      "home": 10,
+      "draw": 19,
+      "away": 71
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 2
+    },
+    "markets": {
+      "over15": 81,
+      "over25": 62,
+      "over35": 36,
+      "btts": 30,
+      "htOver05": 72,
+      "cornersOver85": 20,
+      "cardsOver25": 47
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "a76a0ef96391a9d0",
+    "actual": {
+      "home": 0,
+      "away": 2,
+      "outcome": "A",
+      "utcDate": "2026-04-15T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": true,
+      "brier": 0.1302
+    },
+    "gradedAt": "2026-04-15T21:10:27.874061+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T06:15:40.805312+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1359,
+    "awayTeamId": 1337,
+    "homeTeam": "Luton",
+    "awayTeam": "Northampton",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "H",
+    "confidence": 82,
+    "probabilities": {
+      "home": 82,
+      "draw": 18,
+      "away": 0
+    },
+    "predictedScore": {
+      "home": 2,
+      "away": 0
+    },
+    "markets": {
+      "over15": 83,
+      "over25": 64,
+      "over35": 38,
+      "btts": 34,
+      "htOver05": 74,
+      "cornersOver85": 40,
+      "cardsOver25": 53
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Estimated",
+      "cls": "weak",
+      "hint": "standings/form model with limited rich data"
+    },
+    "status": "graded",
+    "id": "99f3f5c6386bebf7",
+    "actual": {
+      "home": 2,
+      "away": 1,
+      "outcome": "H",
+      "utcDate": "2026-04-15T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.0648
+    },
+    "gradedAt": "2026-04-15T21:10:28.020168+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T06:17:18.850155+00:00",
+    "competition": "SPL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 2939,
+    "awayTeamId": 2934,
+    "homeTeam": "Al-Nassr",
+    "awayTeam": "Al-Ettifaq",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "H",
+    "confidence": 85,
+    "probabilities": {
+      "home": 85,
+      "draw": 15,
+      "away": 0
+    },
+    "predictedScore": {
+      "home": 3,
+      "away": 0
+    },
+    "markets": {
+      "over15": 94,
+      "over25": 83,
+      "over35": 59,
+      "btts": 40,
+      "htOver05": 83,
+      "cornersOver85": 80,
+      "cardsOver25": 46
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "6bb2a3d130040e5e",
+    "actual": {
+      "home": 1,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-15T18:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.045
+    },
+    "gradedAt": "2026-04-15T21:10:28.361496+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T06:20:21.905101+00:00",
+    "competition": "CL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 42,
+    "awayTeamId": 228,
+    "homeTeam": "Arsenal",
+    "awayTeam": "Sporting CP",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "H",
+    "confidence": 83,
+    "probabilities": {
+      "home": 83,
+      "draw": 13,
+      "away": 4
+    },
+    "predictedScore": {
+      "home": 4,
+      "away": 0
+    },
+    "markets": {
+      "over15": 94,
+      "over25": 85,
+      "over35": 61,
+      "btts": 25,
+      "htOver05": 84,
+      "cornersOver85": 100,
+      "cardsOver25": 11
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "a5c10390809087cc",
+    "actual": {
+      "home": 0,
+      "away": 0,
+      "outcome": "D",
+      "utcDate": "2026-04-15T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 1.4474
+    },
+    "gradedAt": "2026-04-15T21:10:28.636381+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T06:20:45.766523+00:00",
+    "competition": "CL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 157,
+    "awayTeamId": 541,
+    "homeTeam": "Bayern M\u00fcnchen",
+    "awayTeam": "Real Madrid",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "H",
+    "confidence": 64,
+    "probabilities": {
+      "home": 64,
+      "draw": 19,
+      "away": 17
+    },
+    "predictedScore": {
+      "home": 4,
+      "away": 3
+    },
+    "markets": {
+      "over15": 99,
+      "over25": 99,
+      "over35": 98,
+      "btts": 95,
+      "htOver05": 97,
+      "cornersOver85": 100,
+      "cardsOver25": 95
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "a3aedebea4885508",
+    "actual": {
+      "home": 4,
+      "away": 3,
+      "outcome": "H",
+      "utcDate": "2026-04-15T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": true,
+      "brier": 0.1946
+    },
+    "gradedAt": "2026-04-15T21:10:28.793529+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T08:34:19.234805+00:00",
+    "competition": "KCL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 2767,
+    "awayTeamId": 2766,
+    "homeTeam": "Ulsan Hyundai FC",
+    "awayTeam": "FC Seoul",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "H",
+    "confidence": 39,
+    "probabilities": {
+      "home": 39,
+      "draw": 33,
+      "away": 28
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 1
+    },
+    "markets": {
+      "over15": 53,
+      "over25": 30,
+      "over35": 12,
+      "btts": 31,
+      "htOver05": 52,
+      "cornersOver85": 2,
+      "cardsOver25": 53
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Estimated",
+      "cls": "weak",
+      "hint": "standings/form model with limited rich data"
+    },
+    "status": "graded",
+    "id": "26de51307bf82515",
+    "actual": {
+      "home": 1,
+      "away": 4,
+      "outcome": "A",
+      "utcDate": "2026-04-15T10:30:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.7794
+    },
+    "gradedAt": "2026-04-15T12:32:29.654594+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T08:47:42.381633+00:00",
+    "competition": "PL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 55,
+    "awayTeamId": 36,
+    "homeTeam": "Brentford",
+    "awayTeam": "Fulham",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "H",
+    "confidence": 60,
+    "probabilities": {
+      "home": 60,
+      "draw": 23,
+      "away": 17
+    },
+    "predictedScore": {
+      "home": 2,
+      "away": 1
+    },
+    "markets": {
+      "over15": 88,
+      "over25": 72,
+      "over35": 45,
+      "btts": 59,
+      "htOver05": 77,
+      "cornersOver85": 24,
+      "cardsOver25": 85
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "53cb7cb5e4fbe30b"
+  },
+  {
+    "createdAt": "2026-04-15T10:37:23.808010+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1333,
+    "awayTeamId": 4686,
+    "homeTeam": "AFC Wimbledon",
+    "awayTeam": "Stockport County",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 16,
+      "rho": -0.146
+    },
+    "pick": "A",
+    "confidence": 73,
+    "probabilities": {
+      "home": 10,
+      "draw": 17,
+      "away": 73
+    },
+    "predictedScore": {
+      "home": 0,
+      "away": 3
+    },
+    "markets": {
+      "over15": 89,
+      "over25": 74,
+      "over35": 48,
+      "btts": 37,
+      "htOver05": 78,
+      "cornersOver85": 40,
+      "cardsOver25": 47
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "6e761478719cd351",
+    "actual": {
+      "home": 0,
+      "away": 2,
+      "outcome": "A",
+      "utcDate": "2026-04-15T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.1118
+    },
+    "gradedAt": "2026-04-15T21:10:29.428834+00:00"
+  },
+  {
+    "createdAt": "2026-04-15T13:24:28.176424+00:00",
+    "competition": "CL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 42,
+    "awayTeamId": 228,
+    "homeTeam": "Arsenal",
+    "awayTeam": "Sporting CP",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 17,
+      "rho": -0.14
+    },
+    "pick": "H",
+    "confidence": 84,
+    "probabilities": {
+      "home": 84,
+      "draw": 12,
+      "away": 4
+    },
+    "predictedScore": {
+      "home": 4,
+      "away": 0
+    },
+    "markets": {
+      "over15": 96,
+      "over25": 85,
+      "over35": 61,
+      "btts": 25,
+      "htOver05": 84,
+      "cornersOver85": 100,
+      "cardsOver25": 11
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "graded",
+    "id": "8692fae4eeee5752",
+    "actual": {
+      "home": 0,
+      "away": 0,
+      "outcome": "D",
+      "utcDate": "2026-04-15T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 1.4816
+    },
+    "gradedAt": "2026-04-15T21:10:29.577649+00:00"
+  },
+  {
+    "createdAt": "2026-04-16T05:59:33.029663+00:00",
+    "competition": "L1",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1350,
+    "awayTeamId": 1351,
+    "homeTeam": "Peterborough",
+    "awayTeam": "Port Vale",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 25,
+      "rho": -0.153
+    },
+    "pick": "H",
+    "confidence": 45,
+    "probabilities": {
+      "home": 45,
+      "draw": 28,
+      "away": 27
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 73,
+      "over25": 45,
+      "over35": 24,
+      "btts": 51,
+      "htOver05": 68,
+      "cornersOver85": 57,
+      "cardsOver25": 72
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "6e7348c345283f3a"
+  },
+  {
+    "createdAt": "2026-04-16T06:03:50.296527+00:00",
+    "competition": "L2",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 1832,
+    "awayTeamId": 1370,
+    "homeTeam": "Bromley",
+    "awayTeam": "Cambridge United",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 25,
+      "rho": -0.153
+    },
+    "pick": "A",
+    "confidence": 41,
+    "probabilities": {
+      "home": 29,
+      "draw": 30,
+      "away": 41
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 63,
+      "over25": 33,
+      "over35": 15,
+      "btts": 42,
+      "htOver05": 61,
+      "cornersOver85": 31,
+      "cardsOver25": 0
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "a6495ef9182e2e8a"
+  },
+  {
+    "createdAt": "2026-04-16T06:07:42.593173+00:00",
+    "competition": "EL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 538,
+    "awayTeamId": 160,
+    "homeTeam": "Celta Vigo",
+    "awayTeam": "SC Freiburg",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 25,
+      "rho": -0.153
+    },
+    "pick": "H",
+    "confidence": 46,
+    "probabilities": {
+      "home": 46,
+      "draw": 31,
+      "away": 23
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 0
+    },
+    "markets": {
+      "over15": 56,
+      "over25": 26,
+      "over35": 11,
+      "btts": 33,
+      "htOver05": 57,
+      "cornersOver85": 28,
+      "cardsOver25": 88
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "e0e8d43591b40aa1"
+  },
+  {
+    "createdAt": "2026-04-16T06:08:25.906744+00:00",
+    "competition": "EL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 65,
+    "awayTeamId": 212,
+    "homeTeam": "Nottingham Forest",
+    "awayTeam": "FC Porto",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 25,
+      "rho": -0.153
+    },
+    "pick": "A",
+    "confidence": 41,
+    "probabilities": {
+      "home": 30,
+      "draw": 29,
+      "away": 41
+    },
+    "predictedScore": {
+      "home": 1,
+      "away": 1
+    },
+    "markets": {
+      "over15": 72,
+      "over25": 44,
+      "over35": 23,
+      "btts": 50,
+      "htOver05": 68,
+      "cornersOver85": 59,
+      "cardsOver25": 80
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "ef905e1976eb70b4"
+  },
+  {
+    "createdAt": "2026-04-16T06:08:59.777258+00:00",
+    "competition": "EL",
+    "fixtureId": null,
+    "kickoff": null,
+    "homeTeamId": 66,
+    "awayTeamId": 500,
+    "homeTeam": "Aston Villa",
+    "awayTeam": "Bologna",
+    "model": "balanced",
+    "homeAdvantage": "1.1",
+    "tuning": {
+      "applied": true,
+      "graded": 25,
+      "rho": -0.153
+    },
+    "pick": "H",
+    "confidence": 71,
+    "probabilities": {
+      "home": 71,
+      "draw": 24,
+      "away": 5
+    },
+    "predictedScore": {
+      "home": 2,
+      "away": 0
+    },
+    "markets": {
+      "over15": 70,
+      "over25": 41,
+      "over35": 21,
+      "btts": 35,
+      "htOver05": 66,
+      "cornersOver85": 86,
+      "cardsOver25": 64
+    },
+    "odds": {},
+    "fixtureIntel": null,
+    "dataQuality": {
+      "label": "Stats only",
+      "cls": "warn",
+      "hint": "team stats available, odds missing"
+    },
+    "status": "pending",
+    "id": "96991c728319f0ed"
+  }
+]

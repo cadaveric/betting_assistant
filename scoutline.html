@@ -821,6 +821,7 @@ html,body{overflow-x:hidden}
   <button class="nav-btn" onclick="nav('teamstats')">Team Stats</button>
   <button class="nav-btn" onclick="nav('odds')">Odds</button>
   <button class="nav-btn" onclick="nav('advisor')">&#9733; Advisor</button>
+  <button class="nav-btn" onclick="nav('history')">History</button>
 </div>
 
 <div id="pg-fixtures" class="page on">
@@ -941,11 +942,19 @@ html,body{overflow-x:hidden}
   </div>
 </div>
 
+<div id="pg-history" class="page">
+  <div id="hist-body"><div class="loading-state">Loading prediction history...</div></div>
+</div>
+
 <script>
 const BASE='/api';
 let lg='PL', leagueVersion=0, standRows=[], eloMap={}, formMap={}, teamStatsMap={}, h2hCache={}, oddsCache={}, playersCache={};
 let teamStatsMeta={}, oddsMeta={};
 let resChart=null, predChart=null;
+let modelCalibration={
+  global:{ready:false,graded:0,bias:{home:0,draw:0,away:0},homeAdvMultiplier:1,dcRho:-0.13,oddsWeightScale:1,richDataWeightScale:1,over25Adjustment:0},
+  leagues:{}
+};
 
 // ── API ──────────────────────────────────────────────────────────────────────
 async function api(path){
@@ -953,11 +962,31 @@ async function api(path){
   if(!r.ok) throw new Error('API '+r.status+' '+path);
   return r.json();
 }
+async function postJson(path,payload){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(!r.ok) throw new Error('POST '+r.status+' '+path);
+  return r.json();
+}
 function prefetch(comp){ fetch('/prefetch/'+comp).catch(()=>{}); }
+async function loadModelCalibration(){
+  try{
+    const d=await fetch('/predictions?refresh=1&limit=500').then(r=>r.json());
+    const tuning=d.summary?.tuning;
+    if(tuning) modelCalibration=tuning;
+  }catch(e){}
+}
+function activeTune(){
+  const fallback={ready:false,graded:0,bias:{home:0,draw:0,away:0},homeAdvMultiplier:1,dcRho:-0.13,oddsWeightScale:1,richDataWeightScale:1,over25Adjustment:0};
+  const leagueTune=modelCalibration.leagues?.[lg];
+  if(leagueTune?.ready)return {...fallback,...leagueTune,bias:{...fallback.bias,...(leagueTune.bias||{})}};
+  const globalTune=modelCalibration.global;
+  if(globalTune?.ready)return {...fallback,...globalTune,bias:{...fallback.bias,...(globalTune.bias||{})}};
+  return fallback;
+}
 async function refreshLeague(){
   const reqLeague=lg;
   const active=document.querySelector('.nav-btn.on');
-  const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor'];
+  const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
   const targetPage=pages[[...document.querySelectorAll('.nav-btn')].indexOf(active)]||'fixtures';
   await fetch('/refresh/'+reqLeague).catch(()=>{});
   if(reqLeague!==lg)return;
@@ -1067,7 +1096,7 @@ async function loadTeamStats(showProgress){
     const r=await fetch('/teamstats/'+reqLeague);
     const d=await r.json();
     if(reqLeague!==lg||reqVersion!==leagueVersion)return false;
-    teamStatsMeta[reqLeague]=d.cache||{};
+    teamStatsMeta[reqLeague]={...(d.cache||{}),leagueAverages:d.leagueAverages||{},referees:d.referees||{}};
     if(d.teams && Object.keys(d.teams).length>0){
       Object.entries(d.teams).forEach(([tid,s])=>{
         teamStatsMap[tid]={
@@ -1077,6 +1106,13 @@ async function loadTeamStats(showProgress){
           foulPg:s.foulPg, possPg:s.possPg, savesPg:s.savesPg,
           shotsPg:s.shotsPg,
           goalsPg:s.goals_pg, goalsAgPg:s.goals_ag_pg,
+          gfHomePg:s.gfHomePg, gaHomePg:s.gaHomePg, gfAwayPg:s.gfAwayPg, gaAwayPg:s.gaAwayPg,
+          xgHomePg:s.xgHomePg, xgaHomePg:s.xgaHomePg, xgAwayPg:s.xgAwayPg, xgaAwayPg:s.xgaAwayPg,
+          sotHomePg:s.sotHomePg, sotAwayPg:s.sotAwayPg,
+          cornHomePg:s.cornHomePg, cornAwayPg:s.cornAwayPg,
+          cornAllowedHomePg:s.cornAllowedHomePg, cornAllowedAwayPg:s.cornAllowedAwayPg,
+          ycHomePg:s.ycHomePg, ycAwayPg:s.ycAwayPg,
+          last5:s.last5||{}, refCardPg:s.refCardPg,
           htGpg:s.htGpg, pensPg:s.pensPg,
           hasRealData:s.hasStats,
           avgOddsHW:s.avgOddsHW, avgOddsAW:s.avgOddsAW, avgOddsDr:s.avgOddsDr,
@@ -1115,8 +1151,9 @@ const LG_CORN={PL:4.5,ELC:4.6,PD:4.2,BL1:4.8,SA:4.0,FL1:4.1,PPL:4.3,DED:4.7,CL:4
 const LG_CARD={PL:1.4,ELC:1.5,PD:1.7,BL1:1.3,SA:1.6,FL1:1.5,PPL:1.5,DED:1.3,CL:1.3,EL:1.3,EC:1.3,WC:1.3,BSA:1.6};
 
 // ── DEEP PREDICT v2 ───────────────────────────────────────────────────────────
-function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
+function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fixtureIntel){
   const h=standRows[hi], a=standRows[ai];
+  const tune=activeTune();
   const hElo=eloMap[h.team.id]||1500, aElo=eloMap[a.team.id]||1500;
   const hF=formMap[h.team.id]||{pct:0.5,games:1,formGFpg:1.2,formGApg:1.2,results:[]};
   const aF=formMap[a.team.id]||{pct:0.5,games:1,formGFpg:1.2,formGApg:1.2,results:[]};
@@ -1125,7 +1162,13 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
   const lgAvg=liveLgAvg||LG_AVG[lg]||1.35;
   const lgSot=liveLgSot||LG_SOT[lg]||4.8;
   const lgConv=LG_CONV[lg]||0.285;
-  const haBase=parseFloat(haBoost)||1.1;
+  const haBase=(parseFloat(haBoost)||1.1)*(tune.homeAdvMultiplier||1);
+  const hL5=hS?.last5||{}, aL5=aS?.last5||{};
+  const hVenueXg=hS?.xgHomePg??hS?.xgPg, aVenueXga=aS?.xgaAwayPg??aS?.xgaPg;
+  const aVenueXg=aS?.xgAwayPg??aS?.xgPg, hVenueXga=hS?.xgaHomePg??hS?.xgaPg;
+  const hVenueSot=hS?.sotHomePg??hS?.sotPg, aVenueSot=aS?.sotAwayPg??aS?.sotPg;
+  const hRecentAtt=hL5.xgPg??hL5.gfPg, aRecentAtt=aL5.xgPg??aL5.gfPg;
+  const hRecentDef=hL5.xgaPg??hL5.gaPg, aRecentDef=aL5.xgaPg??aL5.gaPg;
   let ha=haBase;
   if(hS?.gfHomePg&&hS?.gfAwayPg&&hS.gfAwayPg>0)
     ha=Math.max(1.0,Math.min(1.35,haBase*0.5+(hS.gfHomePg/hS.gfAwayPg)*0.5));
@@ -1140,28 +1183,51 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
   const aDef=aCpg*0.6+(aF.formGApg||aCpg)*0.4;
 
   let hLam,aLam,hDataBadge,aDataBadge;
-  if(hS?.xgPg!=null&&hS.xgPg>0&&aS?.xgaPg!=null){
-    hLam=Math.max(0.3,Math.min(4.5,(hS.xgPg*0.65+hAtt*0.35)/lgAvg*(aS.xgaPg/lgAvg)*lgAvg*ha));
-    hDataBadge='xG';
-  } else if(hS?.sotPg!=null&&hS.sotPg>0){
-    hLam=Math.max(0.3,Math.min(4.5,(hS.sotPg/lgSot)*(aDef/lgConv/lgSot)*lgAvg*ha));
+  if(hVenueXg!=null&&hVenueXg>0&&aVenueXga!=null){
+    const richScale=tune.richDataWeightScale||1;
+    const xgW=Math.max(0.42,Math.min(0.60,0.50*richScale));
+    const recentW=0.25;
+    const tableW=Math.max(0.15,1-xgW-recentW);
+    const attackBlend=hVenueXg*xgW+(hRecentAtt||hVenueXg)*recentW+hAtt*tableW;
+    const defBlend=aVenueXga*(0.70*richScale)+(aRecentDef||aVenueXga)*(1-(0.70*richScale));
+    hLam=Math.max(0.3,Math.min(4.5,(attackBlend/lgAvg)*(defBlend/lgAvg)*lgAvg*ha));
+    hDataBadge=hS?.xgHomePg!=null||aS?.xgaAwayPg!=null?'home/away xG':'xG';
+  } else if(hVenueSot!=null&&hVenueSot>0){
+    hLam=Math.max(0.3,Math.min(4.5,(hVenueSot/lgSot)*(aDef/lgConv/lgSot)*lgAvg*ha));
     hDataBadge='SoT';
   } else {
     hLam=Math.max(0.3,Math.min(4.5,(hAtt/lgAvg)*(aDef/lgAvg)*lgAvg*ha));
     hDataBadge='est.';
   }
-  if(aS?.xgPg!=null&&aS.xgPg>0&&hS?.xgaPg!=null){
-    aLam=Math.max(0.2,Math.min(4.5,(aS.xgPg*0.65+aAtt*0.35)/lgAvg*(hS.xgaPg/lgAvg)*lgAvg));
-    aDataBadge='xG';
-  } else if(aS?.sotPg!=null&&aS.sotPg>0){
-    aLam=Math.max(0.2,Math.min(4.5,(aS.sotPg/lgSot)*(hDef/lgConv/lgSot)*lgAvg));
+  if(aVenueXg!=null&&aVenueXg>0&&hVenueXga!=null){
+    const richScale=tune.richDataWeightScale||1;
+    const xgW=Math.max(0.42,Math.min(0.60,0.50*richScale));
+    const recentW=0.25;
+    const tableW=Math.max(0.15,1-xgW-recentW);
+    const attackBlend=aVenueXg*xgW+(aRecentAtt||aVenueXg)*recentW+aAtt*tableW;
+    const defBlend=hVenueXga*(0.70*richScale)+(hRecentDef||hVenueXga)*(1-(0.70*richScale));
+    aLam=Math.max(0.2,Math.min(4.5,(attackBlend/lgAvg)*(defBlend/lgAvg)*lgAvg));
+    aDataBadge=aS?.xgAwayPg!=null||hS?.xgaHomePg!=null?'home/away xG':'xG';
+  } else if(aVenueSot!=null&&aVenueSot>0){
+    aLam=Math.max(0.2,Math.min(4.5,(aVenueSot/lgSot)*(hDef/lgConv/lgSot)*lgAvg));
     aDataBadge='SoT';
   } else {
     aLam=Math.max(0.2,Math.min(4.5,(aAtt/lgAvg)*(hDef/lgAvg)*lgAvg));
     aDataBadge='est.';
   }
+  const injuries=fixtureIntel?.injuries||[];
+  const hMissing=injuries.filter(x=>x.teamId===h.team.id).length;
+  const aMissing=injuries.filter(x=>x.teamId===a.team.id).length;
+  if(hMissing||aMissing){
+    const hCut=Math.max(0.86,1-hMissing*0.035);
+    const aCut=Math.max(0.86,1-aMissing*0.035);
+    hLam*=hCut;
+    aLam*=aCut;
+    hDataBadge=hMissing?hDataBadge+' +inj':hDataBadge;
+    aDataBadge=aMissing?aDataBadge+' +inj':aDataBadge;
+  }
 
-  const dcMat=buildDCMatrix(hLam,aLam,-0.13);
+  const dcMat=buildDCMatrix(hLam,aLam,tune.dcRho||-0.13);
   const {hW:hWinDC,dr:drawDC,aW:aWinDC}=dcProbs(dcMat);
   const eloExp=1/(1+Math.pow(10,(aElo-hElo)/400));
   const hFF=hF.pct!=null?hF.pct:0.5;
@@ -1182,9 +1248,13 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
     const raw=1/bH+1/bD+1/bA;
     implH=(1/bH)/raw; implD=(1/bD)/raw; implA=(1/bA)/raw; hasOdds=true;
   }
+  const moveH=oddsMove?.home?Math.max(-0.03,Math.min(0.03,-oddsMove.home*0.015)):0;
+  const moveD=oddsMove?.draw?Math.max(-0.02,Math.min(0.02,-oddsMove.draw*0.010)):0;
+  const moveA=oddsMove?.away?Math.max(-0.03,Math.min(0.03,-oddsMove.away*0.015)):0;
 
   let wH,wD,wA;
-  const oddsW=hasOdds?0.15:0, poisW=hasOdds?0.35:0.45;
+  const oddsW=hasOdds?Math.max(0.08,Math.min(0.22,0.15*(tune.oddsWeightScale||1))):0;
+  const poisW=hasOdds?Math.max(0.30,0.50-oddsW):0.45;
   if(modelW==='form'){
     wH=hWinDC*0.35+hFF*0.35+eloExp*0.2+Math.max(0,h2hFactor)*0.1;
     wA=aWinDC*0.35+(1-hFF)*0.3+(1-eloExp)*0.2+Math.max(0,-h2hFactor)*0.15;
@@ -1196,9 +1266,9 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
   } else if(modelW==='poisson'){
     wH=hWinDC; wD=drawDC; wA=aWinDC;
   } else {
-    wH=hWinDC*poisW+eloExp*0.2+hFF*0.15+Math.max(0,h2hFactor)*0.1+(hasOdds?implH*oddsW:0);
-    wA=aWinDC*poisW+(1-eloExp)*0.15+(1-hFF)*0.15+Math.max(0,-h2hFactor)*0.1+(hasOdds?implA*oddsW:0);
-    wD=drawDC*0.55+(hasOdds?implD*0.15:0)+0.07;
+    wH=hWinDC*poisW+eloExp*0.2+hFF*0.15+Math.max(0,h2hFactor)*0.1+(hasOdds?implH*oddsW:0)+moveH+(tune.bias?.home||0);
+    wA=aWinDC*poisW+(1-eloExp)*0.15+(1-hFF)*0.15+Math.max(0,-h2hFactor)*0.1+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
+    wD=drawDC*0.55+(hasOdds?implD*oddsW:0)+0.07+moveD+(tune.bias?.draw||0);
   }
   const tot=wH+wD+wA;
   const pH=Math.round(wH/tot*100), pD=Math.round(wD/tot*100), pA=100-pH-pD;
@@ -1226,6 +1296,13 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
   }));
   pOver15=Math.round(pOver15*100); pOver25=Math.round(pOver25*100);
   pOver35=Math.round(pOver35*100); pOver45=Math.round(pOver45*100); pBTTS=Math.round(pBTTS*100);
+  if(tune.over25Adjustment){
+    const adj=tune.over25Adjustment;
+    pOver25=Math.max(1,Math.min(99,Math.round(pOver25+adj)));
+    pOver15=Math.max(1,Math.min(99,Math.round(pOver15+adj*0.45)));
+    pOver35=Math.max(1,Math.min(99,Math.round(pOver35+adj*0.55)));
+    pOver45=Math.max(1,Math.min(99,Math.round(pOver45+adj*0.35)));
+  }
   const pHCS=Math.round(Math.exp(-aLam)*100), pACS=Math.round(Math.exp(-hLam)*100);
 
   const hLamHT=hLam*0.45,aLamHT=aLam*0.45,totHT=hLamHT+aLamHT;
@@ -1237,12 +1314,17 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
   const htT=htH+htD+htA;
   const pHT_H=Math.round(htH/htT*100),pHT_D=Math.round(htD/htT*100),pHT_A=100-pHT_H-pHT_D;
 
-  const hCL=(hS?.cornPg||LG_CORN[lg]||4.5)*(hLam/lgAvg);
-  const aCL=(aS?.cornPg||LG_CORN[lg]||4.0)*(aLam/lgAvg);
+  const hCornBase=hS?.cornHomePg??hS?.last5?.cornPg??hS?.cornPg??LG_CORN[lg]??4.5;
+  const aCornBase=aS?.cornAwayPg??aS?.last5?.cornPg??aS?.cornPg??LG_CORN[lg]??4.0;
+  const hCL=hCornBase*(hLam/lgAvg);
+  const aCL=aCornBase*(aLam/lgAvg);
   const totCorn=hCL+aCL;
   const pCorn85=Math.round((1-[0,1,2,3,4,5,6,7,8].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
   const pCorn105=Math.round((1-[0,1,2,3,4,5,6,7,8,9,10].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
-  const hCard=hS?.ycardPg||LG_CARD[lg]||1.4, aCard=aS?.ycardPg||LG_CARD[lg]||1.4;
+  const hCardBase=hS?.ycHomePg??hS?.last5?.ycardPg??hS?.ycardPg??LG_CARD[lg]??1.4;
+  const aCardBase=aS?.ycAwayPg??aS?.last5?.ycardPg??aS?.ycardPg??LG_CARD[lg]??1.4;
+  const refBoost=Math.max(0.85,Math.min(1.25,((hS?.refCardPg||aS?.refCardPg||((LG_CARD[lg]||1.4)*2))/((LG_CARD[lg]||1.4)*2))));
+  const hCard=hCardBase*refBoost, aCard=aCardBase*refBoost;
   const totCard=hCard+aCard;
   const pCard25=Math.round((1-[0,1,2].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
   const pCard35=Math.round((1-[0,1,2,3].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
@@ -1254,6 +1336,7 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
     pH,pD,pA,conf,scoreH,scoreA,
     hLam:hLam.toFixed(2),aLam:aLam.toFixed(2),
     hDataBadge,aDataBadge,hasOdds,ha:ha.toFixed(2),
+    tuningApplied:!!tune.ready,tuningGraded:tune.graded||0,tuningRho:tune.dcRho||-0.13,
     bH:bH||null,bD:bD||null,bA:bA||null,
     implH:Math.round(implH*100),implD:Math.round(implD*100),implA:Math.round(implA*100),
     hElo,aElo,h2hFactor:h2hFactor.toFixed(3),
@@ -1263,6 +1346,22 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA){
     aSot:aS?.sotPg!=null?aS.sotPg.toFixed(1):null,
     hXg:hS?.xgPg!=null?hS.xgPg.toFixed(2):null,
     aXg:aS?.xgPg!=null?aS.xgPg.toFixed(2):null,
+    hXga:hS?.xgaPg!=null?hS.xgaPg.toFixed(2):null,
+    aXga:aS?.xgaPg!=null?aS.xgaPg.toFixed(2):null,
+    hVenueXga:hVenueXga!=null?Number(hVenueXga).toFixed(2):null,
+    aVenueXga:aVenueXga!=null?Number(aVenueXga).toFixed(2):null,
+    hRecentXga:hRecentDef!=null?Number(hRecentDef).toFixed(2):null,
+    aRecentXga:aRecentDef!=null?Number(aRecentDef).toFixed(2):null,
+    hGfVenue:hS?.gfHomePg!=null?hS.gfHomePg.toFixed(2):null,
+    aGfVenue:aS?.gfAwayPg!=null?aS.gfAwayPg.toFixed(2):null,
+    hGaVenue:hS?.gaHomePg!=null?hS.gaHomePg.toFixed(2):null,
+    aGaVenue:aS?.gaAwayPg!=null?aS.gaAwayPg.toFixed(2):null,
+    hCornVenue:hS?.cornHomePg!=null?hS.cornHomePg.toFixed(1):null,
+    aCornVenue:aS?.cornAwayPg!=null?aS.cornAwayPg.toFixed(1):null,
+    hCornAllowedVenue:hS?.cornAllowedHomePg!=null?hS.cornAllowedHomePg.toFixed(1):null,
+    aCornAllowedVenue:aS?.cornAllowedAwayPg!=null?aS.cornAllowedAwayPg.toFixed(1):null,
+    refereeName:fixtureIntel?.referee||null,
+    refereeCardsPg:fixtureIntel?.refereeCardsPg??null,
     matrix,hDist,aDist,
     pOver15,pOver25,pOver35,pOver45,pBTTS,pNoBTTS:100-pBTTS,
     pHCS,pACS,pHT05,pHT15,pHT_BTTS,pHT_H,pHT_D,pHT_A,
@@ -1436,6 +1535,7 @@ function renderPredResult(p,hName,aName,h2hData){
   const formDots=(res,rtl)=>(res||[]).slice(0,5).map(r=>`<span class="pred-fd pred-fd-${r}">${r}</span>`).join('');
   const hS=teamStatsMap[hRow?.team?.id];
   const aS=teamStatsMap[aRow?.team?.id];
+  const lgAvgStats=teamStatsMeta[lg]?.leagueAverages||{};
 
   const oddsHTML=p.hasOdds?`<div class="pred-odds-panel">
     ${[['HOME WIN',p.bH,p.implH,p.pH,'#1D9E75'],['DRAW',p.bD,p.implD,p.pD,'#BA7517'],['AWAY WIN',p.bA,p.implA,p.pA,'#A32D2D']].map(([lbl,odd,impl,mdl,clr])=>`
@@ -1493,6 +1593,7 @@ function renderPredResult(p,hName,aName,h2hData){
           <span class="pred-lam-tag ${p.hDataBadge==='xG'?'xg':p.hDataBadge==='SoT'?'sot':''}">λ ${p.hLam} ${p.hDataBadge}</span>
           <span class="pred-lam-tag ${p.aDataBadge==='xG'?'xg':p.aDataBadge==='SoT'?'sot':''}">λ ${p.aLam} ${p.aDataBadge}</span>
           ${p.hasOdds?'<span class="pred-lam-tag xg">odds loaded</span>':''}
+          ${p.tuningApplied?`<span class="pred-lam-tag xg">learned ${p.tuningGraded}</span>`:''}
         </div>
       </div>
       <div class="pred-hero-team away">
@@ -1521,11 +1622,21 @@ function renderPredResult(p,hName,aName,h2hData){
     ${oddsHTML}
     <div class="pred-data-grid">
       ${dataCell('Chance creation',p.hXg??'–',p.aXg??'–',parseFloat(p.hXg)||parseFloat(p.hLam),parseFloat(p.aXg)||parseFloat(p.aLam),'Expected goals per match: better chances, not guaranteed goals')}
+      ${dataCell('Chances allowed',p.hVenueXga??p.hXga??'–',p.aVenueXga??p.aXga??'–',parseFloat(p.hVenueXga)||parseFloat(p.hXga)||1.2,parseFloat(p.aVenueXga)||parseFloat(p.aXga)||1.2,'Expected chances conceded per match: lower is better defensively')}
+      ${dataCell('Recent chances allowed',p.hRecentXga??'–',p.aRecentXga??'–',parseFloat(p.hRecentXga)||1.2,parseFloat(p.aRecentXga)||1.2,'Last-5 expected chances conceded, weighted toward current form')}
+      ${dataCell('Team goals by venue',p.hGfVenue??'–',p.aGfVenue??'–',parseFloat(p.hGfVenue)||1.2,parseFloat(p.aGfVenue)||1.2,'Home team goals at home vs away team goals away')}
+      ${dataCell('Team goals allowed by venue',p.hGaVenue??'–',p.aGaVenue??'–',parseFloat(p.hGaVenue)||1.2,parseFloat(p.aGaVenue)||1.2,'Home goals conceded at home vs away goals conceded away')}
+      ${dataCell('League venue goals',lgAvgStats.homeGoalsPg??'–',lgAvgStats.awayGoalsPg??'–',parseFloat(lgAvgStats.homeGoalsPg)||1.2,parseFloat(lgAvgStats.awayGoalsPg)||1.0,'League average goals scored by home teams and away teams')}
+      ${dataCell('League venue goals allowed',lgAvgStats.homeConcededPg??'–',lgAvgStats.awayConcededPg??'–',parseFloat(lgAvgStats.homeConcededPg)||1.0,parseFloat(lgAvgStats.awayConcededPg)||1.2,'League average goals conceded by home teams and away teams')}
       ${dataCell('Shots on target',p.hSot??'–',p.aSot??'–',parseFloat(p.hSot)||3,parseFloat(p.aSot)||3,'How often each team tests the goalkeeper')}
       ${dataCell('Recent form',p.hFF+'%',p.aFF+'%',p.hFF,p.aFF,'Recent results weighted toward the latest matches')}
       ${dataCell('Team strength',p.hElo,p.aElo,p.hElo-1300,p.aElo-1300,'Model rating from league position, points and goal difference')}
       ${dataCell('Corner tendency',hS?.cornPg?hS.cornPg.toFixed(1):'–',aS?.cornPg?aS.cornPg.toFixed(1):'–',parseFloat(hS?.cornPg)||4.5,parseFloat(aS?.cornPg)||4.5,'Average corners won per match')}
+      ${dataCell('Corners by venue',p.hCornVenue??'–',p.aCornVenue??'–',parseFloat(p.hCornVenue)||4.5,parseFloat(p.aCornVenue)||4.0,'Home corners for at home vs away corners for away')}
+      ${dataCell('Corners allowed by venue',p.hCornAllowedVenue??'–',p.aCornAllowedVenue??'–',parseFloat(p.hCornAllowedVenue)||4.0,parseFloat(p.aCornAllowedVenue)||4.5,'Corners conceded by venue: lower is better')}
+      ${dataCell('League venue corners',lgAvgStats.homeCornersForPg??'–',lgAvgStats.awayCornersForPg??'–',parseFloat(lgAvgStats.homeCornersForPg)||4.5,parseFloat(lgAvgStats.awayCornersForPg)||4.0,'League average corners for home and away teams')}
       ${dataCell('Card risk',hS?.ycardPg?hS.ycardPg.toFixed(1):'–',aS?.ycardPg?aS.ycardPg.toFixed(1):'–',parseFloat(hS?.ycardPg)||1.4,parseFloat(aS?.ycardPg)||1.4,'Average yellow cards per match')}
+      ${dataCell('Referee card rate',p.refereeName||'–',p.refereeCardsPg!=null?p.refereeCardsPg.toFixed(1):'–',p.refereeCardsPg||1.5,lgAvgStats.cardsPg||3.0,'Known fixture referee and average total cards per match')}
       ${dataCell('Home advantage',p.ha+'×','—',1,0,'Home team adjustment used by the model')}
       ${dataCell('Head-to-head tilt',parseFloat(p.h2hFactor)>0?'+'+p.h2hFactor:p.h2hFactor,'—',parseFloat(p.h2hFactor)+0.5,0.5-parseFloat(p.h2hFactor),'Small adjustment from recent meetings between these teams')}
     </div>
@@ -1767,8 +1878,62 @@ function renderOdds(games,el,provider='api-football'){
 }
 
 // ── NAV ────────────────────────────────────────────────────────────────────────
+async function loadPredictionHistory(){
+  const el=document.getElementById('hist-body');
+  el.innerHTML='<div class="loading-state">Scoring stored predictions...</div>';
+  try{
+    const d=await fetch('/predictions?refresh=1&limit=150').then(r=>r.json());
+    const s=d.summary||{};
+    const rows=d.predictions||[];
+    const pct=v=>v==null?'--':v+'%';
+    let html=`<div class="kpi-row" style="margin-bottom:16px">
+      <div class="kpi"><div class="kpi-val">${s.total||0}</div><div class="kpi-lbl">remembered</div></div>
+      <div class="kpi"><div class="kpi-val">${s.graded||0}</div><div class="kpi-lbl">graded</div></div>
+      <div class="kpi"><div class="kpi-val">${pct(s.outcomeAccuracy)}</div><div class="kpi-lbl">outcome accuracy</div></div>
+      <div class="kpi"><div class="kpi-val">${s.avgBrier??'--'}</div><div class="kpi-lbl">avg brier</div></div>
+    </div>`;
+    if(!rows.length){
+      el.innerHTML=html+'<div class="error-state">No predictions saved yet. Run the Predictor once and I will start tracking it.</div>';
+      return;
+    }
+    html+=`<div class="card"><div class="card-head"><div><div class="card-title">Prediction Ledger</div><div style="font-size:12px;color:var(--tx2);margin-top:2px">Pending rows are graded automatically after the fixture finishes.</div></div></div><div class="card-body" style="padding:0;overflow-x:auto">
+      <table class="stand-table"><thead><tr>
+        <th>Date</th><th>Match</th><th>Pick</th><th>Prob.</th><th>Score</th><th>Actual</th><th>Result</th><th>Brier</th>
+      </tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const created=r.createdAt?new Date(r.createdAt):null;
+      const ds=created?created.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+created.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+      const probs=r.probabilities||{};
+      const pick=r.pick||'';
+      const pickLbl=pick==='H'?r.homeTeam:pick==='A'?r.awayTeam:'Draw';
+      const pickProb=pick==='H'?probs.home:pick==='A'?probs.away:probs.draw;
+      const ps=r.predictedScore||{};
+      const ac=r.actual||{};
+      const mt=r.metrics||{};
+      const done=r.status==='graded';
+      const ok=done&&mt.outcomeCorrect;
+      const result=done?(ok?'Hit':'Miss'):'Pending';
+      const tag=done?(ok?'tag-green':'tag-red'):'tag-gray';
+      html+=`<tr>
+        <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
+        <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div></td>
+        <td>${pickLbl}</td>
+        <td style="font-family:var(--mono)">${pickProb??'--'}%</td>
+        <td style="font-family:var(--mono)">${ps.home??'?'}-${ps.away??'?'}</td>
+        <td style="font-family:var(--mono)">${done?`${ac.home}-${ac.away}`:'--'}</td>
+        <td><span class="tag ${tag}">${result}</span>${done&&mt.scoreCorrect?'<span class="tag tag-blue" style="margin-left:4px">score</span>':''}</td>
+        <td style="font-family:var(--mono)">${mt.brier??'--'}</td>
+      </tr>`;
+    });
+    html+='</tbody></table></div></div>';
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div class="error-state">Could not load prediction history: '+e.message+'</div>';
+  }
+}
+
 async function nav(pg){
-  const navPages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor'];
+  const navPages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>
     b.classList.toggle('on',navPages[i]===pg));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
@@ -1781,6 +1946,7 @@ async function nav(pg){
   else if(pg==='teamstats') renderTeamStats();
   else if(pg==='odds') loadOdds();
   else if(pg==='advisor') { /* user clicks Scan to run */ }
+  else if(pg==='history') loadPredictionHistory();
 }
 
 // Leagues with full fixtures/standings/teamstats — populated from /config on startup
@@ -1829,7 +1995,7 @@ async function onLgChange(){
   if(advMode) advMode.value='current';
   ['hSel','aSel'].forEach(id=>{document.getElementById(id).innerHTML='<option>Load standings first...</option>';});
   const active=document.querySelector('.nav-btn.on');
-  const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor'];
+  const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
   const idx=[...document.querySelectorAll('.nav-btn')].indexOf(active);
   const targetPage=pages[idx]||'fixtures';
   await nav(targetPage);
@@ -1916,7 +2082,7 @@ async function loadFixtures(){
         let fxH=0,fxD=0,fxA=0;
         fxO=(oddsCache[lg]||[]).find(g=>g.home===m.homeTeam.name||g.away===m.awayTeam.name||g.home===m.awayTeam.name||g.away===m.homeTeam.name);
         if(fxO){const fl=fxO.home===m.awayTeam.name;fxH=fl?fxO.best_a:fxO.best_h;fxD=fxO.best_d;fxA=fl?fxO.best_h:fxO.best_a;}
-        pred=deepPredict(hI.idx,aI.idx,'balanced','1.1',null,fxH,fxD,fxA);
+        pred=deepPredict(hI.idx,aI.idx,'balanced','1.1',null,fxH,fxD,fxA,fxO?.odds_movement);
       }
       const quality=dataQuality(m.homeTeam.id,m.awayTeam.id,!!fxO);
       // Value badge — show if model has ≥8% edge on any outcome and odds are cached
@@ -2157,9 +2323,17 @@ async function loadResults(){
   const el=document.getElementById('res-body');
   el.innerHTML='<div class="loading-state">Loading…</div>';
   try{
-    const data=await api(`/competitions/${reqLeague}/matches?status=FINISHED`);
+    let data;
+    try{
+      data=await api(`/competitions/${reqLeague}/matches?status=FINISHED&limit=100`);
+    }catch(e){
+      data=await api(`/competitions/${reqLeague}/matches?status=FINISHED`);
+    }
     if(reqLeague!==lg||reqVersion!==leagueVersion)return;
-    const matches=(data.matches||[]).slice(-20).reverse();
+    const matches=(data.matches||[])
+      .filter(m=>m.status==='FINISHED'&&m.score?.fullTime?.home!=null&&m.score?.fullTime?.away!=null)
+      .sort((a,b)=>new Date(b.utcDate)-new Date(a.utcDate))
+      .slice(0,20);
     if(!matches.length){el.innerHTML='<div class="error-state">No results found.</div>';return;}
     const goals=matches.map(m=>(m.score?.fullTime?.home||0)+(m.score?.fullTime?.away||0));
     const avgG=(goals.reduce((s,g)=>s+g,0)/Math.max(1,goals.length)).toFixed(2);
@@ -2243,6 +2417,56 @@ function ensureTeams(){
   });
 }
 
+function findFixtureOdds(hName,aName){
+  return (oddsCache[lg]||[]).find(g=>
+    (g.home===hName&&g.away===aName)||(g.home===aName&&g.away===hName));
+}
+
+function predictionPick(p){
+  if(p.pH>=p.pD&&p.pH>=p.pA)return 'H';
+  if(p.pA>=p.pH&&p.pA>=p.pD)return 'A';
+  return 'D';
+}
+
+async function rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,model,ha,fixtureIntel){
+  const flipped=fxOdds&&fxOdds.home===aName;
+  const quality=dataQuality(hRow.team.id,aRow.team.id,!!fxOdds);
+  const payload={
+    competition:lg,
+    fixtureId:fxOdds?.id||null,
+    kickoff:fxOdds?.commence_time||null,
+    homeTeamId:hRow.team.id,
+    awayTeamId:aRow.team.id,
+    homeTeam:hName,
+    awayTeam:aName,
+    model,
+    homeAdvantage:ha,
+    tuning:{applied:p.tuningApplied,graded:p.tuningGraded,rho:p.tuningRho},
+    pick:predictionPick(p),
+    confidence:p.conf,
+    probabilities:{home:p.pH,draw:p.pD,away:p.pA},
+    predictedScore:{home:p.scoreH,away:p.scoreA},
+    markets:{
+      over15:p.pOver15,over25:p.pOver25,over35:p.pOver35,btts:p.pBTTS,
+      htOver05:p.pHT_over05,cornersOver85:p.pCorners_over85,cardsOver25:p.pCards_over25
+    },
+    fixtureIntel:fixtureIntel?{
+      injuries:(fixtureIntel.injuries||[]).length,
+      lineups:(fixtureIntel.lineups||[]).length,
+      events:fixtureIntel.events||{}
+    }:null,
+    odds:fxOdds?{
+      home:flipped?fxOdds.best_a:fxOdds.best_h,
+      draw:fxOdds.best_d,
+      away:flipped?fxOdds.best_h:fxOdds.best_a,
+      source:fxOdds.source,
+      bookmakers:fxOdds.num_bookmakers
+    }:{},
+    dataQuality:quality
+  };
+  return postJson('/predictions',payload);
+}
+
 async function runDeepPred(){
   if(!standRows.length){document.getElementById('predOut').innerHTML='<div class="error-state">Load Standings first.</div>';return;}
   const hi=parseInt(document.getElementById('hSel').value);
@@ -2255,24 +2479,31 @@ async function runDeepPred(){
   const aName=aRow.team.shortName||aRow.team.name;
   document.getElementById('predOut').innerHTML='<div class="loading-state" style="padding:3rem">Fetching H2H…</div>';
 
-  let h2hData=null,oddsH=0,oddsD=0,oddsA=0;
+  let h2hData=null,oddsH=0,oddsD=0,oddsA=0,fixtureIntel=null;
   try{
     const r=await fetch('/api/competitions/'+lg+'/matches?homeTeam='+hRow.team.id+'&awayTeam='+aRow.team.id+'&limit=10');
     const d=await r.json();
     if(d.matches?.length) h2hData=buildH2HAggregates(d.matches,hRow.team.id,aRow.team.id);
   }catch(e){}
-  const fxOdds=(oddsCache[lg]||[]).find(g=>
-    (g.home===hRow.team.name||g.away===aRow.team.name||g.home===aRow.team.name||g.away===hRow.team.name));
+  const fxOdds=findFixtureOdds(hRow.team.name,aRow.team.name);
   if(fxOdds){
     const flipped=fxOdds.home===aRow.team.name;
     oddsH=flipped?fxOdds.best_a:fxOdds.best_h;
     oddsD=fxOdds.best_d;
     oddsA=flipped?fxOdds.best_h:fxOdds.best_a;
+    if(fxOdds.id){
+      try{
+        const r=await fetch('/fixture-intel/'+fxOdds.id);
+        const d=await r.json();
+        if(!d.error)fixtureIntel=d;
+      }catch(e){}
+    }
   }
 
-  const p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA);
+  const p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel);
   window._lastPred={p,hName,aName};
   document.getElementById('predOut').innerHTML=renderPredResult(p,hName,aName,h2hData);
+  rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,mw,ha,fixtureIntel).catch(e=>console.warn('Prediction history save failed',e));
   setTimeout(()=>drawXgChart(hName,aName,p.hDist,p.aDist),200);
   // Remove stale player intel panel, then re-fetch
   const oldPl=document.getElementById('player-intel');
@@ -2389,7 +2620,7 @@ async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
     if(kickoff<now||kickoff>cutoff)return;
     const hi=findTeamIdxByName(g.home), ai=findTeamIdxByName(g.away);
     if(hi<0||ai<0||hi===ai) return;
-    const p=deepPredict(hi,ai,'balanced','1.1',null,g.best_h||0,g.best_d||0,g.best_a||0);
+    const p=deepPredict(hi,ai,'balanced','1.1',null,g.best_h||0,g.best_d||0,g.best_a||0,g.odds_movement);
     const dt=new Date(g.commence_time);
     const ds=dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     const matchLabel=g.home+' vs '+g.away;
@@ -2563,7 +2794,7 @@ async function fetchSuspensionWarnings(hId,aId,hName,aName){
     </div></div>`;
 }
 
-loadConfig().then(()=>loadFixtures());
+loadModelCalibration().finally(()=>loadConfig().then(()=>loadFixtures()));
 </script>
 </body>
 </html>
