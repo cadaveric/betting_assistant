@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Scoutline — API-Football Pro backend
 Run: python3 proxy.py
@@ -21,6 +21,8 @@ if os.path.exists(_env_path):
 
 PORT            = int(os.environ.get('PORT', 8081))
 DISK_CACHE_FILE = os.environ.get('CACHE_FILE', 'scoutline_cache.json')
+PREDICTION_FILE = os.environ.get('PREDICTION_FILE', os.path.join('data', 'prediction_history.json'))
+ODDS_HISTORY_FILE = os.environ.get('ODDS_HISTORY_FILE', os.path.join('data', 'odds_history.json'))
 
 # ── API-Football Pro (api-sports.io) ─────────────────────────────────────────
 APIF_KEY  = (os.environ.get('APIFOOTBALL_KEY')
@@ -130,6 +132,13 @@ def get_cache(path):
         if e and time.time() - e['ts'] < e.get('ttl', _ttl(path)): return e['data']
     return None
 
+def get_stale_cache(path, max_age=86400):
+    with cache_lock:
+        e = cache.get(_key(path))
+        if e and time.time() - e.get('ts', 0) < max_age:
+            return e.get('data')
+    return None
+
 def set_cache(path, data, ttl=None):
     entry = {'data': data, 'ts': time.time()}
     if ttl is not None:
@@ -169,6 +178,7 @@ def save_disk_cache():
 # ── Team stats status ─────────────────────────────────────────────────────────
 teamstats_status = {}
 teamstats_lock   = threading.Lock()
+prediction_lock  = threading.Lock()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _stat_num(value):
@@ -222,6 +232,314 @@ def _over25_prob(lh, la, max_g=7):
             if i + j > 2: p += pi * _poisson_pmf(j, la)
     return p
 
+# Prediction ledger
+def _prediction_path():
+    path = PREDICTION_FILE
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+    return path
+
+def _load_predictions():
+    path = _prediction_path()
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else data.get('predictions', [])
+    except Exception as e:
+        print(f'  [PRED] Load failed: {e}')
+        return []
+
+def _save_predictions(rows):
+    path = _prediction_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(rows, f, indent=2)
+    except Exception as e:
+        print(f'  [PRED] Save failed: {e}')
+
+def _prediction_id(row):
+    seed = '|'.join(str(row.get(k, '')) for k in (
+        'createdAt', 'competition', 'fixtureId', 'homeTeamId', 'awayTeamId',
+        'homeTeam', 'awayTeam', 'model'
+    ))
+    return hashlib.md5(seed.encode()).hexdigest()[:16]
+
+def _prediction_pick(row):
+    probs = row.get('probabilities') or {}
+    vals = {'H': probs.get('home') or 0, 'D': probs.get('draw') or 0, 'A': probs.get('away') or 0}
+    return max(vals, key=vals.get)
+
+def _norm_team_name(name):
+    s = (name or '').lower()
+    s = _re.sub(r'\b(fc|afc|cf|sc|st|saint|the)\b', ' ', s)
+    s = _re.sub(r'[^a-z0-9]+', ' ', s)
+    return ' '.join(w for w in s.split() if w)
+
+def _team_names_match(a, b):
+    na, nb = _norm_team_name(a), _norm_team_name(b)
+    if not na or not nb:
+        return False
+    if na == nb or na in nb or nb in na:
+        return True
+    aw = {w for w in na.split() if len(w) > 2}
+    bw = {w for w in nb.split() if len(w) > 2}
+    return bool(aw and bw and len(aw & bw) / max(len(aw), len(bw), 1) >= 0.6)
+
+def _grade_prediction(row, match):
+    ft = ((match.get('score') or {}).get('fullTime') or {})
+    hg, ag = ft.get('home'), ft.get('away')
+    if hg is None or ag is None:
+        return False
+    actual = 'H' if hg > ag else 'A' if ag > hg else 'D'
+    pick = row.get('pick') or _prediction_pick(row)
+    probs = row.get('probabilities') or {}
+    p = {
+        'H': (probs.get('home') or 0) / 100,
+        'D': (probs.get('draw') or 0) / 100,
+        'A': (probs.get('away') or 0) / 100,
+    }
+    brier = sum((p[k] - (1 if actual == k else 0)) ** 2 for k in ('H', 'D', 'A'))
+    pred_score = row.get('predictedScore') or {}
+    row['status'] = 'graded'
+    row['actual'] = {'home': hg, 'away': ag, 'outcome': actual, 'utcDate': match.get('utcDate')}
+    row['metrics'] = {
+        'outcomeCorrect': pick == actual,
+        'scoreCorrect': pred_score.get('home') == hg and pred_score.get('away') == ag,
+        'brier': round(brier, 4),
+    }
+    row['gradedAt'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    return True
+
+def _match_prediction_to_result(row):
+    comp = row.get('competition')
+    fixture_id = row.get('fixtureId')
+    if fixture_id and APIF_KEY:
+        data = apif_get('fixtures', {'id': fixture_id}) or []
+        matches = _apif_to_matches(data)
+        if matches and matches[0].get('status') == 'FINISHED':
+            return matches[0]
+    if not comp:
+        return None
+    kickoff_raw = row.get('kickoff') or ''
+    created_raw = row.get('createdAt') or ''
+    predicted_at = None
+    try:
+        predicted_at = _dt.datetime.fromisoformat(created_raw.replace('Z', '+00:00'))
+        if predicted_at.tzinfo is None:
+            predicted_at = predicted_at.replace(tzinfo=_dt.timezone.utc)
+    except Exception:
+        predicted_at = None
+    try:
+        kickoff = _dt.datetime.fromisoformat(kickoff_raw.replace('Z', '+00:00'))
+        if kickoff.tzinfo is None:
+            kickoff = kickoff.replace(tzinfo=_dt.timezone.utc)
+    except Exception:
+        kickoff = None
+    data = apif_matches(comp, status='FINISHED') or {}
+    hid, aid = row.get('homeTeamId'), row.get('awayTeamId')
+    hname = (row.get('homeTeam') or '').lower()
+    aname = (row.get('awayTeam') or '').lower()
+    for m in data.get('matches', []):
+        mh = m.get('homeTeam') or {}; ma = m.get('awayTeam') or {}
+        ids_match = hid and aid and mh.get('id') == hid and ma.get('id') == aid
+        names_match = hname and aname and _team_names_match(mh.get('name'), hname) and _team_names_match(ma.get('name'), aname)
+        if not (ids_match or names_match):
+            continue
+        if kickoff:
+            try:
+                played = _dt.datetime.fromisoformat((m.get('utcDate') or '').replace('Z', '+00:00'))
+                if played.tzinfo is None:
+                    played = played.replace(tzinfo=_dt.timezone.utc)
+                if abs((played - kickoff).total_seconds()) > 3 * 86400:
+                    continue
+            except Exception:
+                continue
+        elif predicted_at:
+            try:
+                played = _dt.datetime.fromisoformat((m.get('utcDate') or '').replace('Z', '+00:00'))
+                if played.tzinfo is None:
+                    played = played.replace(tzinfo=_dt.timezone.utc)
+                if played < predicted_at - _dt.timedelta(hours=12):
+                    continue
+                if played > predicted_at + _dt.timedelta(days=14):
+                    continue
+            except Exception:
+                continue
+        return m
+    return None
+
+def _score_predictions(rows):
+    changed = False
+    for row in rows:
+        if row.get('status') == 'graded':
+            continue
+        match = _match_prediction_to_result(row)
+        if match and _grade_prediction(row, match):
+            changed = True
+    return changed
+
+def _prediction_summary(rows):
+    graded = [r for r in rows if r.get('status') == 'graded']
+    pending = [r for r in rows if r.get('status') != 'graded']
+    if not graded:
+        return {'total': len(rows), 'graded': 0, 'pending': len(pending),
+                'outcomeAccuracy': None, 'scoreAccuracy': None, 'avgBrier': None,
+                'calibration': None}
+    outcome_ok = sum(1 for r in graded if (r.get('metrics') or {}).get('outcomeCorrect'))
+    score_ok = sum(1 for r in graded if (r.get('metrics') or {}).get('scoreCorrect'))
+    briers = [(r.get('metrics') or {}).get('brier') for r in graded if (r.get('metrics') or {}).get('brier') is not None]
+    cal = {}
+    for key, label in [('home', 'H'), ('draw', 'D'), ('away', 'A')]:
+        avg_pred = sum(((r.get('probabilities') or {}).get(key) or 0) for r in graded) / len(graded)
+        actual_rate = sum(1 for r in graded if ((r.get('actual') or {}).get('outcome') == label)) / len(graded) * 100
+        cal[key] = {'avgPred': round(avg_pred, 1), 'actualRate': round(actual_rate, 1),
+                    'delta': round(actual_rate - avg_pred, 1)}
+    return {'total': len(rows), 'graded': len(graded), 'pending': len(pending),
+            'outcomeAccuracy': round(outcome_ok / len(graded) * 100, 1),
+            'scoreAccuracy': round(score_ok / len(graded) * 100, 1),
+            'avgBrier': round(sum(briers) / len(briers), 4) if briers else None,
+            'calibration': cal,
+            'tuning': _prediction_tuning(rows)}
+
+def _avg(vals):
+    vals = [v for v in vals if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+def _clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
+def _prediction_tuning(rows):
+    graded = [r for r in rows if r.get('status') == 'graded']
+
+    def build(sample, min_ready=20):
+        if not sample:
+            return {'graded': 0, 'ready': False}
+        n = len(sample)
+        actual_counts = {'H': 0, 'D': 0, 'A': 0}
+        pred_sum = {'home': 0.0, 'draw': 0.0, 'away': 0.0}
+        over_preds = []
+        over_actuals = []
+        for r in sample:
+            actual = (r.get('actual') or {}).get('outcome')
+            if actual in actual_counts:
+                actual_counts[actual] += 1
+            probs = r.get('probabilities') or {}
+            pred_sum['home'] += probs.get('home') or 0
+            pred_sum['draw'] += probs.get('draw') or 0
+            pred_sum['away'] += probs.get('away') or 0
+            markets = r.get('markets') or {}
+            actual_score = r.get('actual') or {}
+            if markets.get('over25') is not None and actual_score.get('home') is not None and actual_score.get('away') is not None:
+                over_preds.append(markets.get('over25'))
+                over_actuals.append(100 if (actual_score.get('home') + actual_score.get('away')) > 2 else 0)
+
+        deltas = {
+            'home': actual_counts['H'] / n * 100 - pred_sum['home'] / n,
+            'draw': actual_counts['D'] / n * 100 - pred_sum['draw'] / n,
+            'away': actual_counts['A'] / n * 100 - pred_sum['away'] / n,
+        }
+        brier_all = _avg([(r.get('metrics') or {}).get('brier') for r in sample])
+        odds_rows = [r for r in sample if (r.get('odds') or {}).get('home')]
+        no_odds_rows = [r for r in sample if not (r.get('odds') or {}).get('home')]
+        brier_odds = _avg([(r.get('metrics') or {}).get('brier') for r in odds_rows])
+        brier_no_odds = _avg([(r.get('metrics') or {}).get('brier') for r in no_odds_rows])
+        rich_rows = [r for r in sample if (r.get('dataQuality') or {}).get('cls') in ('good', 'warn')]
+        est_rows = [r for r in sample if (r.get('dataQuality') or {}).get('cls') == 'weak']
+        brier_rich = _avg([(r.get('metrics') or {}).get('brier') for r in rich_rows])
+        brier_est = _avg([(r.get('metrics') or {}).get('brier') for r in est_rows])
+        over_delta = (_avg(over_actuals) or 0) - (_avg(over_preds) or 0) if over_preds else 0
+
+        return {
+            'graded': n,
+            'ready': n >= min_ready,
+            'bias': {
+                'home': round(_clamp(deltas['home'] / 500, -0.04, 0.04), 4),
+                'draw': round(_clamp(deltas['draw'] / 500, -0.04, 0.04), 4),
+                'away': round(_clamp(deltas['away'] / 500, -0.04, 0.04), 4),
+            },
+            'homeAdvMultiplier': round(_clamp(1 + (deltas['home'] - deltas['away']) / 1000, 0.94, 1.06), 3),
+            'dcRho': round(_clamp(-0.13 - deltas['draw'] / 400, -0.22, -0.06), 3),
+            'oddsWeightScale': round(_clamp(1 + ((brier_no_odds or brier_all or 0) - (brier_odds or brier_all or 0)) * 0.35, 0.85, 1.25), 3),
+            'richDataWeightScale': round(_clamp(1 + ((brier_est or brier_all or 0) - (brier_rich or brier_all or 0)) * 0.25, 0.9, 1.2), 3),
+            'over25Adjustment': round(_clamp(over_delta / 2, -8, 8), 1),
+            'diagnostics': {
+                'avgBrier': round(brier_all, 4) if brier_all is not None else None,
+                'oddsRows': len(odds_rows),
+                'richRows': len(rich_rows),
+                'over25Rows': len(over_preds),
+                'deltas': {k: round(v, 1) for k, v in deltas.items()},
+            }
+        }
+
+    leagues = {}
+    for comp in sorted({r.get('competition') for r in graded if r.get('competition')}):
+        sample = [r for r in graded if r.get('competition') == comp]
+        leagues[comp] = build(sample, 25)
+    return {'global': build(graded, 15), 'leagues': leagues}
+
+def _data_path(path):
+    if os.path.isabs(path):
+        return path
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+
+def _load_json_file(path, default):
+    path = _data_path(path)
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f'  [DATA] Load failed {path}: {e}')
+        return default
+
+def _save_json_file(path, data):
+    path = _data_path(path)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f'  [DATA] Save failed {path}: {e}')
+
+def _odds_game_key(comp, game):
+    return '|'.join(str(x or '') for x in (
+        comp, game.get('id'), game.get('home'), game.get('away'), game.get('commence_time')
+    ))
+
+def _record_odds_snapshot(comp, games):
+    if not games:
+        return games
+    hist = _load_json_file(ODDS_HISTORY_FILE, {})
+    now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    out = []
+    for game in games:
+        g = dict(game)
+        key = _odds_game_key(comp, g)
+        rows = hist.get(key, [])
+        prev = rows[-1] if rows else None
+        snap = {
+            'ts': now,
+            'h': g.get('best_h'), 'd': g.get('best_d'), 'a': g.get('best_a'),
+            'o25': g.get('best_o25'), 'u25': g.get('best_u25'),
+        }
+        movement = {}
+        if prev:
+            for src_key, label in [('h', 'home'), ('d', 'draw'), ('a', 'away'), ('o25', 'over25'), ('u25', 'under25')]:
+                old, new = prev.get(src_key), snap.get(src_key)
+                if old and new:
+                    movement[label] = round(new - old, 3)
+        if movement:
+            g['odds_movement'] = movement
+        rows.append(snap)
+        hist[key] = rows[-20:]
+        out.append(g)
+    _save_json_file(ODDS_HISTORY_FILE, hist)
+    return out
+
 # ── API-Football Pro ──────────────────────────────────────────────────────────
 def apif_get(endpoint, params=None):
     """Fetch from API-Football with caching. Returns response list or None."""
@@ -238,14 +556,19 @@ def apif_get(endpoint, params=None):
         with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             raw = json.loads(r.read())
             errs = raw.get('errors', {})
-            if errs and errs != []: print(f'  [APIF] {endpoint} error: {errs}'); return None
+            if errs and errs != []:
+                stale = get_stale_cache(cache_key)
+                print(f'  [APIF] {endpoint} error: {errs}{"; using stale cache" if stale is not None else ""}')
+                return stale
             resp = raw.get('response', [])
             set_cache(cache_key, resp)
             rem = r.headers.get('x-ratelimit-requests-remaining', '?')
             print(f'  [APIF] {endpoint}({qs[:60]}): {len(resp)} results, rem={rem}')
             return resp
     except Exception as e:
-        print(f'  [APIF] {endpoint} failed: {e}'); return None
+        stale = get_stale_cache(cache_key)
+        print(f'  [APIF] {endpoint} failed: {e}{"; using stale cache" if stale is not None else ""}')
+        return stale
 
 def _apif_status(short):
     if short in ('NS', 'TBD'):             return 'SCHEDULED'
@@ -317,8 +640,16 @@ def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, 
         if data is None: return None
         matches = [m for m in _apif_to_matches(data) if m['status'] == 'SCHEDULED']
     elif status == 'FINISHED':
-        params['status'] = 'FT'; params['last'] = 50
+        params['status'] = 'FT'
+        try:
+            params['last'] = max(1, min(100, int(limit or 100)))
+        except (TypeError, ValueError):
+            params['last'] = 100
         data = apif_get('fixtures', params)
+        if not data and params.get('last') != 50:
+            fallback_params = dict(params)
+            fallback_params['last'] = 50
+            data = apif_get('fixtures', fallback_params)
         if data is None: return None
         matches = _apif_to_matches(data)
     else:
@@ -341,7 +672,11 @@ def build_teamstats(comp):
     cp = f'/teamstats/{comp}'
     existing = get_cache(cp)
     if existing and existing.get('teams'):
-        with teamstats_lock: teamstats_status[comp] = 'ready'; return
+        first_team = next(iter((existing.get('teams') or {}).values()), {})
+        if existing.get('leagueAverages') and 'cornAllowedHomePg' in first_team:
+            with teamstats_lock: teamstats_status[comp] = 'ready'; return
+        delete_cache(cp)
+        existing = None
     with teamstats_lock:
         if teamstats_status.get(comp) == 'building': return
         teamstats_status[comp] = 'building'
@@ -372,9 +707,22 @@ def build_teamstats(comp):
                     'poss': 0.0, 'poss_n': 0, 'saves': 0.0, 'saves_n': 0,
                     'yc': 0.0, 'yc_n': 0, 'rc': 0.0, 'rc_n': 0,
                     'goals_f': 0.0, 'goals_a': 0.0,
+                    'home_games': 0, 'away_games': 0,
+                    'home_gf': 0.0, 'home_ga': 0.0,
+                    'away_gf': 0.0, 'away_ga': 0.0,
+                    'home_xg': 0.0, 'home_xga': 0.0, 'home_xg_n': 0,
+                    'away_xg': 0.0, 'away_xga': 0.0, 'away_xg_n': 0,
+                    'home_sot': 0.0, 'home_sot_n': 0, 'away_sot': 0.0, 'away_sot_n': 0,
+                    'home_corn': 0.0, 'home_corn_n': 0, 'away_corn': 0.0, 'away_corn_n': 0,
+                    'home_corna': 0.0, 'home_corna_n': 0, 'away_corna': 0.0, 'away_corna_n': 0,
+                    'home_yc': 0.0, 'home_yc_n': 0, 'away_yc': 0.0, 'away_yc_n': 0,
                     'ht_g': 0.0, 'ht_n': 0, 'clean_sheets': 0,
+                    'recent': [],
+                    'ref_cards': 0.0, 'ref_games': 0,
                 }
             return per_team[key]
+
+        referees = {}
 
         for fx in finished:
             fixture = fx.get('fixture') or {}
@@ -392,6 +740,8 @@ def build_teamstats(comp):
             hg = goals.get('home') or 0; ag = goals.get('away') or 0
             hentry['goals_f'] += hg; hentry['goals_a'] += ag
             aentry['goals_f'] += ag; aentry['goals_a'] += hg
+            hentry['home_games'] += 1; hentry['home_gf'] += hg; hentry['home_ga'] += ag
+            aentry['away_games'] += 1; aentry['away_gf'] += ag; aentry['away_ga'] += hg
             if ag == 0: hentry['clean_sheets'] += 1
             if hg == 0: aentry['clean_sheets'] += 1
             ht = score.get('halftime') or {}
@@ -406,12 +756,13 @@ def build_teamstats(comp):
                 stats = {item.get('type'): item.get('value') for item in (row.get('statistics') or [])}
                 stats_by_team[tid] = stats
 
-            def apply(entry, own, opp):
+            def apply(entry, own, opp, venue):
                 xg   = _stat_num(own.get('expected_goals'))
                 xga  = _stat_num(opp.get('expected_goals'))
                 sot  = _stat_num(own.get('Shots on Goal'))
                 shts = _stat_num(own.get('Total Shots'))
                 corn = _stat_num(own.get('Corner Kicks'))
+                corna = _stat_num(opp.get('Corner Kicks'))
                 foul = _stat_num(own.get('Fouls'))
                 poss = _stat_num(own.get('Ball Possession'))
                 svs  = _stat_num(own.get('Goalkeeper Saves'))
@@ -427,18 +778,56 @@ def build_teamstats(comp):
                 if svs  is not None: entry['saves'] += svs; entry['saves_n'] += 1
                 if yc   is not None: entry['yc']    += yc;  entry['yc_n']   += 1
                 if rc   is not None: entry['rc']    += rc;  entry['rc_n']   += 1
+                if venue == 'home':
+                    if xg  is not None: entry['home_xg'] += xg; entry['home_xg_n'] += 1
+                    if xga is not None: entry['home_xga'] += xga
+                    if sot is not None: entry['home_sot'] += sot; entry['home_sot_n'] += 1
+                    if corn is not None: entry['home_corn'] += corn; entry['home_corn_n'] += 1
+                    if corna is not None: entry['home_corna'] += corna; entry['home_corna_n'] += 1
+                    if yc is not None: entry['home_yc'] += yc; entry['home_yc_n'] += 1
+                else:
+                    if xg  is not None: entry['away_xg'] += xg; entry['away_xg_n'] += 1
+                    if xga is not None: entry['away_xga'] += xga
+                    if sot is not None: entry['away_sot'] += sot; entry['away_sot_n'] += 1
+                    if corn is not None: entry['away_corn'] += corn; entry['away_corn_n'] += 1
+                    if corna is not None: entry['away_corna'] += corna; entry['away_corna_n'] += 1
+                    if yc is not None: entry['away_yc'] += yc; entry['away_yc_n'] += 1
+                entry['recent'].append({
+                    'fixtureId': fixture.get('id'), 'date': fixture.get('date'), 'venue': venue,
+                    'gf': hg if venue == 'home' else ag,
+                    'ga': ag if venue == 'home' else hg,
+                    'xg': xg, 'xga': xga, 'sot': sot, 'shots': shts,
+                    'corners': corn, 'cornersAllowed': corna, 'yellowCards': yc, 'redCards': rc,
+                })
 
-            apply(hentry, stats_by_team.get(str(hid), {}), stats_by_team.get(str(aid), {}))
-            apply(aentry, stats_by_team.get(str(aid), {}), stats_by_team.get(str(hid), {}))
+            apply(hentry, stats_by_team.get(str(hid), {}), stats_by_team.get(str(aid), {}), 'home')
+            apply(aentry, stats_by_team.get(str(aid), {}), stats_by_team.get(str(hid), {}), 'away')
+
+            ref = (fixture.get('referee') or '').split(',')[0].strip()
+            hy = _stat_num((stats_by_team.get(str(hid), {}) or {}).get('Yellow Cards')) or 0
+            ay = _stat_num((stats_by_team.get(str(aid), {}) or {}).get('Yellow Cards')) or 0
+            hr = _stat_num((stats_by_team.get(str(hid), {}) or {}).get('Red Cards')) or 0
+            ar = _stat_num((stats_by_team.get(str(aid), {}) or {}).get('Red Cards')) or 0
+            if ref:
+                refs = referees.setdefault(ref, {'games': 0, 'cards': 0.0})
+                refs['games'] += 1
+                refs['cards'] += hy + ay + hr + ar
+                hentry['ref_cards'] += hy + ay + hr + ar; hentry['ref_games'] += 1
+                aentry['ref_cards'] += hy + ay + hr + ar; aentry['ref_games'] += 1
 
         def avg(total, n): return round(total / n, 2) if n else None
         def avg1(total, n): return round(total / n, 1) if n else None
+        def recent_avg(items, key, n=5):
+            vals = [_stat_num(x.get(key)) for x in sorted(items, key=lambda x: x.get('date') or '', reverse=True)[:n]]
+            vals = [v for v in vals if v is not None]
+            return round(sum(vals) / len(vals), 2) if vals else None
 
         summary = {}; name_map = {}
         for row in teams_in_league:
             team = row['team']; tid = str(team['id']); tname = team['name']
             s = per_team.get(tid) or ensure_team(tid, tname)
             g = max(1, s['games'])
+            recent = sorted(s.get('recent') or [], key=lambda x: x.get('date') or '', reverse=True)[:5]
             entry = {
                 'name':        tname,       'games':      g,
                 'xg_pg':       avg(s['xg'],   s['xg_n']),
@@ -454,6 +843,34 @@ def build_teamstats(comp):
                 'savesPg':     avg(s['saves'],s['saves_n']),
                 'goals_pg':    round(s['goals_f'] / g, 2),
                 'goals_ag_pg': round(s['goals_a'] / g, 2),
+                'gfHomePg':    round(s['home_gf'] / s['home_games'], 2) if s['home_games'] else None,
+                'gaHomePg':    round(s['home_ga'] / s['home_games'], 2) if s['home_games'] else None,
+                'gfAwayPg':    round(s['away_gf'] / s['away_games'], 2) if s['away_games'] else None,
+                'gaAwayPg':    round(s['away_ga'] / s['away_games'], 2) if s['away_games'] else None,
+                'xgHomePg':    avg(s['home_xg'], s['home_xg_n']),
+                'xgaHomePg':   avg(s['home_xga'], s['home_xg_n']),
+                'xgAwayPg':    avg(s['away_xg'], s['away_xg_n']),
+                'xgaAwayPg':   avg(s['away_xga'], s['away_xg_n']),
+                'sotHomePg':   avg(s['home_sot'], s['home_sot_n']),
+                'sotAwayPg':   avg(s['away_sot'], s['away_sot_n']),
+                'cornHomePg':  avg(s['home_corn'], s['home_corn_n']),
+                'cornAwayPg':  avg(s['away_corn'], s['away_corn_n']),
+                'cornAllowedHomePg': avg(s['home_corna'], s['home_corna_n']),
+                'cornAllowedAwayPg': avg(s['away_corna'], s['away_corna_n']),
+                'ycHomePg':    avg(s['home_yc'], s['home_yc_n']),
+                'ycAwayPg':    avg(s['away_yc'], s['away_yc_n']),
+                'last5': {
+                    'games': len(recent),
+                    'gfPg': recent_avg(recent, 'gf'),
+                    'gaPg': recent_avg(recent, 'ga'),
+                    'xgPg': recent_avg(recent, 'xg'),
+                    'xgaPg': recent_avg(recent, 'xga'),
+                    'sotPg': recent_avg(recent, 'sot'),
+                    'cornPg': recent_avg(recent, 'corners'),
+                    'cornAllowedPg': recent_avg(recent, 'cornersAllowed'),
+                    'ycardPg': recent_avg(recent, 'yellowCards'),
+                },
+                'refCardPg':   avg(s['ref_cards'], s['ref_games']),
                 'htGpg':       avg(s['ht_g'],  s['ht_n']),
                 'csRate':      round(s['clean_sheets'] / g * 100, 1),
                 'hasStats':    bool(s['xg_n'] or s['sot_n'] or s['corn_n'] or s['yc_n']),
@@ -461,6 +878,25 @@ def build_teamstats(comp):
             summary[tid]    = entry
             name_map[tname] = entry
             print(f'  [TS] {comp}: {tname} — xG/g={entry["xg_pg"]}, SoT/g={entry["sotPg"]}, YC/g={entry["ycardPg"]}')
+
+        def avg_entries(key):
+            vals = [_stat_num(v.get(key)) for v in summary.values()]
+            vals = [v for v in vals if v is not None]
+            return round(sum(vals) / len(vals), 2) if vals else None
+
+        finished_count = max(1, len(finished))
+        league_averages = {
+            'homeGoalsPg': round(sum(((fx.get('goals') or {}).get('home') or 0) for fx in finished) / finished_count, 2),
+            'awayGoalsPg': round(sum(((fx.get('goals') or {}).get('away') or 0) for fx in finished) / finished_count, 2),
+            'homeConcededPg': round(sum(((fx.get('goals') or {}).get('away') or 0) for fx in finished) / finished_count, 2),
+            'awayConcededPg': round(sum(((fx.get('goals') or {}).get('home') or 0) for fx in finished) / finished_count, 2),
+            'homeCornersForPg': avg_entries('cornHomePg'),
+            'awayCornersForPg': avg_entries('cornAwayPg'),
+            'homeCornersAllowedPg': avg_entries('cornAllowedHomePg'),
+            'awayCornersAllowedPg': avg_entries('cornAllowedAwayPg'),
+            'cardsPg': round(sum(v.get('cards') or 0 for v in referees.values()) / max(1, sum(v.get('games') or 0 for v in referees.values())), 2) if referees else None,
+            'matches': len(finished),
+        }
 
         scorers_raw = apif_get('players/topscorers', {'league': info['id'], 'season': info['season']}) or []
         key_scorers = []
@@ -474,6 +910,9 @@ def build_teamstats(comp):
 
         set_cache(cp, {'competition': comp, 'teams': summary, 'name_map': name_map,
                        'matchesProcessed': len(summary), 'source': 'api-football',
+                       'leagueAverages': league_averages,
+                       'referees': {k: {'games': v['games'], 'cardsPg': round(v['cards']/max(1, v['games']), 2)}
+                                    for k, v in referees.items()},
                        'suspensionRisks': [], 'keyScorers': key_scorers})
         with teamstats_lock: teamstats_status[comp] = 'ready'
         print(f'  [TS] {comp}: done — {len(summary)} teams, {len(key_scorers)} top scorers')
@@ -656,7 +1095,7 @@ def _normalize_odds_games(raw_games):
 def get_normalized_odds(comp):
     games = fetch_apif_odds(comp)
     if games:
-        return games, 'api-football', None
+        return _record_odds_snapshot(comp, games), 'api-football', None
 
     sport_key = ODDS_SPORT_KEYS.get(comp)
     if not sport_key:
@@ -670,7 +1109,7 @@ def get_normalized_odds(comp):
     games = _normalize_odds_games(raw or [])
     err = ODDS_LAST_ERROR.get(sport_key)
     source = 'the-odds-api'
-    return games, source, err if not games else None
+    return _record_odds_snapshot(comp, games), source, err if not games else None
 
 def _advisor_standings_map(comp):
     """Lightweight fallback model data when detailed teamstats are not cached."""
@@ -705,7 +1144,9 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/refresh/'):   self.handle_refresh(path.split('/')[-1].upper())
         elif path.startswith('/players/'):   self.handle_players(path.split('/')[-1].upper())
         elif path.startswith('/injuries/'):  self.handle_injuries(path.split('/')[-1])
+        elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
+        elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/config':
             self.send_json({'apif': bool(APIF_KEY),
                             'odds': bool(APIF_KEY or ODDS_API_KEY),
@@ -723,6 +1164,19 @@ class Handler(SimpleHTTPRequestHandler):
                             'ttl': CACHE_TTL})
         else:
             super().do_GET()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path != '/predictions':
+            self.send_json({'error': f'Unknown route: {parsed.path}'}, 404); return
+        try:
+            size = int(self.headers.get('Content-Length', '0'))
+            if size <= 0 or size > 200000:
+                self.send_json({'error': 'Invalid prediction payload size'}, 400); return
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+        except Exception as e:
+            self.send_json({'error': f'Invalid JSON: {e}'}, 400); return
+        self.handle_prediction_create(payload)
 
     def handle_api(self, api_path):
         if not APIF_KEY:
@@ -748,6 +1202,59 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': f'No fixtures for {comp}'}, 404); return
         self.send_json({'error': f'Unknown route: {api_path}'}, 404)
 
+    def handle_prediction_create(self, payload):
+        required = ('competition', 'homeTeam', 'awayTeam', 'probabilities', 'predictedScore')
+        if not isinstance(payload, dict) or any(k not in payload for k in required):
+            self.send_json({'error': 'Missing prediction fields'}, 400); return
+        now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        row = {
+            'createdAt': payload.get('createdAt') or now,
+            'competition': str(payload.get('competition') or '').upper(),
+            'fixtureId': payload.get('fixtureId'),
+            'kickoff': payload.get('kickoff'),
+            'homeTeamId': payload.get('homeTeamId'),
+            'awayTeamId': payload.get('awayTeamId'),
+            'homeTeam': payload.get('homeTeam'),
+            'awayTeam': payload.get('awayTeam'),
+            'model': payload.get('model') or 'balanced',
+            'homeAdvantage': payload.get('homeAdvantage'),
+            'tuning': payload.get('tuning') or {},
+            'pick': payload.get('pick'),
+            'confidence': payload.get('confidence'),
+            'probabilities': payload.get('probabilities') or {},
+            'predictedScore': payload.get('predictedScore') or {},
+            'markets': payload.get('markets') or {},
+            'odds': payload.get('odds') or {},
+            'fixtureIntel': payload.get('fixtureIntel'),
+            'dataQuality': payload.get('dataQuality') or {},
+            'status': 'pending',
+        }
+        row['id'] = payload.get('id') or _prediction_id(row)
+        if not row.get('pick'):
+            row['pick'] = _prediction_pick(row)
+        with prediction_lock:
+            rows = _load_predictions()
+            rows.append(row)
+            _save_predictions(rows)
+        self.send_json({'prediction': row, 'summary': _prediction_summary(rows)}, 201)
+
+    def handle_predictions(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        refresh = params.get('refresh', ['0'])[0].lower() in ('1', 'true', 'yes')
+        with prediction_lock:
+            rows = _load_predictions()
+            if refresh and APIF_KEY:
+                if _score_predictions(rows):
+                    _save_predictions(rows)
+            try:
+                limit = int(params.get('limit', [100])[0] or 100)
+            except ValueError:
+                limit = 100
+            limit = max(1, min(500, limit))
+            ordered = sorted(rows, key=lambda r: r.get('createdAt', ''), reverse=True)
+            self.send_json({'predictions': ordered[:limit], 'summary': _prediction_summary(rows),
+                            'file': _prediction_path()})
+
     def handle_teamstats(self, comp):
         if not APIF_KEY:
             self.send_json({'error': 'APIFOOTBALL_KEY not set', 'teams': {}}, 503); return
@@ -756,7 +1263,12 @@ class Handler(SimpleHTTPRequestHandler):
                             'message': f'{comp} not supported'}); return
         cp = f'/teamstats/{comp}'
         c  = get_cache(cp)
-        if c and c.get('teams'):
+        if c and c.get('teams') and c.get('leagueAverages'):
+            first_team = next(iter((c.get('teams') or {}).values()), {})
+            if 'cornAllowedHomePg' not in first_team:
+                delete_cache(cp)
+                c = None
+        if c and c.get('teams') and c.get('leagueAverages'):
             with teamstats_lock: teamstats_status[comp] = 'ready'
             out = dict(c)
             out['cache'] = cache_meta(cp)
@@ -786,6 +1298,62 @@ class Handler(SimpleHTTPRequestHandler):
                     'teamId': (i.get('team')   or {}).get('id')} for i in data]
         self.send_json({'fixture_id': fixture_id, 'injured': injured, 'count': len(injured)})
 
+    def handle_fixture_intel(self, fixture_id):
+        if not APIF_KEY:
+            self.send_json({'error': 'APIFOOTBALL_KEY not set'}); return
+        fixture_rows = apif_get('fixtures', {'id': fixture_id}) or []
+        fixture = (fixture_rows[0].get('fixture') if fixture_rows else {}) or {}
+        league = (fixture_rows[0].get('league') if fixture_rows else {}) or {}
+        referee = (fixture.get('referee') or '').split(',')[0].strip()
+        comp = None
+        for code, info in APIF_LEAGUE_MAP.items():
+            if info.get('id') == league.get('id') and info.get('season') == league.get('season'):
+                comp = code
+                break
+        ref_cards_pg = None
+        if comp:
+            ts = get_cache(f'/teamstats/{comp}') or get_stale_cache(f'/teamstats/{comp}')
+            ref_cards_pg = (((ts or {}).get('referees') or {}).get(referee) or {}).get('cardsPg')
+        injuries = apif_get('injuries', {'fixture': fixture_id}) or []
+        lineups = apif_get('fixtures/lineups', {'fixture': fixture_id}) or []
+        events = apif_get('fixtures/events', {'fixture': fixture_id}) or []
+        out_injuries = []
+        for item in injuries:
+            player = item.get('player') or {}
+            out_injuries.append({
+                'name': player.get('name', '?'),
+                'type': player.get('type') or 'Injury',
+                'reason': player.get('reason') or '',
+                'teamId': (item.get('team') or {}).get('id'),
+                'teamName': (item.get('team') or {}).get('name'),
+            })
+        lineups_out = []
+        for row in lineups:
+            team = row.get('team') or {}
+            start = row.get('startXI') or []
+            subs = row.get('substitutes') or []
+            lineups_out.append({
+                'teamId': team.get('id'), 'teamName': team.get('name'),
+                'formation': row.get('formation'),
+                'startXI': len(start), 'substitutes': len(subs),
+                'coach': (row.get('coach') or {}).get('name'),
+            })
+        event_summary = {}
+        for ev in events:
+            team_id = (ev.get('team') or {}).get('id')
+            etype = ev.get('type') or 'Other'
+            detail = ev.get('detail') or ''
+            row = event_summary.setdefault(str(team_id), {'goals': 0, 'yellowCards': 0, 'redCards': 0, 'penalties': 0})
+            if etype == 'Goal':
+                row['goals'] += 1
+                if 'Penalty' in detail: row['penalties'] += 1
+            elif etype == 'Card':
+                if 'Red' in detail: row['redCards'] += 1
+                elif 'Yellow' in detail: row['yellowCards'] += 1
+        self.send_json({'fixture_id': fixture_id, 'referee': referee, 'refereeCardsPg': ref_cards_pg,
+                        'competition': comp, 'injuries': out_injuries,
+                        'lineups': lineups_out, 'events': event_summary})
+
     def handle_odds(self, comp):
         if comp not in APIF_LEAGUE_MAP:
             self.send_json({'error': f'{comp} is not supported for API-Football odds',
@@ -812,6 +1380,7 @@ class Handler(SimpleHTTPRequestHandler):
             f'/apif/standings?league={info["id"]}&season={info["season"]}',
             f'/apif/fixtures?league={info["id"]}&next=20&season={info["season"]}',
             f'/apif/fixtures?last=50&league={info["id"]}&season={info["season"]}&status=FT',
+            f'/apif/fixtures?last=100&league={info["id"]}&season={info["season"]}&status=FT',
             f'/apif/odds?league={info["id"]}&season={info["season"]}',
         ]
         for p in paths:
@@ -979,23 +1548,30 @@ class Handler(SimpleHTTPRequestHandler):
         status = args[1] if len(args) > 1 else '?'; p = self.path
         if   p.startswith('/teamstats/'): print(f'  [TS]   {p}  {status}')
         elif p.startswith('/players/'):   print(f'  [PLYR] {p}  {status}')
+        elif p.startswith('/fixture-intel/'): print(f'  [INTEL] {p}  {status}')
         elif p.startswith('/odds/'):      print(f'  [ODDS] {p}  {status}')
         elif p.startswith('/advisor'):    print(f'  [ADV]  {p}  {status}')
+        elif p.startswith('/predictions'):print(f'  [PRED] {p}  {status}')
         elif p.startswith('/api/'):       print(f'  [API]  {p[4:]}  {status}')
         elif not p.endswith(('.ico', '.map')): print(f'  [WEB]  {p}  {status}')
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     load_disk_cache(); atexit.register(save_disk_cache)
+    apif_status = 'configured' if APIF_KEY else 'missing - set APIFOOTBALL_KEY in .env'
+    odds_status = (
+        'API-Football primary' + (' + fallback' if ODDS_FALLBACK_ENABLED and ODDS_API_KEY else '')
+        if APIF_KEY else ('The Odds API fallback' if ODDS_API_KEY else 'missing odds provider')
+    )
     print(f'''
-  ╔════════════════════════════════════════════════════════════╗
-  ║  Scoutline — API-Football Pro                              ║
-  ╠════════════════════════════════════════════════════════════╣
-  ║  Open:  http://localhost:{PORT}/scoutline.html               ║
-  ║  APIF:  {"✓ configured" if APIF_KEY else "✗ missing — set APIFOOTBALL_KEY in .env":<46} ║
-  ║  ODDS:  {("API-Football primary" + (" + fallback" if ODDS_FALLBACK_ENABLED and ODDS_API_KEY else "")) if APIF_KEY else ("The Odds API fallback" if ODDS_API_KEY else "✗ missing odds provider"):<46} ║
-  ║  Leagues: {len(APIF_LEAGUE_MAP)} supported                                   ║
-  ╚════════════════════════════════════════════════════════════╝
+  ============================================================
+  Scoutline - API-Football Pro
+  ------------------------------------------------------------
+  Open:    http://localhost:{PORT}/scoutline.html
+  APIF:    {apif_status}
+  ODDS:    {odds_status}
+  Leagues: {len(APIF_LEAGUE_MAP)} supported
+  ============================================================
 ''')
     def startup():
         time.sleep(2)
@@ -1009,3 +1585,4 @@ if __name__ == '__main__':
     server = HTTPServer(('', PORT), Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\n  Stopped.')
+
