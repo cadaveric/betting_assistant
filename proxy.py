@@ -7,7 +7,7 @@ Run: python3 proxy.py
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import urllib.request, urllib.error, ssl as _ssl
 import json, os, time, threading, hashlib, atexit, math, concurrent.futures, urllib.parse, re as _re
-import datetime as _dt
+import datetime as _dt, sqlite3, secrets
 
 # Load .env
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
@@ -20,6 +20,122 @@ if os.path.exists(_env_path):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 PORT            = int(os.environ.get('PORT', 8081))
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+AUTH_DB   = os.path.join('data', 'users.db')
+SESSIONS  = {}   # token -> {'user': str, 'expires': float}
+SESSION_TTL = 7 * 24 * 3600   # 7 days
+
+def _init_auth_db():
+    os.makedirs('data', exist_ok=True)
+    con = sqlite3.connect(AUTH_DB)
+    con.execute('''CREATE TABLE IF NOT EXISTS users (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT    UNIQUE NOT NULL,
+        pw_hash  TEXT    NOT NULL,
+        salt     TEXT    NOT NULL,
+        created  TEXT    NOT NULL DEFAULT (datetime('now'))
+    )''')
+    con.commit(); con.close()
+
+def _hash_pw(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 200_000).hex()
+
+def auth_check_user(username: str, password: str) -> bool:
+    try:
+        con = sqlite3.connect(AUTH_DB)
+        row = con.execute('SELECT pw_hash, salt FROM users WHERE username=?', (username,)).fetchone()
+        con.close()
+        if not row: return False
+        return secrets.compare_digest(row[0], _hash_pw(password, row[1]))
+    except Exception: return False
+
+def auth_create_user(username: str, password: str):
+    salt = secrets.token_hex(32)
+    pw_hash = _hash_pw(password, salt)
+    con = sqlite3.connect(AUTH_DB)
+    con.execute('INSERT INTO users (username, pw_hash, salt) VALUES (?,?,?)', (username, pw_hash, salt))
+    con.commit(); con.close()
+
+def session_create(username: str) -> str:
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = {'user': username, 'expires': time.time() + SESSION_TTL}
+    return token
+
+def session_get(token: str):
+    s = SESSIONS.get(token)
+    if not s: return None
+    if time.time() > s['expires']:
+        SESSIONS.pop(token, None); return None
+    return s
+
+def _get_session_from_request(handler) -> str | None:
+    cookie_header = handler.headers.get('Cookie', '')
+    for part in cookie_header.split(';'):
+        part = part.strip()
+        if part.startswith('scoutline_session='):
+            token = part[len('scoutline_session='):]
+            if session_get(token): return token
+    return None
+
+LOGIN_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scoutline — Sign in</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#111318;color:#EEF0F8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#1A1D26;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:48px 40px;width:100%;max-width:400px}
+.logo{display:flex;align-items:center;gap:14px;margin-bottom:36px}
+.logo-mark{width:44px;height:44px;background:#F59E0B;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.logo-text{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.logo-sub{font-size:11px;color:#5D637E;font-family:'JetBrains Mono',monospace;margin-top:2px}
+h1{font-size:18px;font-weight:600;margin-bottom:6px}
+.sub{font-size:13px;color:#9DA3BB;margin-bottom:32px}
+label{display:block;font-size:12px;font-weight:600;color:#9DA3BB;margin-bottom:6px;letter-spacing:.4px;text-transform:uppercase}
+input{width:100%;height:42px;background:#222632;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:0 14px;font-size:14px;font-family:'Inter',sans-serif;color:#EEF0F8;outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus{border-color:#F59E0B;box-shadow:0 0 0 3px rgba(245,158,11,.12)}
+.field{margin-bottom:20px}
+button{width:100%;height:44px;background:#F59E0B;border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:'Inter',sans-serif;color:#000;cursor:pointer;margin-top:8px;transition:opacity .15s}
+button:hover{opacity:.9}
+.error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:10px 14px;font-size:13px;color:#FCA5A5;margin-bottom:20px;display:none}
+.error.show{display:block}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">⚽</div>
+    <div>
+      <div class="logo-text">Scoutline</div>
+      <div class="logo-sub">FOOTBALL INTELLIGENCE</div>
+    </div>
+  </div>
+  <h1>Sign in</h1>
+  <p class="sub">Enter your credentials to access the dashboard.</p>
+  <div class="error" id="err">INVALID_MSG</div>
+  <form method="POST" action="/login">
+    <div class="field">
+      <label>Username</label>
+      <input type="text" name="username" autocomplete="username" autofocus required>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit">Sign in</button>
+  </form>
+</div>
+<script>
+const p=new URLSearchParams(location.search);
+if(p.get('err')){const e=document.getElementById('err');e.textContent=p.get('err')==='1'?'Invalid username or password.':'Session expired. Please sign in again.';e.classList.add('show');}
+</script>
+</body>
+</html>
+'''
 DISK_CACHE_FILE = os.environ.get('CACHE_FILE', 'scoutline_cache.json')
 PREDICTION_FILE = os.environ.get('PREDICTION_FILE', os.path.join('data', 'prediction_history.json'))
 ODDS_HISTORY_FILE = os.environ.get('ODDS_HISTORY_FILE', os.path.join('data', 'odds_history.json'))
@@ -1133,10 +1249,37 @@ ADVISOR_LEAGUES = [c for c in APIF_LEAGUE_MAP if c in ODDS_SPORT_KEYS]
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(SimpleHTTPRequestHandler):
+    def _require_auth(self) -> bool:
+        if _get_session_from_request(self): return True
+        self.send_response(302)
+        self.send_header('Location', '/login?err=2')
+        self.end_headers(); return False
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path   = parsed.path
         qs     = parsed.query
+
+        if path == '/login':
+            body = LOGIN_HTML.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers(); self.wfile.write(body); return
+
+        if path == '/logout':
+            cookie = self.headers.get('Cookie', '')
+            for part in cookie.split(';'):
+                part = part.strip()
+                if part.startswith('scoutline_session='):
+                    SESSIONS.pop(part[len('scoutline_session='):], None)
+            self.send_response(302)
+            self.send_header('Set-Cookie', 'scoutline_session=; Max-Age=0; Path=/')
+            self.send_header('Location', '/login')
+            self.end_headers(); return
+
+        if not self._require_auth(): return
+
         if   path.startswith('/api/'):       self.handle_api(path[4:] + ('?' + qs if qs else ''))
         elif path.startswith('/teamstats/'): self.handle_teamstats(path.split('/')[-1].upper())
         elif path.startswith('/odds/'):      self.handle_odds(path.split('/')[-1].upper())
@@ -1167,6 +1310,27 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+
+        if parsed.path == '/login':
+            size = int(self.headers.get('Content-Length', '0'))
+            body = self.rfile.read(size).decode('utf-8')
+            params = urllib.parse.parse_qs(body)
+            username = params.get('username', [''])[0].strip()
+            password = params.get('password', [''])[0]
+            if auth_check_user(username, password):
+                token = session_create(username)
+                self.send_response(302)
+                self.send_header('Set-Cookie', f'scoutline_session={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly; SameSite=Lax')
+                self.send_header('Location', '/scoutline.html')
+                self.end_headers()
+            else:
+                self.send_response(302)
+                self.send_header('Location', '/login?err=1')
+                self.end_headers()
+            return
+
+        if not self._require_auth(): return
+
         if parsed.path != '/predictions':
             self.send_json({'error': f'Unknown route: {parsed.path}'}, 404); return
         try:
@@ -1557,6 +1721,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    _init_auth_db()
     load_disk_cache(); atexit.register(save_disk_cache)
     apif_status = 'configured' if APIF_KEY else 'missing - set APIFOOTBALL_KEY in .env'
     odds_status = (
