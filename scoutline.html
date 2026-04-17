@@ -736,6 +736,89 @@ html,body{overflow-x:hidden}
 .lang-btn{height:100%;padding:0 11px;border:none;background:transparent;color:var(--tx2);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:all .15s;white-space:nowrap}
 .lang-btn.active{background:var(--amber);color:#000}
 .lang-btn:not(.active):hover{color:var(--tx);background:rgba(255,255,255,.06)}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:600px){
+  /* Topbar */
+  .topbar{gap:10px;padding:14px 0 12px}
+  .topbar-right{gap:8px}
+  .model-badge{display:none}
+
+  /* Nav — shrink buttons so all 9 fit without ugly scroll */
+  .nav{padding:3px}
+  .nav-btn{min-width:0;font-size:11px;padding:0 8px;height:30px;flex:1}
+
+  /* KPI */
+  .kpi{padding:12px 14px}
+  .kpi-val{font-size:22px}
+
+  /* Match cards */
+  .tname{font-size:13px}
+  .badge{width:32px;height:32px;font-size:9px}
+
+  /* Predictor hero */
+  .pred-score-big{font-size:44px}
+  .pred-hero{padding:20px 16px 18px}
+  .pred-hero-tname{font-size:14px}
+  .pred-prob-pct-h,.pred-prob-pct-a{font-size:20px}
+  .pred-prob-pct-d{font-size:16px}
+  .pred-odds-panel{grid-template-columns:1fr;padding:14px 16px}
+  .pred-tab-content{padding:16px 14px}
+
+  /* Prob label rows */
+  .prow{grid-template-columns:80px 1fr 42px;gap:6px}
+
+  /* Results score */
+  .score-display{font-size:36px}
+  .res-row{grid-template-columns:1fr 64px 1fr;gap:6px;padding:10px 12px}
+  .res-score{font-size:18px}
+  .res-team{font-size:13px}
+
+  /* Standings — allow horizontal scroll inside card */
+  .stand-table-wrap,.card-body{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .stand-table{min-width:520px}
+
+  /* Elo rows */
+  .elo-team{width:80px;font-size:11px}
+  .elo-val{width:36px;font-size:11px}
+
+  /* Odds boxes */
+  .odds-box{grid-template-columns:repeat(2,1fr)}
+
+  /* Acca totals */
+  .acca-totals{grid-template-columns:repeat(2,1fr)}
+  .acca-head{flex-direction:column;gap:10px;align-items:flex-start}
+
+  /* Advisor */
+  .adv-budget-input{width:100%}
+  .adv-group{width:100%}
+  .adv-scan-btn{margin-left:0;width:100%;justify-content:center}
+  .bet-match{white-space:normal}
+
+  /* Bet reasons — 2 cols instead of 4 */
+  .bet-reason{grid-template-columns:repeat(2,1fr)}
+
+  /* Odds compare table */
+  #odds-body details>div{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #odds-body table{min-width:480px}
+
+  /* Markets grid */
+  .markets-grid{grid-template-columns:repeat(2,1fr)}
+
+  /* Schedule time */
+  .schedule-time{font-size:15px}
+}
+
+@media(max-width:400px){
+  .nav-btn{font-size:10px;padding:0 5px}
+  .pred-score-big{font-size:36px;letter-spacing:-1px}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .factors-grid{grid-template-columns:1fr}
+  .pred-data-grid{grid-template-columns:repeat(2,1fr)}
+  .acca-totals{grid-template-columns:1fr}
+  .stand-table{min-width:420px}
+  .odds-market-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
