@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY proxy.py scoutline.html ./
+COPY proxy.py scoutline.html manage_users.py ./
 
 EXPOSE 8081
 
