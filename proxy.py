@@ -4,7 +4,7 @@ Scoutline — API-Football Pro backend
 Run: python3 proxy.py
 """
 
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 import urllib.request, urllib.error, ssl as _ssl
 import json, os, time, threading, hashlib, atexit, math, concurrent.futures, urllib.parse, re as _re
 import datetime as _dt, sqlite3, secrets
@@ -1735,15 +1735,18 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        status = args[1] if len(args) > 1 else '?'; p = self.path
-        if   p.startswith('/teamstats/'): print(f'  [TS]   {p}  {status}')
-        elif p.startswith('/players/'):   print(f'  [PLYR] {p}  {status}')
-        elif p.startswith('/fixture-intel/'): print(f'  [INTEL] {p}  {status}')
-        elif p.startswith('/odds/'):      print(f'  [ODDS] {p}  {status}')
-        elif p.startswith('/advisor'):    print(f'  [ADV]  {p}  {status}')
-        elif p.startswith('/predictions'):print(f'  [PRED] {p}  {status}')
-        elif p.startswith('/api/'):       print(f'  [API]  {p[4:]}  {status}')
-        elif not p.endswith(('.ico', '.map')): print(f'  [WEB]  {p}  {status}')
+        try:
+            status = args[1] if len(args) > 1 else '?'; p = getattr(self, 'path', None) or '?'
+            if   p.startswith('/teamstats/'): print(f'  [TS]   {p}  {status}')
+            elif p.startswith('/players/'):   print(f'  [PLYR] {p}  {status}')
+            elif p.startswith('/fixture-intel/'): print(f'  [INTEL] {p}  {status}')
+            elif p.startswith('/odds/'):      print(f'  [ODDS] {p}  {status}')
+            elif p.startswith('/advisor'):    print(f'  [ADV]  {p}  {status}')
+            elif p.startswith('/predictions'):print(f'  [PRED] {p}  {status}')
+            elif p.startswith('/api/'):       print(f'  [API]  {p[4:]}  {status}')
+            elif not p.endswith(('.ico', '.map')): print(f'  [WEB]  {p}  {status}')
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -1773,7 +1776,7 @@ if __name__ == '__main__':
         elif APIF_KEY:
             build_teamstats('PL')
     threading.Thread(target=startup, daemon=True).start()
-    server = HTTPServer(('', PORT), Handler)
+    server = ThreadingHTTPServer(('', PORT), Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\n  Stopped.')
 
