@@ -39,7 +39,7 @@ def _init_auth_db():
     con.commit(); con.close()
 
 def _hash_pw(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 200_000).hex()
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100_000).hex()
 
 def auth_check_user(username: str, password: str) -> bool:
     try:
@@ -84,7 +84,9 @@ LOGIN_HTML = '''<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Scoutline — Sign in</title>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Manrope',sans-serif;background:#DED3BF;color:#20251F;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
