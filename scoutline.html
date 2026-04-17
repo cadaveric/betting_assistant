@@ -731,6 +731,11 @@ html,body{overflow-x:hidden}
   .schedule-row{grid-template-columns:1fr}
   .schedule-focus{justify-self:start;text-align:left}
 }
+/* ── LANG TOGGLE ── */
+.lang-toggle{display:flex;align-items:center;background:var(--bg3);border:1px solid var(--br2);border-radius:8px;overflow:hidden;height:36px;flex-shrink:0}
+.lang-btn{height:100%;padding:0 11px;border:none;background:transparent;color:var(--tx2);font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:all .15s;white-space:nowrap}
+.lang-btn.active{background:var(--amber);color:#000}
+.lang-btn:not(.active):hover{color:var(--tx);background:rgba(255,255,255,.06)}
 </style>
 </head>
 <body>
@@ -750,9 +755,13 @@ html,body{overflow-x:hidden}
   </div>
   <div>
     <div class="brand-name">Scoutline</div>
-    <div class="brand-sub">FOOTBALL INTELLIGENCE · DIXON-COLES · KELLY · API-FOOTBALL PRO</div>
+    <div class="brand-sub" data-i18n="brand.sub">FOOTBALL INTELLIGENCE · DIXON-COLES · KELLY · API-FOOTBALL PRO</div>
   </div>
   <div class="topbar-right">
+    <div class="lang-toggle">
+      <button class="lang-btn active" id="langBtnEn" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" id="langBtnBg" onclick="setLang('bg')">BG</button>
+    </div>
     <span class="model-badge">Rich model v2</span>
     <select id="lgSel" onchange="onLgChange()" style="min-width:230px">
       <optgroup label="── England (full data)">
@@ -813,140 +822,543 @@ html,body{overflow-x:hidden}
 </div>
 
 <div class="nav">
-  <button class="nav-btn on" onclick="nav('fixtures')">Fixtures</button>
-  <button class="nav-btn" onclick="nav('schedule')">Schedule</button>
-  <button class="nav-btn" onclick="nav('predictor')">Predictor</button>
-  <button class="nav-btn" onclick="nav('standings')">Standings</button>
-  <button class="nav-btn" onclick="nav('results')">Results</button>
-  <button class="nav-btn" onclick="nav('teamstats')">Team Stats</button>
-  <button class="nav-btn" onclick="nav('odds')">Odds</button>
-  <button class="nav-btn" onclick="nav('advisor')">&#9733; Advisor</button>
-  <button class="nav-btn" onclick="nav('history')">History</button>
+  <button class="nav-btn on" onclick="nav('fixtures')" data-i18n="nav.fixtures">Fixtures</button>
+  <button class="nav-btn" onclick="nav('schedule')" data-i18n="nav.schedule">Schedule</button>
+  <button class="nav-btn" onclick="nav('predictor')" data-i18n="nav.predictor">Predictor</button>
+  <button class="nav-btn" onclick="nav('standings')" data-i18n="nav.standings">Standings</button>
+  <button class="nav-btn" onclick="nav('results')" data-i18n="nav.results">Results</button>
+  <button class="nav-btn" onclick="nav('teamstats')" data-i18n="nav.teamstats">Team Stats</button>
+  <button class="nav-btn" onclick="nav('odds')" data-i18n="nav.odds">Odds</button>
+  <button class="nav-btn" onclick="nav('advisor')" data-i18n="nav.advisor">&#9733; Advisor</button>
+  <button class="nav-btn" onclick="nav('history')" data-i18n="nav.history">History</button>
 </div>
 
 <div id="pg-fixtures" class="page on">
   <div id="fix-kpis" class="kpi-row"></div>
-  <div id="fix-body"><div class="loading-state">Loading fixtures…</div></div>
+  <div id="fix-body"><div class="loading-state" data-i18n="loading.fixtures">Loading fixtures…</div></div>
 </div>
 
 <div id="pg-schedule" class="page">
-  <div id="schedule-body"><div class="loading-state">Loading schedule…</div></div>
+  <div id="schedule-body"><div class="loading-state" data-i18n="loading.schedule">Loading schedule…</div></div>
 </div>
 
 <div id="pg-predictor" class="page">
   <div class="pred-control-strip">
     <div class="pred-matchup">
       <div class="pred-team-select">
-        <div class="pred-select-label">HOME</div>
-        <select id="hSel" class="pred-team-sel"><option>Load standings first…</option></select>
+        <div class="pred-select-label" data-i18n="pred.home">HOME</div>
+        <select id="hSel" class="pred-team-sel"><option data-i18n="pred.load_standings">Load standings first…</option></select>
       </div>
       <div class="pred-vs-badge">VS</div>
       <div class="pred-team-select">
-        <div class="pred-select-label">AWAY</div>
-        <select id="aSel" class="pred-team-sel"><option>Load standings first…</option></select>
+        <div class="pred-select-label" data-i18n="pred.away">AWAY</div>
+        <select id="aSel" class="pred-team-sel"><option data-i18n="pred.load_standings">Load standings first…</option></select>
       </div>
     </div>
     <div class="pred-options">
       <div class="pred-opt-group">
-        <div class="pred-select-label">MODEL</div>
+        <div class="pred-select-label" data-i18n="pred.model">MODEL</div>
         <select id="modelSel" class="pred-opt-sel">
-          <option value="balanced">Balanced</option>
-          <option value="form">Form-heavy</option>
-          <option value="elo">Elo-heavy</option>
-          <option value="poisson">Poisson only</option>
+          <option value="balanced" data-i18n="pred.model.balanced">Balanced</option>
+          <option value="form" data-i18n="pred.model.form">Form-heavy</option>
+          <option value="elo" data-i18n="pred.model.elo">Elo-heavy</option>
+          <option value="poisson" data-i18n="pred.model.poisson">Poisson only</option>
         </select>
       </div>
       <div class="pred-opt-group">
-        <div class="pred-select-label">HOME ADV</div>
+        <div class="pred-select-label" data-i18n="pred.homeadv">HOME ADV</div>
         <select id="haSel" class="pred-opt-sel">
           <option value="1.1">+10%</option>
           <option value="1.18">+18%</option>
           <option value="1.05">+5%</option>
-          <option value="1.0">None</option>
+          <option value="1.0" data-i18n="pred.homeadv.none">None</option>
         </select>
       </div>
     </div>
     <button class="pred-run-btn" onclick="runDeepPred()">
-      <span class="pred-run-icon">▶</span><span>Analyse</span>
+      <span class="pred-run-icon">▶</span><span data-i18n="pred.analyse">Analyse</span>
     </button>
   </div>
   <div id="predOut">
     <div class="pred-empty-state">
       <div class="pred-empty-icon">⚽</div>
-      <div class="pred-empty-title">Select two teams to analyse</div>
-      <div class="pred-empty-sub">dixon-coles · xg · decay form · elo · odds blend</div>
+      <div class="pred-empty-title" data-i18n="pred.empty.title">Select two teams to analyse</div>
+      <div class="pred-empty-sub" data-i18n="pred.empty.sub">dixon-coles · xg · decay form · elo · odds blend</div>
     </div>
   </div>
 </div>
 
 <div id="pg-standings" class="page">
-  <div id="stand-body"><div class="loading-state">Loading…</div></div>
+  <div id="stand-body"><div class="loading-state" data-i18n="loading.generic">Loading…</div></div>
 </div>
 
 <div id="pg-results" class="page">
-  <div id="res-body"><div class="loading-state">Loading…</div></div>
+  <div id="res-body"><div class="loading-state" data-i18n="loading.generic">Loading…</div></div>
 </div>
 
 <div id="pg-teamstats" class="page">
-  <div id="ts-body"><div class="loading-state">Loading team stats…</div></div>
+  <div id="ts-body"><div class="loading-state" data-i18n="loading.teamstats">Loading team stats…</div></div>
 </div>
-<div id="pg-odds" class="page"><div id="odds-body"><div class="loading-state">Click the Odds tab to load.</div></div></div>
+<div id="pg-odds" class="page"><div id="odds-body"><div class="loading-state" data-i18n="loading.odds">Click the Odds tab to load.</div></div></div>
 
 <div id="pg-advisor" class="page">
     <div class="adv-controls">
       <div class="adv-group">
-        <div class="adv-label">Budget (€)</div>
+        <div class="adv-label" data-i18n="adv.budget">Budget (€)</div>
         <input type="number" id="advBudget" class="adv-budget-input" value="20" min="1" max="100000">
       </div>
       <div class="adv-group">
-        <div class="adv-label">Risk level</div>
+        <div class="adv-label" data-i18n="adv.risk">Risk level</div>
         <select id="advRisk" class="pred-opt-sel">
-          <option value="conservative">Conservative (edge ≥12%)</option>
-          <option value="balanced" selected>Balanced (edge ≥8%)</option>
-          <option value="risky">Risky (edge ≥5%)</option>
+          <option value="conservative" data-i18n="adv.risk.conservative">Conservative (edge ≥12%)</option>
+          <option value="balanced" selected data-i18n="adv.risk.balanced">Balanced (edge ≥8%)</option>
+          <option value="risky" data-i18n="adv.risk.risky">Risky (edge ≥5%)</option>
         </select>
       </div>
       <div class="adv-group">
-        <div class="adv-label">Bet type</div>
+        <div class="adv-label" data-i18n="adv.bettype">Bet type</div>
         <select id="advStrategy" class="pred-opt-sel">
-          <option value="both" selected>Individual + combined</option>
-          <option value="singles">Individual bets only</option>
-          <option value="acca">Combined bet only</option>
+          <option value="both" selected data-i18n="adv.bettype.both">Individual + combined</option>
+          <option value="singles" data-i18n="adv.bettype.singles">Individual bets only</option>
+          <option value="acca" data-i18n="adv.bettype.acca">Combined bet only</option>
         </select>
       </div>
       <div class="adv-group">
-        <div class="adv-label">Scan mode</div>
+        <div class="adv-label" data-i18n="adv.scanmode">Scan mode</div>
         <select id="advMode" class="pred-opt-sel">
-          <option value="current" selected>Current league only</option>
-          <option value="all">All leagues (ignore selected league)</option>
+          <option value="current" selected data-i18n="adv.scanmode.current">Current league only</option>
+          <option value="all" data-i18n="adv.scanmode.all">All leagues (ignore selected league)</option>
         </select>
       </div>
       <div class="adv-group">
-        <div class="adv-label">Time window</div>
+        <div class="adv-label" data-i18n="adv.timewindow">Time window</div>
         <select id="advDays" class="pred-opt-sel">
-          <option value="1">Next 24h</option>
-          <option value="3" selected>Next 3 days</option>
-          <option value="7">Next 7 days</option>
-          <option value="14">Next 14 days</option>
+          <option value="1" data-i18n="adv.days.1">Next 24h</option>
+          <option value="3" selected data-i18n="adv.days.3">Next 3 days</option>
+          <option value="7" data-i18n="adv.days.7">Next 7 days</option>
+          <option value="14" data-i18n="adv.days.14">Next 14 days</option>
         </select>
       </div>
-      <button class="adv-scan-btn" onclick="runAdvisor()">&#128269; Scan value bets</button>
+      <button class="adv-scan-btn" onclick="runAdvisor()" data-i18n="adv.scan">🔍 Scan value bets</button>
     </div>
     <div id="adv-results">
       <div class="pred-empty-state">
         <div class="pred-empty-icon">★</div>
-        <div class="pred-empty-title">Enter your budget and click Scan</div>
-        <div class="pred-empty-sub">kelly criterion · expected value · dixon-coles · poisson · 30+ leagues</div>
+        <div class="pred-empty-title" data-i18n="adv.empty.title">Enter your budget and click Scan</div>
+        <div class="pred-empty-sub" data-i18n="adv.empty.sub">kelly criterion · expected value · dixon-coles · poisson · 30+ leagues</div>
       </div>
     </div>
   </div>
 </div>
 
 <div id="pg-history" class="page">
-  <div id="hist-body"><div class="loading-state">Loading prediction history...</div></div>
+  <div id="hist-body"><div class="loading-state" data-i18n="loading.history">Loading prediction history...</div></div>
 </div>
 
 <script>
+// ── I18N ────────────────────────────────────────────────────────────────────
+let _lang=localStorage.getItem('scoutline_lang')||'en';
+const TRANSLATIONS={
+  en:{
+    'brand.sub':'FOOTBALL INTELLIGENCE · DIXON-COLES · KELLY · API-FOOTBALL PRO',
+    'nav.fixtures':'Fixtures','nav.schedule':'Schedule','nav.predictor':'Predictor',
+    'nav.standings':'Standings','nav.results':'Results','nav.teamstats':'Team Stats',
+    'nav.odds':'Odds','nav.advisor':'★ Advisor','nav.history':'History',
+    'pred.home':'HOME','pred.away':'AWAY','pred.model':'MODEL','pred.homeadv':'HOME ADV',
+    'pred.model.balanced':'Balanced','pred.model.form':'Form-heavy',
+    'pred.model.elo':'Elo-heavy','pred.model.poisson':'Poisson only',
+    'pred.homeadv.none':'None','pred.analyse':'Analyse',
+    'pred.empty.title':'Select two teams to analyse',
+    'pred.empty.sub':'dixon-coles · xg · decay form · elo · odds blend',
+    'pred.load_standings':'Load standings first…',
+    'pred.tab.markets':'Markets','pred.tab.matrix':'Score matrix',
+    'pred.tab.chart':'Goal dist.','pred.tab.h2h':'H2H',
+    'pred.score_label':'PREDICTED SCORELINE','pred.draw':'DRAW',
+    'pred.confidence':'confidence','pred.outcome_pick':'Outcome pick',
+    'pred.elo_delta':'Elo Δ','pred.odds_loaded':'odds loaded','pred.learned':'learned',
+    'pred.home_win_lbl':'HOME WIN','pred.draw_lbl':'DRAW','pred.away_win_lbl':'AWAY WIN',
+    'pred.no_h2h':'No H2H data',
+    'pred.matrix_note':'DC-corrected Poisson · {home} goals (rows) × {away} goals (cols)',
+    'adv.budget':'Budget (€)','adv.risk':'Risk level',
+    'adv.risk.conservative':'Conservative (edge ≥12%)','adv.risk.balanced':'Balanced (edge ≥8%)',
+    'adv.risk.risky':'Risky (edge ≥5%)','adv.bettype':'Bet type',
+    'adv.bettype.both':'Individual + combined','adv.bettype.singles':'Individual bets only',
+    'adv.bettype.acca':'Combined bet only','adv.scanmode':'Scan mode',
+    'adv.scanmode.current':'Current league only','adv.scanmode.all':'All leagues (ignore selected league)',
+    'adv.timewindow':'Time window','adv.days.1':'Next 24h','adv.days.3':'Next 3 days',
+    'adv.days.7':'Next 7 days','adv.days.14':'Next 14 days',
+    'adv.scan':'🔍 Scan value bets',
+    'adv.empty.title':'Enter your budget and click Scan',
+    'adv.empty.sub':'kelly criterion · expected value · dixon-coles · poisson · 30+ leagues',
+    'adv.singles_label':'Individual bets: lower risk, play each match separately',
+    'adv.acca_label':'Combined bet: higher return, higher risk because every match must win',
+    'adv.acca_title':'{n}-Match Combined Bet',
+    'adv.acca_meta':'Combined odds: {odds} · Model probability: {prob}%',
+    'adv.suggested_stake':'suggested stake','adv.acca_disclaimer':'To place this combined bet, add every listed match and market to the same bet slip. Only stake €{stake} or less, because one wrong leg loses the whole slip.',
+    'adv.not_enough':'Not enough qualifying matches for a combined bet at this risk level.',
+    'adv.disclaimer':'⚠ {model}. Results <strong>do not guarantee profit</strong>. Kelly stakes capped at 25% per individual bet, 10% for combined bets. EV is a long-run statistical measure — individual outcomes are random. Bet responsibly. 18+.',
+    'adv.how_to_play':'How to play:','adv.model_chance':'Model chance','adv.market_chance':'Market chance',
+    'adv.edge':'Edge','adv.if_wins':'If stake wins','adv.return':'return','adv.profit':'profit','adv.ev':'EV',
+    'adv.how_to_play_text':'Open {bk}, find <strong>{match}</strong>, choose <strong>{label}</strong>, then stake about <strong>€{stake}</strong> or less.',
+    'adv.model_pct_help':'our predicted probability','adv.impl_pct_help':'probability implied by odds',
+    'adv.model_minus_market':'model minus market','adv.return_profit':'return, profit €{profit}',
+    'adv.stake_return_profit':'return €{ret} · profit €{profit}',
+    'adv.acca_stake':'Stake','adv.acca_return':'Potential return','adv.acca_net_profit':'Net profit',
+    'adv.help.title':'How to choose and place bets today',
+    'adv.help.text':'A value bet appears when <strong>our model probability</strong> is higher than the <strong>market probability</strong> implied by the odds. The difference is the <strong>edge</strong>. <strong>EV</strong> estimates long-run value, not a guaranteed profit. The suggested stake uses a cautious Kelly formula, capped to avoid oversized bets.',
+    'adv.help.safer':'Safer choice','adv.help.safer_text':'Pick the top 2-3 individual bets. Each match is played separately, so one loss does not ruin the others.',
+    'adv.help.higher':'Higher return','adv.help.higher_text':'Use the combined bet for 3-5 matches only if you accept more risk. Every leg must win.',
+    'adv.help.place':'How to place','adv.help.place_text':'Open the bookmaker, find the match, choose the shown market, enter the suggested stake or less.',
+    'adv.help.avoid':'What to avoid','adv.help.avoid_text':'Do not pick only the biggest profit. Prefer strong edge, sensible stake, and matches soon enough to track.',
+    'loading.fixtures':'Loading fixtures…','loading.schedule':'Loading schedule…','loading.generic':'Loading…',
+    'loading.teamstats':'Loading team stats…','loading.odds':'Click the Odds tab to load.',
+    'loading.history':'Loading prediction history...','loading.switching':'Switching league...',
+    'loading.rich_stats':'Loading rich stats from proxy (building in background)…',
+    'loading.scoring':'Scoring stored predictions...','loading.h2h':'Fetching H2H…',
+    'loading.live_odds':'Fetching live odds...','loading.scanning':'Scanning fixtures for value…',
+    'loading.fetching_odds':'Fetching live odds…',
+    'loading.standings_first':'Load Standings first to populate team data.',
+    'loading.shot_data':'Shot data not yet loaded — visit Standings tab first.',
+    'stand.rank':'Rank','stand.team':'Team','stand.played':'Played','stand.wins':'Wins',
+    'stand.draws':'Draws','stand.losses':'Losses','stand.gf':'Goals For','stand.ga':'Goals Against',
+    'stand.gd':'Goal Diff','stand.pts':'Points','stand.model_rating':'Model Rating',
+    'stand.sot':'Shots on Target / match','stand.form':'Recent Form',
+    'stand.rank_tip':'League position','stand.played_tip':'Matches played','stand.wins_tip':'Matches won',
+    'stand.draws_tip':'Matches drawn','stand.losses_tip':'Matches lost','stand.gf_tip':'Goals scored',
+    'stand.ga_tip':'Goals conceded','stand.gd_tip':'Goals for minus goals against',
+    'stand.pts_tip':'League points','stand.rating_tip':'Estimated team strength rating used by the prediction model',
+    'stand.sot_tip':'Average shots on target per match','stand.form_tip':'Recent results, newest first',
+    'stand.elo_top5':'Elo ratings — top 5','stand.league_stats':'League stats',
+    'stand.total_goals':'total goals','stand.avg_goals':'avg goals/game',
+    'stand.games_played':'games played','stand.draw_rate':'draw rate',
+    'kpi.fixtures':'fixtures','kpi.teams':'teams','kpi.selected_league':'selected league',
+    'kpi.teams_shot_data':'teams w/ shot data','kpi.results':'results','kpi.avg_goals':'avg goals',
+    'kpi.btts_rate':'BTTS rate','kpi.draws':'draws','kpi.avg_goals_game':'avg goals/game',
+    'kpi.draw_rate':'draw rate','kpi.teams_w_sot':'teams w/ SoT data','kpi.upcoming':'upcoming matches',
+    'kpi.today':'today','kpi.next3':'next 3 days','kpi.day_window':'day window',
+    'kpi.fixtures_w_odds':'fixtures with odds','kpi.bookmakers':'bookmakers',
+    'kpi.value_bets':'value bets','kpi.odds_provider':'odds provider',
+    'kpi.remembered':'remembered','kpi.graded':'graded','kpi.outcome_acc':'outcome accuracy',
+    'kpi.avg_brier':'avg brier','kpi.indiv_bets':'individual value bets',
+    'kpi.your_budget':'your budget','kpi.top_ev':'top EV','kpi.leagues_scanned':'leagues scanned',
+    'kpi.combined_bet':'{n}-match combined bet',
+    'mkt.over15':'Over 1.5 goals','mkt.over25':'Over 2.5 goals','mkt.over35':'Over 3.5 goals',
+    'mkt.over45':'Over 4.5 goals','mkt.btts':'Both teams score','mkt.nobtts':'Both teams do not score',
+    'mkt.ht_goal':'1st-half goal','mkt.ht_over15':'1st-half over 1.5 goals',
+    'mkt.ht_btts':'Both score in 1st half','mkt.ht_draw':'Draw at half-time',
+    'mkt.corners_85':'Over 8.5 corners','mkt.corners_105':'Over 10.5 corners',
+    'mkt.cards_25':'Over 2.5 cards','mkt.cards_35':'Over 3.5 cards',
+    'mkt.clean_sheet':'clean sheet','mkt.win_to_nil':'win to nil',
+    'mkt.home_cs':'{team} clean sheet','mkt.away_cs':'{team} clean sheet',
+    'mkt.lead_ht':'{team} lead at half-time',
+    'mkt.sub.over15':'2 or more total goals','mkt.sub.over25':'3 or more total goals',
+    'mkt.sub.over35':'4 or more total goals','mkt.sub.over45':'5 or more total goals',
+    'mkt.sub.btts':'each team scores at least once','mkt.sub.nobtts':'at least one team finishes with 0 goals',
+    'mkt.sub.ht_goal':'at least 1 goal before half-time','mkt.sub.ht_over15':'2 or more goals before half-time',
+    'mkt.sub.ht_btts':'each team scores before half-time','mkt.sub.ht_draw':'scores level after 45 minutes',
+    'mkt.sub.ht_home':'home winning at break','mkt.sub.ht_away':'away winning at break',
+    'mkt.sub.corners_85':'9 or more total corners','mkt.sub.corners_105':'11 or more total corners',
+    'mkt.sub.cards_25':'3 or more total cards','mkt.sub.cards_35':'4 or more total cards',
+    'mkt.sub.cs_likely':'clean sheet likely','mkt.sub.1cs':'1+ clean sheet',
+    'mkt.sub.home_dom':'home dominance','mkt.sub.away_dom':'away dominance',
+    'section.goals':'goals — full match','section.cs':'clean sheets &amp; win to nil',
+    'section.halftime':'first half','section.corners_lbl':'corners','section.cards_lbl':'cards',
+    'section.goals_tab':'Goals','section.halftime_tab':'Half time',
+    'dc.label':'Chance creation','dc.label_help':'Expected goals per match: better chances, not guaranteed goals',
+    'dc.allowed':'Chances allowed','dc.allowed_help':'Expected chances conceded per match: lower is better defensively',
+    'dc.recent':'Recent chances allowed','dc.recent_help':'Last-5 expected chances conceded, weighted toward current form',
+    'dc.goals_venue':'Team goals by venue','dc.goals_venue_help':'Home team goals at home vs away team goals away',
+    'dc.goals_allowed_venue':'Team goals allowed by venue','dc.goals_allowed_venue_help':'Home goals conceded at home vs away goals conceded away',
+    'dc.lg_venue_goals':'League venue goals','dc.lg_venue_goals_help':'League average goals scored by home teams and away teams',
+    'dc.lg_venue_allowed':'League venue goals allowed','dc.lg_venue_allowed_help':'League average goals conceded by home teams and away teams',
+    'dc.sot':'Shots on target','dc.sot_help':'How often each team tests the goalkeeper',
+    'dc.recent_form':'Recent form','dc.recent_form_help':'Recent results weighted toward the latest matches',
+    'dc.team_strength':'Team strength','dc.team_strength_help':'Model rating from league position, points and goal difference',
+    'dc.corner_tendency':'Corner tendency','dc.corner_tendency_help':'Average corners won per match',
+    'dc.corners_venue':'Corners by venue','dc.corners_venue_help':'Home corners for at home vs away corners for away',
+    'dc.corners_allowed_venue':'Corners allowed by venue','dc.corners_allowed_venue_help':'Corners conceded by venue: lower is better',
+    'dc.lg_corners':'League venue corners','dc.lg_corners_help':'League average corners for home and away teams',
+    'dc.card_risk':'Card risk','dc.card_risk_help':'Average yellow cards per match',
+    'dc.ref_cards':'Referee card rate','dc.ref_cards_help':'Known fixture referee and average total cards per match',
+    'dc.home_adv':'Home advantage','dc.home_adv_help':'Home team adjustment used by the model',
+    'dc.h2h_tilt':'Head-to-head tilt','dc.h2h_tilt_help':'Small adjustment from recent meetings between these teams',
+    'fix.rich_loaded':'Rich stats loaded','fix.rich_building':'Rich stats building',
+    'fix.stats_updated':'Team stats updated','fix.refresh':'Refresh',
+    'fix.most_likely_score':'most likely score','fix.outcome_pick':'Outcome pick',
+    'fix.scoreline_differs':'scoreline differs','fix.conf':'Conf','fix.draw':'Draw',
+    'sched.title':'Match timetable',
+    'sched.sub':'Upcoming {league} fixtures grouped by urgency. Start with Today and Next 3 days.',
+    'sched.focus_today':'Focus today','sched.tomorrow':'Tomorrow',
+    'sched.prepare_soon':'Prepare soon','sched.monitor':'Monitor',
+    'odds.how_to_read':'How to read:',
+    'odds.how_to_read_text':'Best odds = highest across EU bookmakers · Implied% = vig-removed · Model% = our Poisson · Updated',
+    'odds.value_badge':'VALUE {label} @ {odd}','odds.model_sees':'model sees ≥8% more than market',
+    'odds.most_likely':'<strong>Most likely result:</strong>','odds.best_value':'<strong>Best value price:</strong>',
+    'odds.not_most_likely':'This is not necessarily the most likely result; it means the model thinks the bookmaker price is too high by','odds.pp':'percentage points.',
+    'odds.no_value':'No model value edge found for this fixture.',
+    'odds.best_value_kicker':'Best value price, not most likely','odds.model_edge':'model edge',
+    'odds.compare':'Compare all','odds.bookmakers':'bookmakers',
+    'odds.pick':'Pick','odds.stake':'Stake','odds.return':'Return','odds.profit':'Profit',
+    'odds.home_win':'Home win','odds.draw':'Draw','odds.away_win':'Away win',
+    'odds.over25':'Over 2.5 goals','odds.under25':'Under 2.5 goals',
+    'odds.model_says':'Model says:','odds.market_says':'Market says:','odds.books':'books',
+    'odds.kpi.fixtures':'fixtures with odds','odds.kpi.books':'bookmakers',
+    'odds.kpi.value':'value bets','odds.kpi.provider':'odds provider',
+    'hist.title':'Prediction Ledger',
+    'hist.pending_note':'Pending rows are graded automatically after the fixture finishes.',
+    'hist.date':'Date','hist.match':'Match','hist.pick':'Pick','hist.prob':'Prob.',
+    'hist.score':'Score','hist.actual':'Actual','hist.result':'Result','hist.brier':'Brier',
+    'hist.hit':'Hit','hist.miss':'Miss','hist.pending':'Pending',
+    'hist.no_predictions':'No predictions saved yet. Run the Predictor once and I will start tracking it.',
+    'hist.kpi.remembered':'remembered','hist.kpi.graded':'graded',
+    'hist.kpi.acc':'outcome accuracy','hist.kpi.brier':'avg brier',
+    'player.intel':'Player intelligence','player.last38':'last 38 matches',
+    'player.suspension':'⚠ Suspension risk (4+ YC in last 38)','player.key_scorers':'⚽ Key scorers',
+    'player.goals':'goals',
+    'ts.sot':'SoT/g','ts.corners':'Corners/g','ts.cards':'Cards/g','ts.fouls':'Fouls/g',
+    'ts.poss':'Poss%','ts.data':'Data','ts.real':'real','ts.est':'est.',
+    'dq.full':'Full data','dq.strong':'Strong data','dq.stats_only':'Stats only',
+    'dq.odds_only':'Odds only','dq.estimated':'Estimated',
+    'dq.hint_full':'xG, shots and odds available','dq.hint_strong':'team stats and odds available',
+    'dq.hint_stats':'team stats available, odds missing',
+    'dq.hint_odds':'market data available, team stats estimated',
+    'dq.hint_est':'standings/form model with limited rich data',
+    'time.not_cached':'not cached','time.just_now':'just now',
+    'time.m_ago':'m ago','time.h_ago':'h ago','time.d_ago':'d ago',
+    'err.load_standings':'Load Standings first.','err.two_teams':'Select two different teams.',
+    'err.no_fixtures':'No fixtures in the next 7 days.','err.no_results':'No results found.',
+    'err.rate_limited':'Rate limited','err.rate_limited_text':'the free API allows 10 calls/minute.',
+    'err.rate_limited_reload':'reload the page','err.no_schedule':'No scheduled matches in this time window.',
+    'err.schedule_unavail':'Schedule unavailable',
+    'err.no_odds':'No live odds currently listed for {league}. Some leagues only appear close to matchday or when bookmakers publish EU markets.',
+    'err.no_value':'No value bets found at {risk} risk (≥{edge}% edge). Try Risky mode.',
+    'err.no_value_multi':'No value bets found across {leagues} leagues at {risk} risk (≥{edge}% edge). Try Risky mode.',
+    'err.scan_failed':'Scan failed: {msg}. Check that APIFOOTBALL_KEY and ODDS_API_KEY are set in .env',
+    'err.no_standings':'Could not load standings. Visit Fixtures tab first.',
+    'err.no_odds_league':'Could not load odds for this league.',
+    'err.hist_failed':'Could not load prediction history:',
+    'res.goals_chart':'Goals per game — last 15',
+    'res.home_win':'Home win','res.away_win':'Away win','res.draw':'Draw',
+    'misc.draw':'Draw','misc.real':'real data','misc.estimated':'estimated',
+    'misc.pts':'pts','misc.saved':'saved','misc.score':'score',
+    'vtag.value':'VALUE','vtag.edge':'edge','vtag.avoid':'avoid',
+    'outcome.home_win':'Home win','outcome.away_win':'Away win','outcome.draw':'Draw',
+  },
+  bg:{
+    'brand.sub':'ФУТБОЛЕН АНАЛИЗ · ДИКСОН-КОУЛС · КЕЛИ · API-FOOTBALL PRO',
+    'nav.fixtures':'Мачове','nav.schedule':'Програма','nav.predictor':'Предиктор',
+    'nav.standings':'Класиране','nav.results':'Резултати','nav.teamstats':'Статистики',
+    'nav.odds':'Коефициенти','nav.advisor':'★ Съветник','nav.history':'История',
+    'pred.home':'ДОМАКИН','pred.away':'ГОСТ','pred.model':'МОДЕЛ','pred.homeadv':'ДОМ. ПРЕДИМСТВО',
+    'pred.model.balanced':'Балансиран','pred.model.form':'Акцент форма',
+    'pred.model.elo':'Акцент Ело','pred.model.poisson':'Само Поасон',
+    'pred.homeadv.none':'Няма','pred.analyse':'Анализирай',
+    'pred.empty.title':'Изберете два отбора за анализ',
+    'pred.empty.sub':'диксон-коулс · xg · форма · ело · коефициенти',
+    'pred.load_standings':'Заредете класирането първо…',
+    'pred.tab.markets':'Пазари','pred.tab.matrix':'Матрица резултати',
+    'pred.tab.chart':'Разпр. голове','pred.tab.h2h':'Директни срещи',
+    'pred.score_label':'ПРОГНОЗЕН РЕЗУЛТАТ','pred.draw':'РАВЕН',
+    'pred.confidence':'увереност','pred.outcome_pick':'Прогноза',
+    'pred.elo_delta':'Ело Δ','pred.odds_loaded':'коефициенти заредени','pred.learned':'научен',
+    'pred.home_win_lbl':'ДОМАКИН ПЕЧЕЛИ','pred.draw_lbl':'РАВЕН','pred.away_win_lbl':'ГОСТ ПЕЧЕЛИ',
+    'pred.no_h2h':'Няма данни за директни срещи',
+    'pred.matrix_note':'Поасон с DC корекция · {home} гола (редове) × {away} гола (колони)',
+    'adv.budget':'Бюджет (€)','adv.risk':'Ниво на риска',
+    'adv.risk.conservative':'Консервативен (предимство ≥12%)','adv.risk.balanced':'Балансиран (предимство ≥8%)',
+    'adv.risk.risky':'Рисков (предимство ≥5%)','adv.bettype':'Тип залог',
+    'adv.bettype.both':'Единичен + комбиниран','adv.bettype.singles':'Само единични залози',
+    'adv.bettype.acca':'Само комбиниран залог','adv.scanmode':'Режим сканиране',
+    'adv.scanmode.current':'Само текущата лига','adv.scanmode.all':'Всички лиги (игнорира избраната)',
+    'adv.timewindow':'Времеви прозорец','adv.days.1':'Следващите 24ч','adv.days.3':'Следващите 3 дни',
+    'adv.days.7':'Следващите 7 дни','adv.days.14':'Следващите 14 дни',
+    'adv.scan':'🔍 Търси ценни залози',
+    'adv.empty.title':'Въведете бюджет и кликнете Сканиране',
+    'adv.empty.sub':'критерий на Кели · очаквана стойност · диксон-коулс · поасон · 30+ лиги',
+    'adv.singles_label':'Единични залози: по-нисък риск, играйте всеки мач отделно',
+    'adv.acca_label':'Комбиниран залог: по-висока печалба, по-висок риск — всеки мач трябва да спечели',
+    'adv.acca_title':'Комбинация от {n} мача',
+    'adv.acca_meta':'Комбинирани коефициенти: {odds} · Вероятност на модела: {prob}%',
+    'adv.suggested_stake':'препоръчителен залог','adv.acca_disclaimer':'За да направите комбинирания залог, добавете всеки мач в един бетслип. Залагайте само €{stake} или по-малко, защото един грешен крак губи целия слип.',
+    'adv.not_enough':'Недостатъчно отговарящи мачове за комбиниран залог.',
+    'adv.disclaimer':'⚠ {model}. Резултатите <strong>не гарантират печалба</strong>. Залозите по Кели са ограничени до 25% за единични и 10% за комбинирани. ОС е дългосрочна статистическа мярка — индивидуалните резултати са случайни. Залагайте отговорно. 18+.',
+    'adv.how_to_play':'Как да играете:','adv.model_chance':'Вероятност на модела','adv.market_chance':'Пазарна вероятност',
+    'adv.edge':'Предимство','adv.if_wins':'При успех','adv.return':'печалба','adv.profit':'нетна печалба','adv.ev':'ОС',
+    'adv.how_to_play_text':'Отворете {bk}, намерете <strong>{match}</strong>, изберете <strong>{label}</strong>, след това заложете около <strong>€{stake}</strong> или по-малко.',
+    'adv.model_pct_help':'нашата предвидена вероятност','adv.impl_pct_help':'вероятност, имплицирана от коефициентите',
+    'adv.model_minus_market':'модел минус пазар','adv.return_profit':'печалба, нетна €{profit}',
+    'adv.stake_return_profit':'печалба €{ret} · нетна €{profit}',
+    'adv.acca_stake':'Залог','adv.acca_return':'Потенциална печалба','adv.acca_net_profit':'Нетна печалба',
+    'adv.help.title':'Как да изберете и направите залози днес',
+    'adv.help.text':'Ценен залог се появява когато <strong>вероятността на нашия модел</strong> е по-висока от <strong>пазарната вероятност</strong>. Разликата е <strong>предимството</strong>. <strong>ОС</strong> оценява дългосрочна стойност, не гарантирана печалба. Препоръчителният залог използва предпазна формула на Кели.',
+    'adv.help.safer':'По-безопасен избор','adv.help.safer_text':'Изберете топ 2-3 единични залога. Всеки мач е отделен, така че една загуба не руинира останалите.',
+    'adv.help.higher':'По-висока печалба','adv.help.higher_text':'Използвайте комбинирания залог само ако приемате по-висок риск. Всеки крак трябва да спечели.',
+    'adv.help.place':'Как да направите','adv.help.place_text':'Отворете букмейкъра, намерете мача, изберете показания пазар, въведете препоръчителния залог.',
+    'adv.help.avoid':'Какво да избягвате','adv.help.avoid_text':'Не избирайте само най-голямата печалба. Предпочитайте силно предимство, разумен залог.',
+    'loading.fixtures':'Зареждане на мачове…','loading.schedule':'Зареждане на програма…','loading.generic':'Зареждане…',
+    'loading.teamstats':'Зареждане на статистики…','loading.odds':'Кликнете Коефициенти за зареждане.',
+    'loading.history':'Зареждане на история...','loading.switching':'Превключване на лига...',
+    'loading.rich_stats':'Зареждане на статистики (изгражда се)…',
+    'loading.scoring':'Оценяване на прогнози...','loading.h2h':'Зареждане на директни срещи…',
+    'loading.live_odds':'Зареждане на коефициенти...','loading.scanning':'Сканиране за ценни залози…',
+    'loading.fetching_odds':'Зареждане на коефициенти…',
+    'loading.standings_first':'Заредете Класирането за данни.',
+    'loading.shot_data':'Данните за удари не са заредени — посетете Класирането.',
+    'stand.rank':'Ранг','stand.team':'Отбор','stand.played':'Мачове','stand.wins':'Победи',
+    'stand.draws':'Равни','stand.losses':'Загуби','stand.gf':'Голове за','stand.ga':'Голове против',
+    'stand.gd':'Разлика','stand.pts':'Точки','stand.model_rating':'Рейтинг',
+    'stand.sot':'Удари в рамка/мач','stand.form':'Последна форма',
+    'stand.rank_tip':'Позиция в лигата','stand.played_tip':'Изиграни мачове','stand.wins_tip':'Спечелени мачове',
+    'stand.draws_tip':'Равни мачове','stand.losses_tip':'Загубени мачове','stand.gf_tip':'Вкарани голове',
+    'stand.ga_tip':'Допуснати голове','stand.gd_tip':'Голове за минус голове против',
+    'stand.pts_tip':'Точки в лигата','stand.rating_tip':'Оценка на силата на отбора използвана от модела',
+    'stand.sot_tip':'Средни удари в рамка на мач','stand.form_tip':'Последни резултати, най-новите първи',
+    'stand.elo_top5':'Ело рейтинги — топ 5','stand.league_stats':'Статистики лига',
+    'stand.total_goals':'общо голове','stand.avg_goals':'ср. голове/мач',
+    'stand.games_played':'изиграни мача','stand.draw_rate':'% равни',
+    'kpi.fixtures':'мача','kpi.teams':'отбора','kpi.selected_league':'избрана лига',
+    'kpi.teams_shot_data':'отбора с данни удари','kpi.results':'резултата','kpi.avg_goals':'ср. голове',
+    'kpi.btts_rate':'% ДОА','kpi.draws':'равни','kpi.avg_goals_game':'ср. голове/мач',
+    'kpi.draw_rate':'% равни','kpi.teams_w_sot':'отбора с данни удари','kpi.upcoming':'предстоящи мача',
+    'kpi.today':'днес','kpi.next3':'следващите 3 дни','kpi.day_window':'ден прозорец',
+    'kpi.fixtures_w_odds':'мача с коефициенти','kpi.bookmakers':'букмейкъри',
+    'kpi.value_bets':'ценни залози','kpi.odds_provider':'доставчик',
+    'kpi.remembered':'запомнени','kpi.graded':'оценени','kpi.outcome_acc':'точност резултат',
+    'kpi.avg_brier':'ср. Брие','kpi.indiv_bets':'единични ценни залози',
+    'kpi.your_budget':'вашият бюджет','kpi.top_ev':'топ ОС','kpi.leagues_scanned':'сканирани лиги',
+    'kpi.combined_bet':'комбинация от {n} мача',
+    'mkt.over15':'Над 1.5 гола','mkt.over25':'Над 2.5 гола','mkt.over35':'Над 3.5 гола',
+    'mkt.over45':'Над 4.5 гола','mkt.btts':'Двата отбора бележат','mkt.nobtts':'Двата отбора не бележат',
+    'mkt.ht_goal':'Гол 1-во полувр.','mkt.ht_over15':'1-во полувр. над 1.5 гола',
+    'mkt.ht_btts':'ДОА в 1-во полувр.','mkt.ht_draw':'Равен на полувремето',
+    'mkt.corners_85':'Над 8.5 ъглови','mkt.corners_105':'Над 10.5 ъглови',
+    'mkt.cards_25':'Над 2.5 картона','mkt.cards_35':'Над 3.5 картона',
+    'mkt.clean_sheet':'суха мрежа','mkt.win_to_nil':'победа без допуснат',
+    'mkt.home_cs':'{team} суха мрежа','mkt.away_cs':'{team} суха мрежа',
+    'mkt.lead_ht':'{team} води на полувремето',
+    'mkt.sub.over15':'2 или повече гола общо','mkt.sub.over25':'3 или повече гола общо',
+    'mkt.sub.over35':'4 или повече гола общо','mkt.sub.over45':'5 или повече гола общо',
+    'mkt.sub.btts':'всеки отбор вкарва поне веднъж','mkt.sub.nobtts':'поне един отбор завършва с 0 гола',
+    'mkt.sub.ht_goal':'поне 1 гол преди полувремето','mkt.sub.ht_over15':'2 или повече гола преди полувремето',
+    'mkt.sub.ht_btts':'всеки отбор вкарва преди полувремето','mkt.sub.ht_draw':'равен след 45 минути',
+    'mkt.sub.ht_home':'домакинът води на полувремето','mkt.sub.ht_away':'гостът води на полувремето',
+    'mkt.sub.corners_85':'9 или повече ъглови общо','mkt.sub.corners_105':'11 или повече ъглови общо',
+    'mkt.sub.cards_25':'3 или повече картона общо','mkt.sub.cards_35':'4 или повече картона общо',
+    'mkt.sub.cs_likely':'суха мрежа вероятна','mkt.sub.1cs':'поне 1 суха мрежа',
+    'mkt.sub.home_dom':'домакинско превъзходство','mkt.sub.away_dom':'гостуващо превъзходство',
+    'section.goals':'голове — цял мач','section.cs':'сухи мрежи &amp; победа без допуснат',
+    'section.halftime':'първо полувреме','section.corners_lbl':'ъглови','section.cards_lbl':'картони',
+    'section.goals_tab':'Голове','section.halftime_tab':'Полувреме',
+    'dc.label':'Създаване на шансове','dc.label_help':'Очаквани голове на мач: по-добри шансове, не гарантирани голове',
+    'dc.allowed':'Допуснати шансове','dc.allowed_help':'Очаквани допуснати шансове на мач: по-ниско е по-добро',
+    'dc.recent':'Последни допуснати шансове','dc.recent_help':'Последните 5 очаквани допуснати шансове с тегло към текущата форма',
+    'dc.goals_venue':'Голове по домакинство','dc.goals_venue_help':'Голове на домакина вкъщи срещу голове на госта в гости',
+    'dc.goals_allowed_venue':'Допуснати по домакинство','dc.goals_allowed_venue_help':'Допуснати на домакина вкъщи срещу допуснати на госта в гости',
+    'dc.lg_venue_goals':'Голове по домакинство в лигата','dc.lg_venue_goals_help':'Средни голове на домакини и гости в лигата',
+    'dc.lg_venue_allowed':'Допуснати по домакинство в лигата','dc.lg_venue_allowed_help':'Средни допуснати голове на домакини и гости в лигата',
+    'dc.sot':'Удари в рамка','dc.sot_help':'Колко пъти отборът проверява вратаря',
+    'dc.recent_form':'Последна форма','dc.recent_form_help':'Последни резултати с тегло към най-новите мачове',
+    'dc.team_strength':'Сила на отбора','dc.team_strength_help':'Рейтинг от позиция, точки и голова разлика',
+    'dc.corner_tendency':'Тенденция ъглови','dc.corner_tendency_help':'Средни ъглови на мач',
+    'dc.corners_venue':'Ъглови по домакинство','dc.corners_venue_help':'Ъглови на домакина вкъщи срещу ъглови на госта в гости',
+    'dc.corners_allowed_venue':'Допуснати ъглови по домакинство','dc.corners_allowed_venue_help':'Допуснати ъглови по домакинство: по-ниско е по-добро',
+    'dc.lg_corners':'Ъглови по домакинство в лигата','dc.lg_corners_help':'Средни ъглови на домакини и гости в лигата',
+    'dc.card_risk':'Риск от картони','dc.card_risk_help':'Средни жълти картони на мач',
+    'dc.ref_cards':'Картони на референ','dc.ref_cards_help':'Известен рефер и средни общи картони на мач',
+    'dc.home_adv':'Домакинско предимство','dc.home_adv_help':'Корекция за домакина използвана от модела',
+    'dc.h2h_tilt':'Корекция директни срещи','dc.h2h_tilt_help':'Малка корекция от последните срещи между тези отбори',
+    'fix.rich_loaded':'Богати статистики заредени','fix.rich_building':'Статистиките се изграждат',
+    'fix.stats_updated':'Статистики обновени','fix.refresh':'Опресни',
+    'fix.most_likely_score':'най-вероятен резултат','fix.outcome_pick':'Прогноза',
+    'fix.scoreline_differs':'резултатът се различава','fix.conf':'Увер','fix.draw':'Равен',
+    'sched.title':'Програма мачове',
+    'sched.sub':'Предстоящи мачове от {league} групирани по спешност. Започнете с Днес и Следващите 3 дни.',
+    'sched.focus_today':'Фокус днес','sched.tomorrow':'Утре',
+    'sched.prepare_soon':'Подгответе се','sched.monitor':'Следете',
+    'odds.how_to_read':'Как да четете:',
+    'odds.how_to_read_text':'Най-добри коефициенти = най-висок от ЕС букмейкъри · Implied% = без вигор · Model% = нашият Поасон · Обновено',
+    'odds.value_badge':'СТОЙНОСТ {label} @ {odd}','odds.model_sees':'моделът вижда ≥8% повече от пазара',
+    'odds.most_likely':'<strong>Най-вероятен резултат:</strong>','odds.best_value':'<strong>Най-добра ценова стойност:</strong>',
+    'odds.not_most_likely':'Не е задължително най-вероятният резултат; означава, че моделът смята коефициента за твърде висок с','odds.pp':'процентни точки.',
+    'odds.no_value':'Няма намерено предимство на модела за тази среща.',
+    'odds.best_value_kicker':'Най-добра ценова стойност, не най-вероятен','odds.model_edge':'предимство на модела',
+    'odds.compare':'Сравни всички','odds.bookmakers':'букмейкъри',
+    'odds.pick':'Избор','odds.stake':'Залог','odds.return':'Печалба','odds.profit':'Нетна печалба',
+    'odds.home_win':'Победа домакин','odds.draw':'Равен','odds.away_win':'Победа гост',
+    'odds.over25':'Над 2.5 гола','odds.under25':'Под 2.5 гола',
+    'odds.model_says':'Моделът казва:','odds.market_says':'Пазарът казва:','odds.books':'букмейкъра',
+    'odds.kpi.fixtures':'мача с коефициенти','odds.kpi.books':'букмейкъри',
+    'odds.kpi.value':'ценни залози','odds.kpi.provider':'доставчик',
+    'hist.title':'Журнал прогнози',
+    'hist.pending_note':'Предстоящите редове се оценяват автоматично след края на мача.',
+    'hist.date':'Дата','hist.match':'Мач','hist.pick':'Избор','hist.prob':'Вер.',
+    'hist.score':'Резултат','hist.actual':'Реален','hist.result':'Изход','hist.brier':'Брие',
+    'hist.hit':'Уцелен','hist.miss':'Пропуснат','hist.pending':'Предстои',
+    'hist.no_predictions':'Няма запазени прогнози. Пуснете Предиктора веднъж и ще започна да следя.',
+    'hist.kpi.remembered':'запомнени','hist.kpi.graded':'оценени',
+    'hist.kpi.acc':'точност резултат','hist.kpi.brier':'ср. Брие',
+    'player.intel':'Информация за играчи','player.last38':'последните 38 мача',
+    'player.suspension':'⚠ Риск от наказание (4+ ЖК в последните 38)','player.key_scorers':'⚽ Ключови голмайстори',
+    'player.goals':'гола',
+    'ts.sot':'Удари/мач','ts.corners':'Ъглови/мач','ts.cards':'Картони/мач','ts.fouls':'Нарушения/мач',
+    'ts.poss':'Владение%','ts.data':'Данни','ts.real':'реални','ts.est':'ест.',
+    'dq.full':'Пълни данни','dq.strong':'Добри данни','dq.stats_only':'Само статистики',
+    'dq.odds_only':'Само коефициенти','dq.estimated':'Приблизителни',
+    'dq.hint_full':'xG, удари и коефициенти налични','dq.hint_strong':'статистики и коефициенти налични',
+    'dq.hint_stats':'статистики налични, коефициенти липсват',
+    'dq.hint_odds':'пазарни данни налични, статистики приблизителни',
+    'dq.hint_est':'модел на класиране/форма с ограничени данни',
+    'time.not_cached':'не е кеширано','time.just_now':'току-що',
+    'time.m_ago':'мин. преди','time.h_ago':'ч. преди','time.d_ago':'д. преди',
+    'err.load_standings':'Заредете Класирането първо.','err.two_teams':'Изберете два различни отбора.',
+    'err.no_fixtures':'Няма мачове в следващите 7 дни.','err.no_results':'Няма намерени резултати.',
+    'err.rate_limited':'Ограничен достъп','err.rate_limited_text':'безплатният API позволява 10 заявки/минута.',
+    'err.rate_limited_reload':'презаредете страницата','err.no_schedule':'Няма планирани мачове в това времево прозорче.',
+    'err.schedule_unavail':'Програмата е недостъпна',
+    'err.no_odds':'Няма коефициенти за {league}. Някои лиги се появяват само близо до кръга.',
+    'err.no_value':'Няма ценни залози при {risk} риск (≥{edge}% предимство). Пробвайте Рисков режим.',
+    'err.no_value_multi':'Няма ценни залози в {leagues} лиги при {risk} риск (≥{edge}% предимство). Пробвайте Рисков режим.',
+    'err.scan_failed':'Сканирането се провали: {msg}. Проверете APIFOOTBALL_KEY и ODDS_API_KEY в .env',
+    'err.no_standings':'Не можа да се зареди класирането. Посетете Мачове.',
+    'err.no_odds_league':'Не можа да се заредят коефициенти за тази лига.',
+    'err.hist_failed':'Не можа да се зареди историята:',
+    'res.goals_chart':'Голове на мач — последните 15',
+    'res.home_win':'Победа домакин','res.away_win':'Победа гост','res.draw':'Равен',
+    'misc.draw':'Равен','misc.real':'реални данни','misc.estimated':'приблизителни',
+    'misc.pts':'т.','misc.saved':'запазено','misc.score':'резултат',
+    'vtag.value':'СТОЙНОСТ','vtag.edge':'предимство','vtag.avoid':'избягвай',
+    'outcome.home_win':'Победа домакин','outcome.away_win':'Победа гост','outcome.draw':'Равен',
+  }
+};
+function t(key,vars){
+  const s=(TRANSLATIONS[_lang]||TRANSLATIONS.en)[key]||(TRANSLATIONS.en[key]||key);
+  if(!vars)return s;
+  return s.replace(/\{(\w+)\}/g,(_,k)=>vars[k]??_);
+}
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key=el.dataset.i18n;
+    if(el.tagName==='OPTION'||el.tagName==='OPTGROUP') el.textContent=t(key);
+    else el.innerHTML=t(key);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    el.placeholder=t(el.dataset.i18nPh);
+  });
+  document.getElementById('langBtnEn').classList.toggle('active',_lang==='en');
+  document.getElementById('langBtnBg').classList.toggle('active',_lang==='bg');
+}
+function setLang(l){
+  _lang=l;
+  localStorage.setItem('scoutline_lang',l);
+  applyI18n();
+  // Re-render current page
+  const active=document.querySelector('.nav-btn.on');
+  const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
+  const idx=[...document.querySelectorAll('.nav-btn')].indexOf(active);
+  const pg=pages[idx]||'fixtures';
+  nav(pg);
+}
+
 const BASE='/api';
 let lg='PL', leagueVersion=0, standRows=[], eloMap={}, formMap={}, teamStatsMap={}, h2hCache={}, oddsCache={}, playersCache={};
 let teamStatsMeta={}, oddsMeta={};
@@ -1018,22 +1430,22 @@ function dcProbs(mat){
 }
 function ini(n){return n.split(' ').map(w=>w[0]).join('').slice(0,3).toUpperCase()}
 function timeAgo(ts){
-  if(!ts)return 'not cached';
+  if(!ts)return t('time.not_cached');
   const s=Math.max(0,Math.round(Date.now()/1000-ts));
-  if(s<60)return 'just now';
-  if(s<3600)return Math.round(s/60)+'m ago';
-  if(s<86400)return Math.round(s/3600)+'h ago';
-  return Math.round(s/86400)+'d ago';
+  if(s<60)return t('time.just_now');
+  if(s<3600)return Math.round(s/60)+t('time.m_ago');
+  if(s<86400)return Math.round(s/3600)+t('time.h_ago');
+  return Math.round(s/86400)+t('time.d_ago');
 }
 function dataQuality(homeId,awayId,hasOdds){
   const h=teamStatsMap[homeId]||{}, a=teamStatsMap[awayId]||{};
   const bothXg=h.xgPg!=null&&a.xgPg!=null;
   const bothSot=h.sotPg!=null&&a.sotPg!=null;
-  if(bothXg&&bothSot&&hasOdds)return {label:'Full data',cls:'good',hint:'xG, shots and odds available'};
-  if((bothXg||bothSot)&&hasOdds)return {label:'Strong data',cls:'good',hint:'team stats and odds available'};
-  if(bothXg||bothSot)return {label:'Stats only',cls:'warn',hint:'team stats available, odds missing'};
-  if(hasOdds)return {label:'Odds only',cls:'warn',hint:'market data available, team stats estimated'};
-  return {label:'Estimated',cls:'weak',hint:'standings/form model with limited rich data'};
+  if(bothXg&&bothSot&&hasOdds)return {label:t('dq.full'),cls:'good',hint:t('dq.hint_full')};
+  if((bothXg||bothSot)&&hasOdds)return {label:t('dq.strong'),cls:'good',hint:t('dq.hint_strong')};
+  if(bothXg||bothSot)return {label:t('dq.stats_only'),cls:'warn',hint:t('dq.hint_stats')};
+  if(hasOdds)return {label:t('dq.odds_only'),cls:'warn',hint:t('dq.hint_odds')};
+  return {label:t('dq.estimated'),cls:'weak',hint:t('dq.hint_est')};
 }
 function marketChip(pct,label,help){
   const val=pct??'–';
@@ -1090,7 +1502,7 @@ async function loadTeamStats(showProgress){
   if(Object.keys(teamStatsMap).length>0) return true;
   if(showProgress){
     const el=document.getElementById('fix-body')||document.getElementById('stand-body');
-    if(el) el.innerHTML='<div class="loading-state">Loading rich stats from proxy (building in background)…</div>';
+    if(el) el.innerHTML=`<div class="loading-state">${t('loading.rich_stats')}</div>`;
   }
   try{
     const r=await fetch('/teamstats/'+reqLeague);
@@ -1480,46 +1892,46 @@ function renderStatCompare(p,hName,aName){
 function renderMarkets(p,hName,aName){
   const tLam=(parseFloat(p.hLam)+parseFloat(p.aLam)).toFixed(2);
   return`
-  <div><div class="section-label">goals — full match</div>
+  <div><div class="section-label">${t('section.goals')}</div>
     <div class="markets-grid">
-      ${mCard('⚽','over 1.5 goals',`xG total: ${tLam}`,p.pOver15,'both teams score',p.hDataBadge==='real SoT')}
-      ${mCard('⚽','over 2.5 goals',`λ: ${tLam}`,p.pOver25,'most popular line',p.hDataBadge==='real SoT')}
-      ${mCard('⚽','over 3.5 goals',`${hName} λ ${p.hLam}`,p.pOver35,'high-scoring',p.hDataBadge==='real SoT')}
-      ${mCard('⚽','over 4.5 goals',`λ ${tLam}`,p.pOver45,'goal-fest',p.hDataBadge==='real SoT')}
-      ${mCard('🎯','BTTS yes',`H scores ${Math.round((1-Math.exp(-parseFloat(p.hLam)))*100)}% · A ${Math.round((1-Math.exp(-parseFloat(p.aLam)))*100)}%`,p.pBTTS,'both teams score',p.hDataBadge==='real SoT')}
-      ${mCard('🧤','no BTTS',`clean sheet likely`,p.pNoBTTS,'1+ clean sheet',p.hDataBadge==='real SoT')}
+      ${mCard('⚽',t('mkt.over15'),`xG total: ${tLam}`,p.pOver15,t('mkt.sub.btts'),p.hDataBadge==='real SoT')}
+      ${mCard('⚽',t('mkt.over25'),`λ: ${tLam}`,p.pOver25,t('mkt.sub.over25'),p.hDataBadge==='real SoT')}
+      ${mCard('⚽',t('mkt.over35'),`${hName} λ ${p.hLam}`,p.pOver35,t('mkt.sub.over35'),p.hDataBadge==='real SoT')}
+      ${mCard('⚽',t('mkt.over45'),`λ ${tLam}`,p.pOver45,t('mkt.sub.over45'),p.hDataBadge==='real SoT')}
+      ${mCard('🎯',t('mkt.btts'),`H scores ${Math.round((1-Math.exp(-parseFloat(p.hLam)))*100)}% · A ${Math.round((1-Math.exp(-parseFloat(p.aLam)))*100)}%`,p.pBTTS,t('mkt.sub.btts'),p.hDataBadge==='real SoT')}
+      ${mCard('🧤',t('mkt.nobtts'),t('mkt.sub.cs_likely'),p.pNoBTTS,t('mkt.sub.1cs'),p.hDataBadge==='real SoT')}
     </div>
   </div>
-  <div><div class="section-label">clean sheets &amp; win to nil</div>
+  <div><div class="section-label">${t('section.cs')}</div>
     <div class="markets-grid">
-      ${mCard('🛡','home clean sheet',`${hName} keep 0`,p.pHCS,`away λ: ${p.aLam}`,p.aDataBadge==='real SoT')}
-      ${mCard('🛡','away clean sheet',`${aName} keep 0`,p.pACS,`home λ: ${p.hLam}`,p.hDataBadge==='real SoT')}
-      ${mCard('🏆','home win to nil',`win + clean sheet`,p.pHWnil,'home dominance',p.hDataBadge==='real SoT')}
-      ${mCard('🏆','away win to nil',`win + clean sheet`,p.pAWnil,'away dominance',p.aDataBadge==='real SoT')}
+      ${mCard('🛡',`${hName} ${t('mkt.clean_sheet')}`,`${hName} keep 0`,p.pHCS,`away λ: ${p.aLam}`,p.aDataBadge==='real SoT')}
+      ${mCard('🛡',`${aName} ${t('mkt.clean_sheet')}`,`${aName} keep 0`,p.pACS,`home λ: ${p.hLam}`,p.hDataBadge==='real SoT')}
+      ${mCard('🏆',`${hName} ${t('mkt.win_to_nil')}`,`win + clean sheet`,p.pHWnil,t('mkt.sub.home_dom'),p.hDataBadge==='real SoT')}
+      ${mCard('🏆',`${aName} ${t('mkt.win_to_nil')}`,`win + clean sheet`,p.pAWnil,t('mkt.sub.away_dom'),p.aDataBadge==='real SoT')}
     </div>
   </div>
-  <div><div class="section-label">first half</div>
+  <div><div class="section-label">${t('section.halftime')}</div>
     <div class="markets-grid">
-      ${mCard('⏱','HT: over 0.5',`HT pred: ${p.htScoreH}–${p.htScoreA}`,p.pHT_over05,'1+ goals before break',false)}
-      ${mCard('⏱','HT: over 1.5',`HT λ: ${(parseFloat(p.hLam)*0.45+parseFloat(p.aLam)*0.45).toFixed(2)}`,p.pHT_over15,'2+ first-half goals',false)}
-      ${mCard('⏱','HT: BTTS',`both score in 45min`,p.pHT_BTTS,'first-half BTTS',false)}
-      ${mCard('⏱','HT: home lead',`${hName} ahead`,p.pHT_H,'home winning at break',false)}
-      ${mCard('⏱','HT: draw',`level at break`,p.pHT_D,'all-square HT',false)}
-      ${mCard('⏱','HT: away lead',`${aName} ahead`,p.pHT_A,'away winning at break',false)}
+      ${mCard('⏱','HT: over 0.5',`HT pred: ${p.htScoreH}–${p.htScoreA}`,p.pHT_over05,t('mkt.sub.ht_goal'),false)}
+      ${mCard('⏱','HT: over 1.5',`HT λ: ${(parseFloat(p.hLam)*0.45+parseFloat(p.aLam)*0.45).toFixed(2)}`,p.pHT_over15,t('mkt.sub.ht_over15'),false)}
+      ${mCard('⏱','HT: BTTS',t('mkt.sub.ht_btts'),p.pHT_BTTS,t('mkt.ht_btts'),false)}
+      ${mCard('⏱',`HT: ${hName}`,`${hName} ahead`,p.pHT_H,t('mkt.sub.ht_home'),false)}
+      ${mCard('⏱',`HT: ${t('misc.draw')}`,`level at break`,p.pHT_D,t('mkt.sub.ht_draw'),false)}
+      ${mCard('⏱',`HT: ${aName}`,`${aName} ahead`,p.pHT_A,t('mkt.sub.ht_away'),false)}
     </div>
   </div>
-  <div><div class="section-label">corners ${p.cornersReal?'<span class="data-badge">real data</span>':'<span class="data-badge est">estimated</span>'}</div>
+  <div><div class="section-label">${t('section.corners_lbl')} ${p.cornersReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`}</div>
     <div class="markets-grid">
-      ${mCard('📐','over 8.5 corners',`${hName}: ${p.hCorners} · ${aName}: ${p.aCorners}`,p.pCorners_over85,`xTotal: ${p.totalCorners}`,p.cornersReal)}
-      ${mCard('📐','over 10.5 corners',`total: ${p.totalCorners}`,p.pCorners_over105,'high-corner match',p.cornersReal)}
-      ${mCard('📐',`${hName} corners`,`home: ${p.hCorners}`,Math.round(parseFloat(p.hCorners)/parseFloat(p.totalCorners)*100),'home corner share',p.cornersReal)}
+      ${mCard('📐',t('mkt.corners_85'),`${hName}: ${p.hCorners} · ${aName}: ${p.aCorners}`,p.pCorners_over85,`xTotal: ${p.totalCorners}`,p.cornersReal)}
+      ${mCard('📐',t('mkt.corners_105'),`total: ${p.totalCorners}`,p.pCorners_over105,t('mkt.sub.corners_105'),p.cornersReal)}
+      ${mCard('📐',`${hName} ${t('section.corners_lbl')}`,`home: ${p.hCorners}`,Math.round(parseFloat(p.hCorners)/parseFloat(p.totalCorners)*100),'home corner share',p.cornersReal)}
     </div>
   </div>
-  <div><div class="section-label">cards ${p.cardsReal?'<span class="data-badge">real data</span>':'<span class="data-badge est">estimated</span>'}</div>
+  <div><div class="section-label">${t('section.cards_lbl')} ${p.cardsReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`}</div>
     <div class="markets-grid">
-      ${mCard('🟨','over 2.5 cards',`${hName}: ${p.hCards} · ${aName}: ${p.aCards}`,p.pCards_over25,`xTotal: ${p.totalCards}`,p.cardsReal)}
-      ${mCard('🟨','over 3.5 cards',`total: ${p.totalCards}`,p.pCards_over35,'feisty match',p.cardsReal)}
-      ${mCard('🟨',`${aName} cards`,`away: ${p.aCards}`,Math.round(parseFloat(p.aCards)/parseFloat(p.totalCards)*100),'away card share',p.cardsReal)}
+      ${mCard('🟨',t('mkt.cards_25'),`${hName}: ${p.hCards} · ${aName}: ${p.aCards}`,p.pCards_over25,`xTotal: ${p.totalCards}`,p.cardsReal)}
+      ${mCard('🟨',t('mkt.cards_35'),`total: ${p.totalCards}`,p.pCards_over35,t('mkt.sub.cards_35'),p.cardsReal)}
+      ${mCard('🟨',`${aName} ${t('section.cards_lbl')}`,`away: ${p.aCards}`,Math.round(parseFloat(p.aCards)/parseFloat(p.totalCards)*100),'away card share',p.cardsReal)}
     </div>
   </div>`;
 }
@@ -1538,7 +1950,7 @@ function renderPredResult(p,hName,aName,h2hData){
   const lgAvgStats=teamStatsMeta[lg]?.leagueAverages||{};
 
   const oddsHTML=p.hasOdds?`<div class="pred-odds-panel">
-    ${[['HOME WIN',p.bH,p.implH,p.pH,'#1D9E75'],['DRAW',p.bD,p.implD,p.pD,'#BA7517'],['AWAY WIN',p.bA,p.implA,p.pA,'#A32D2D']].map(([lbl,odd,impl,mdl,clr])=>`
+    ${[[t('pred.home_win_lbl'),p.bH,p.implH,p.pH,'#1D9E75'],[t('pred.draw_lbl'),p.bD,p.implD,p.pD,'#BA7517'],[t('pred.away_win_lbl'),p.bA,p.implA,p.pA,'#A32D2D']].map(([lbl,odd,impl,mdl,clr])=>`
       <div class="pred-odds-item">
         <div class="pred-odds-lbl">${lbl}</div>
         <div class="pred-odds-val" style="color:${clr}">${odd||'–'}</div>
@@ -1577,7 +1989,7 @@ function renderPredResult(p,hName,aName,h2hData){
         <span style="text-align:right;font-weight:500">${m.awayTeam.shortName||m.awayTeam.name}</span>
       </div>`;
     }).join('')}
-  </div>`:'<div style="color:var(--tx3);font-size:12px;font-family:var(--mono)">No H2H data</div>';
+  </div>`:`<div style="color:var(--tx3);font-size:12px;font-family:var(--mono)">${t('pred.no_h2h')}</div>`;
 
   return `<div class="pred-result">
     <div class="pred-hero">
@@ -1588,12 +2000,12 @@ function renderPredResult(p,hName,aName,h2hData){
       </div>
       <div class="pred-hero-center">
         <div class="pred-score-big">${p.scoreH}<span style="opacity:.35;margin:0 6px">–</span>${p.scoreA}</div>
-        <div class="pred-score-label">PREDICTED SCORELINE</div>
+        <div class="pred-score-label">${t('pred.score_label')}</div>
         <div class="pred-lambda-row">
           <span class="pred-lam-tag ${p.hDataBadge==='xG'?'xg':p.hDataBadge==='SoT'?'sot':''}">λ ${p.hLam} ${p.hDataBadge}</span>
           <span class="pred-lam-tag ${p.aDataBadge==='xG'?'xg':p.aDataBadge==='SoT'?'sot':''}">λ ${p.aLam} ${p.aDataBadge}</span>
-          ${p.hasOdds?'<span class="pred-lam-tag xg">odds loaded</span>':''}
-          ${p.tuningApplied?`<span class="pred-lam-tag xg">learned ${p.tuningGraded}</span>`:''}
+          ${p.hasOdds?`<span class="pred-lam-tag xg">${t('pred.odds_loaded')}</span>`:''}
+          ${p.tuningApplied?`<span class="pred-lam-tag xg">${t('pred.learned')} ${p.tuningGraded}</span>`:''}
         </div>
       </div>
       <div class="pred-hero-team away">
@@ -1605,7 +2017,7 @@ function renderPredResult(p,hName,aName,h2hData){
     <div class="pred-prob-strip">
       <div class="pred-prob-labels">
         <div><div class="pred-prob-pct-h">${p.pH}%</div><div class="pred-prob-name-h">${hName}</div></div>
-        <div><div class="pred-prob-pct-d">${p.pD}%</div><div style="font-size:10px;color:var(--tx3);text-align:center;font-family:var(--mono)">DRAW</div></div>
+        <div><div class="pred-prob-pct-d">${p.pD}%</div><div style="font-size:10px;color:var(--tx3);text-align:center;font-family:var(--mono)">${t('pred.draw')}</div></div>
         <div><div class="pred-prob-pct-a">${p.pA}%</div><div class="pred-prob-name-a">${aName}</div></div>
       </div>
       <div class="pred-prob-bar">
@@ -1614,71 +2026,71 @@ function renderPredResult(p,hName,aName,h2hData){
         <div class="pred-pb-a" style="width:${p.pA}%"></div>
       </div>
       <div class="pred-conf-row">
-        <span class="pred-conf-badge ${confClass}">${p.conf}% confidence</span>
-        <span class="pred-winner-pill" style="background:${wColor}22;color:${wColor};border:.5px solid ${wColor}55;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:500">Outcome pick: ${winner}</span>
-        <span class="pred-conf-badge">Elo Δ ${Math.abs(p.hElo-p.aElo)}</span>
+        <span class="pred-conf-badge ${confClass}">${p.conf}% ${t('pred.confidence')}</span>
+        <span class="pred-winner-pill" style="background:${wColor}22;color:${wColor};border:.5px solid ${wColor}55;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:500">${t('pred.outcome_pick')}: ${winner}</span>
+        <span class="pred-conf-badge">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
       </div>
     </div>
     ${oddsHTML}
     <div class="pred-data-grid">
-      ${dataCell('Chance creation',p.hXg??'–',p.aXg??'–',parseFloat(p.hXg)||parseFloat(p.hLam),parseFloat(p.aXg)||parseFloat(p.aLam),'Expected goals per match: better chances, not guaranteed goals')}
-      ${dataCell('Chances allowed',p.hVenueXga??p.hXga??'–',p.aVenueXga??p.aXga??'–',parseFloat(p.hVenueXga)||parseFloat(p.hXga)||1.2,parseFloat(p.aVenueXga)||parseFloat(p.aXga)||1.2,'Expected chances conceded per match: lower is better defensively')}
-      ${dataCell('Recent chances allowed',p.hRecentXga??'–',p.aRecentXga??'–',parseFloat(p.hRecentXga)||1.2,parseFloat(p.aRecentXga)||1.2,'Last-5 expected chances conceded, weighted toward current form')}
-      ${dataCell('Team goals by venue',p.hGfVenue??'–',p.aGfVenue??'–',parseFloat(p.hGfVenue)||1.2,parseFloat(p.aGfVenue)||1.2,'Home team goals at home vs away team goals away')}
-      ${dataCell('Team goals allowed by venue',p.hGaVenue??'–',p.aGaVenue??'–',parseFloat(p.hGaVenue)||1.2,parseFloat(p.aGaVenue)||1.2,'Home goals conceded at home vs away goals conceded away')}
-      ${dataCell('League venue goals',lgAvgStats.homeGoalsPg??'–',lgAvgStats.awayGoalsPg??'–',parseFloat(lgAvgStats.homeGoalsPg)||1.2,parseFloat(lgAvgStats.awayGoalsPg)||1.0,'League average goals scored by home teams and away teams')}
-      ${dataCell('League venue goals allowed',lgAvgStats.homeConcededPg??'–',lgAvgStats.awayConcededPg??'–',parseFloat(lgAvgStats.homeConcededPg)||1.0,parseFloat(lgAvgStats.awayConcededPg)||1.2,'League average goals conceded by home teams and away teams')}
-      ${dataCell('Shots on target',p.hSot??'–',p.aSot??'–',parseFloat(p.hSot)||3,parseFloat(p.aSot)||3,'How often each team tests the goalkeeper')}
-      ${dataCell('Recent form',p.hFF+'%',p.aFF+'%',p.hFF,p.aFF,'Recent results weighted toward the latest matches')}
-      ${dataCell('Team strength',p.hElo,p.aElo,p.hElo-1300,p.aElo-1300,'Model rating from league position, points and goal difference')}
-      ${dataCell('Corner tendency',hS?.cornPg?hS.cornPg.toFixed(1):'–',aS?.cornPg?aS.cornPg.toFixed(1):'–',parseFloat(hS?.cornPg)||4.5,parseFloat(aS?.cornPg)||4.5,'Average corners won per match')}
-      ${dataCell('Corners by venue',p.hCornVenue??'–',p.aCornVenue??'–',parseFloat(p.hCornVenue)||4.5,parseFloat(p.aCornVenue)||4.0,'Home corners for at home vs away corners for away')}
-      ${dataCell('Corners allowed by venue',p.hCornAllowedVenue??'–',p.aCornAllowedVenue??'–',parseFloat(p.hCornAllowedVenue)||4.0,parseFloat(p.aCornAllowedVenue)||4.5,'Corners conceded by venue: lower is better')}
-      ${dataCell('League venue corners',lgAvgStats.homeCornersForPg??'–',lgAvgStats.awayCornersForPg??'–',parseFloat(lgAvgStats.homeCornersForPg)||4.5,parseFloat(lgAvgStats.awayCornersForPg)||4.0,'League average corners for home and away teams')}
-      ${dataCell('Card risk',hS?.ycardPg?hS.ycardPg.toFixed(1):'–',aS?.ycardPg?aS.ycardPg.toFixed(1):'–',parseFloat(hS?.ycardPg)||1.4,parseFloat(aS?.ycardPg)||1.4,'Average yellow cards per match')}
-      ${dataCell('Referee card rate',p.refereeName||'–',p.refereeCardsPg!=null?p.refereeCardsPg.toFixed(1):'–',p.refereeCardsPg||1.5,lgAvgStats.cardsPg||3.0,'Known fixture referee and average total cards per match')}
-      ${dataCell('Home advantage',p.ha+'×','—',1,0,'Home team adjustment used by the model')}
-      ${dataCell('Head-to-head tilt',parseFloat(p.h2hFactor)>0?'+'+p.h2hFactor:p.h2hFactor,'—',parseFloat(p.h2hFactor)+0.5,0.5-parseFloat(p.h2hFactor),'Small adjustment from recent meetings between these teams')}
+      ${dataCell(t('dc.label'),p.hXg??'–',p.aXg??'–',parseFloat(p.hXg)||parseFloat(p.hLam),parseFloat(p.aXg)||parseFloat(p.aLam),t('dc.label_help'))}
+      ${dataCell(t('dc.allowed'),p.hVenueXga??p.hXga??'–',p.aVenueXga??p.aXga??'–',parseFloat(p.hVenueXga)||parseFloat(p.hXga)||1.2,parseFloat(p.aVenueXga)||parseFloat(p.aXga)||1.2,t('dc.allowed_help'))}
+      ${dataCell(t('dc.recent'),p.hRecentXga??'–',p.aRecentXga??'–',parseFloat(p.hRecentXga)||1.2,parseFloat(p.aRecentXga)||1.2,t('dc.recent_help'))}
+      ${dataCell(t('dc.goals_venue'),p.hGfVenue??'–',p.aGfVenue??'–',parseFloat(p.hGfVenue)||1.2,parseFloat(p.aGfVenue)||1.2,t('dc.goals_venue_help'))}
+      ${dataCell(t('dc.goals_allowed_venue'),p.hGaVenue??'–',p.aGaVenue??'–',parseFloat(p.hGaVenue)||1.2,parseFloat(p.aGaVenue)||1.2,t('dc.goals_allowed_venue_help'))}
+      ${dataCell(t('dc.lg_venue_goals'),lgAvgStats.homeGoalsPg??'–',lgAvgStats.awayGoalsPg??'–',parseFloat(lgAvgStats.homeGoalsPg)||1.2,parseFloat(lgAvgStats.awayGoalsPg)||1.0,t('dc.lg_venue_goals_help'))}
+      ${dataCell(t('dc.lg_venue_allowed'),lgAvgStats.homeConcededPg??'–',lgAvgStats.awayConcededPg??'–',parseFloat(lgAvgStats.homeConcededPg)||1.0,parseFloat(lgAvgStats.awayConcededPg)||1.2,t('dc.lg_venue_allowed_help'))}
+      ${dataCell(t('dc.sot'),p.hSot??'–',p.aSot??'–',parseFloat(p.hSot)||3,parseFloat(p.aSot)||3,t('dc.sot_help'))}
+      ${dataCell(t('dc.recent_form'),p.hFF+'%',p.aFF+'%',p.hFF,p.aFF,t('dc.recent_form_help'))}
+      ${dataCell(t('dc.team_strength'),p.hElo,p.aElo,p.hElo-1300,p.aElo-1300,t('dc.team_strength_help'))}
+      ${dataCell(t('dc.corner_tendency'),hS?.cornPg?hS.cornPg.toFixed(1):'–',aS?.cornPg?aS.cornPg.toFixed(1):'–',parseFloat(hS?.cornPg)||4.5,parseFloat(aS?.cornPg)||4.5,t('dc.corner_tendency_help'))}
+      ${dataCell(t('dc.corners_venue'),p.hCornVenue??'–',p.aCornVenue??'–',parseFloat(p.hCornVenue)||4.5,parseFloat(p.aCornVenue)||4.0,t('dc.corners_venue_help'))}
+      ${dataCell(t('dc.corners_allowed_venue'),p.hCornAllowedVenue??'–',p.aCornAllowedVenue??'–',parseFloat(p.hCornAllowedVenue)||4.0,parseFloat(p.aCornAllowedVenue)||4.5,t('dc.corners_allowed_venue_help'))}
+      ${dataCell(t('dc.lg_corners'),lgAvgStats.homeCornersForPg??'–',lgAvgStats.awayCornersForPg??'–',parseFloat(lgAvgStats.homeCornersForPg)||4.5,parseFloat(lgAvgStats.awayCornersForPg)||4.0,t('dc.lg_corners_help'))}
+      ${dataCell(t('dc.card_risk'),hS?.ycardPg?hS.ycardPg.toFixed(1):'–',aS?.ycardPg?aS.ycardPg.toFixed(1):'–',parseFloat(hS?.ycardPg)||1.4,parseFloat(aS?.ycardPg)||1.4,t('dc.card_risk_help'))}
+      ${dataCell(t('dc.ref_cards'),p.refereeName||'–',p.refereeCardsPg!=null?p.refereeCardsPg.toFixed(1):'–',p.refereeCardsPg||1.5,lgAvgStats.cardsPg||3.0,t('dc.ref_cards_help'))}
+      ${dataCell(t('dc.home_adv'),p.ha+'×','—',1,0,t('dc.home_adv_help'))}
+      ${dataCell(t('dc.h2h_tilt'),parseFloat(p.h2hFactor)>0?'+'+p.h2hFactor:p.h2hFactor,'—',parseFloat(p.h2hFactor)+0.5,0.5-parseFloat(p.h2hFactor),t('dc.h2h_tilt_help'))}
     </div>
     <div class="pred-tabs">
       <div class="pred-tab-bar">
-        <button class="pred-tab-btn on" onclick="switchPredTab(this,'tab-markets')">Markets</button>
-        <button class="pred-tab-btn" onclick="switchPredTab(this,'tab-matrix')">Score matrix</button>
-        <button class="pred-tab-btn" onclick="switchPredTab(this,'tab-chart')">Goal dist.</button>
-        <button class="pred-tab-btn" onclick="switchPredTab(this,'tab-h2h')">H2H</button>
+        <button class="pred-tab-btn on" onclick="switchPredTab(this,'tab-markets')">${t('pred.tab.markets')}</button>
+        <button class="pred-tab-btn" onclick="switchPredTab(this,'tab-matrix')">${t('pred.tab.matrix')}</button>
+        <button class="pred-tab-btn" onclick="switchPredTab(this,'tab-chart')">${t('pred.tab.chart')}</button>
+        <button class="pred-tab-btn" onclick="switchPredTab(this,'tab-h2h')">${t('pred.tab.h2h')}</button>
       </div>
       <div id="tab-markets" class="pred-tab-content on">
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">Goals</div><div class="pred-mkts">
-          ${mkt('Over 1.5 goals',p.pOver15,'2 or more total goals')}
-          ${mkt('Over 2.5 goals',p.pOver25,'3 or more total goals')}
-          ${mkt('Over 3.5 goals',p.pOver35,'4 or more total goals')}
-          ${mkt('Over 4.5 goals',p.pOver45,'5 or more total goals')}
-          ${mkt('Both teams score',p.pBTTS,'each team scores at least once')}
-          ${mkt('Both teams do not score',p.pNoBTTS,'at least one team finishes with 0 goals')}
-          ${mkt(`${hName} clean sheet`,p.pHCS,`${aName} scores 0`)}
-          ${mkt(`${aName} clean sheet`,p.pACS,`${hName} scores 0`)}
+        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.goals_tab')}</div><div class="pred-mkts">
+          ${mkt(t('mkt.over15'),p.pOver15,t('mkt.sub.over15'))}
+          ${mkt(t('mkt.over25'),p.pOver25,t('mkt.sub.over25'))}
+          ${mkt(t('mkt.over35'),p.pOver35,t('mkt.sub.over35'))}
+          ${mkt(t('mkt.over45'),p.pOver45,t('mkt.sub.over45'))}
+          ${mkt(t('mkt.btts'),p.pBTTS,t('mkt.sub.btts'))}
+          ${mkt(t('mkt.nobtts'),p.pNoBTTS,t('mkt.sub.nobtts'))}
+          ${mkt(t('mkt.home_cs',{team:hName}),p.pHCS,`${aName} scores 0`)}
+          ${mkt(t('mkt.away_cs',{team:aName}),p.pACS,`${hName} scores 0`)}
         </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">Half time</div><div class="pred-mkts">
-          ${mkt('1st-half goal',p.pHT05,'at least 1 goal before half-time')}
-          ${mkt('1st-half over 1.5 goals',p.pHT15,'2 or more goals before half-time')}
-          ${mkt('Both score in 1st half',p.pHT_BTTS,'each team scores before half-time')}
-          ${mkt(`${hName} lead at half-time`,p.pHT_H,`${hName} ahead after 45 minutes`)}
-          ${mkt('Draw at half-time',p.pHT_D,'scores level after 45 minutes')}
-          ${mkt(`${aName} lead at half-time`,p.pHT_A,`${aName} ahead after 45 minutes`)}
+        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.halftime_tab')}</div><div class="pred-mkts">
+          ${mkt(t('mkt.ht_goal'),p.pHT05,t('mkt.sub.ht_goal'))}
+          ${mkt(t('mkt.ht_over15'),p.pHT15,t('mkt.sub.ht_over15'))}
+          ${mkt(t('mkt.ht_btts'),p.pHT_BTTS,t('mkt.sub.ht_btts'))}
+          ${mkt(t('mkt.lead_ht',{team:hName}),p.pHT_H,`${hName} ahead after 45 minutes`)}
+          ${mkt(t('mkt.ht_draw'),p.pHT_D,t('mkt.sub.ht_draw'))}
+          ${mkt(t('mkt.lead_ht',{team:aName}),p.pHT_A,`${aName} ahead after 45 minutes`)}
         </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">Corners · xTotal ${p.totalCornLam}</div><div class="pred-mkts">
-          ${mkt('Over 8.5 corners',p.pCorn85,'9 or more total corners')}
-          ${mkt('Over 10.5 corners',p.pCorn105,'11 or more total corners')}
-          ${mkt(`${hName} win to nil`,p.pHWnil,`${hName} wins and ${aName} scores 0`)}
-          ${mkt(`${aName} win to nil`,p.pAWnil,`${aName} wins and ${hName} scores 0`)}
+        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.corners_lbl')} · xTotal ${p.totalCornLam}</div><div class="pred-mkts">
+          ${mkt(t('mkt.corners_85'),p.pCorn85,t('mkt.sub.corners_85'))}
+          ${mkt(t('mkt.corners_105'),p.pCorn105,t('mkt.sub.corners_105'))}
+          ${mkt(t('mkt.home_cs',{team:hName})+' nil',p.pHWnil,`${hName} wins and ${aName} scores 0`)}
+          ${mkt(t('mkt.away_cs',{team:aName})+' nil',p.pAWnil,`${aName} wins and ${hName} scores 0`)}
         </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">Cards · xTotal ${p.totalCardLam}</div><div class="pred-mkts">
-          ${mkt('Over 2.5 cards',p.pCard25,'3 or more total cards')}
-          ${mkt('Over 3.5 cards',p.pCard35,'4 or more total cards')}
+        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.cards_lbl')} · xTotal ${p.totalCardLam}</div><div class="pred-mkts">
+          ${mkt(t('mkt.cards_25'),p.pCard25,t('mkt.sub.cards_25'))}
+          ${mkt(t('mkt.cards_35'),p.pCard35,t('mkt.sub.cards_35'))}
         </div></div>
       </div>
       <div id="tab-matrix" class="pred-tab-content">
-        <div style="font-size:10px;font-family:var(--mono);color:var(--tx3);margin-bottom:10px">DC-corrected Poisson · ${hName} goals (rows) × ${aName} goals (cols)</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--tx3);margin-bottom:10px">${t('pred.matrix_note',{home:hName,away:aName})}</div>
         ${renderPoissonMatrix(p.matrix,hName,aName)}
       </div>
       <div id="tab-chart" class="pred-tab-content">
@@ -1722,18 +2134,18 @@ function drawXgChart(hName,aName,hDist,aDist){
 async function loadOdds(){
   const reqLeague=lg, reqVersion=leagueVersion;
   const el=document.getElementById('odds-body');
-  el.innerHTML='<div class="loading-state">Fetching live odds...</div>';
+  el.innerHTML=`<div class="loading-state">${t('loading.live_odds')}</div>`;
   try{
     const r=await fetch('/odds/'+reqLeague);
     const d=await r.json();
     if(reqLeague!==lg||reqVersion!==leagueVersion)return;
     if(d.error){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
     const games=d.games||[];
-    if(!games.length){el.innerHTML=`<div class="error-state">No live odds currently listed for ${reqLeague}. Some leagues only appear close to matchday or when bookmakers publish EU markets.</div>`;return;}
+    if(!games.length){el.innerHTML=`<div class="error-state">${t('err.no_odds',{league:reqLeague})}</div>`;return;}
     oddsCache[reqLeague]=games;
     oddsMeta[reqLeague]=d.cache||{};
     renderOdds(games,el,d.provider||games[0]?.source||'api-football');
-  }catch(e){el.innerHTML=`<div class="error-state">Odds error: ${e.message}</div>`;}
+  }catch(e){el.innerHTML=`<div class="error-state">Odds: ${e.message}</div>`;}
 }
 
 function findTeamIdxByName(name){
@@ -1754,14 +2166,14 @@ function oddsClr(o){return !o?'var(--tx2)':o>=4?'var(--red)':o>=2.5?'var(--amber
 function vtag(impl,model,label){
   if(!model||!impl)return '';
   const e=model-impl;
-  const name=label?label.replace(' WIN','').replace('HOME','Home').replace('AWAY','Away')+' ':'';
-  if(e>=8) return '<span class="odds-value-chip">VALUE '+name+'+'+e.toFixed(0)+'pp</span>';
-  if(e>=4) return '<span class="tag odds-edge-chip" style="font-size:11px">edge '+name+'+'+e.toFixed(0)+'pp</span>';
-  if(e<=-8)return '<span class="tag odds-avoid-chip" style="font-size:11px">avoid '+name+'-'+Math.abs(e).toFixed(0)+'pp</span>';
+  const name=label?label.replace(' WIN','').replace('HOME',t('odds.home_win')).replace('AWAY',t('odds.away_win'))+' ':'';
+  if(e>=8) return `<span class="odds-value-chip">${t('vtag.value')} ${name}+${e.toFixed(0)}pp</span>`;
+  if(e>=4) return `<span class="tag odds-edge-chip" style="font-size:11px">${t('vtag.edge')} ${name}+${e.toFixed(0)}pp</span>`;
+  if(e<=-8)return `<span class="tag odds-avoid-chip" style="font-size:11px">${t('vtag.avoid')} ${name}-${Math.abs(e).toFixed(0)}pp</span>`;
   return '';
 }
 function niceOutcome(label){
-  return label.replace('HOME WIN','Home win').replace('AWAY WIN','Away win').replace('DRAW','Draw');
+  return label.replace('HOME WIN',t('outcome.home_win')).replace('AWAY WIN',t('outcome.away_win')).replace('DRAW',t('outcome.draw'));
 }
 
 function updateOddsCalc(id){
@@ -1788,13 +2200,13 @@ function renderOdds(games,el,provider='api-football'){
   }
   const valueGames=games.filter(g=>{const mp=mMap[g.id];if(!mp)return false;return[mp.pH-g.impl_h,mp.pD-g.impl_d,mp.pA-g.impl_a].some(e=>e>=6);});
   let html='<div class="kpi-row" style="margin-bottom:16px">'
-    +'<div class="kpi"><div class="kpi-val">'+games.length+'</div><div class="kpi-lbl">fixtures with odds</div></div>'
-    +'<div class="kpi"><div class="kpi-val">'+(games[0]?.num_bookmakers??'?')+'</div><div class="kpi-lbl">bookmakers</div></div>'
-    +'<div class="kpi"><div class="kpi-val" style="color:var(--green)">'+valueGames.length+'</div><div class="kpi-lbl">value bets</div></div>'
-    +'<div class="kpi"><div class="kpi-val" style="font-size:20px">'+provider+'</div><div class="kpi-lbl">odds provider</div></div>'
-    +'</div><div style="font-size:11px;font-family:var(--mono);color:var(--tx2);margin-bottom:14px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:12px 16px;line-height:1.9">'
-    +'<strong style="color:var(--blue)">How to read:</strong> Best odds = highest across EU bookmakers &middot; Implied% = vig-removed &middot; Model% = our Poisson &middot; Updated '+timeAgo(oddsMeta[lg]?.updatedAt)+' &middot; '
-    +'<span class="tag tag-green" style="font-size:9px">VALUE</span> = model sees &ge;8% more than market</div>';
+    +`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">${t('odds.kpi.fixtures')}</div></div>`
+    +`<div class="kpi"><div class="kpi-val">${games[0]?.num_bookmakers??'?'}</div><div class="kpi-lbl">${t('odds.kpi.books')}</div></div>`
+    +`<div class="kpi"><div class="kpi-val" style="color:var(--green)">${valueGames.length}</div><div class="kpi-lbl">${t('odds.kpi.value')}</div></div>`
+    +`<div class="kpi"><div class="kpi-val" style="font-size:20px">${provider}</div><div class="kpi-lbl">${t('odds.kpi.provider')}</div></div>`
+    +`</div><div style="font-size:11px;font-family:var(--mono);color:var(--tx2);margin-bottom:14px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:12px 16px;line-height:1.9">`
+    +`<strong style="color:var(--blue)">${t('odds.how_to_read')}</strong> ${t('odds.how_to_read_text')} ${timeAgo(oddsMeta[lg]?.updatedAt)} &middot; `
+    +`<span class="tag tag-green" style="font-size:9px">${t('vtag.value')}</span> = ${t('odds.model_sees')}</div>`;
 
   games.forEach(g=>{
     const mp=mMap[g.id];
@@ -1811,15 +2223,15 @@ function renderOdds(games,el,provider='api-football'){
       {label:'Draw',pct:mp.pD,odd:g.best_d},
       {label:'Away win',pct:mp.pA,odd:g.best_a},
     ].sort((a,b)=>b.pct-a.pct)[0]:null;
-    const oddsGrid=['HOME WIN','DRAW','AWAY WIN'].map((lbl,i)=>{
+    const oddsGrid=[t('pred.home_win_lbl'),t('pred.draw_lbl'),t('pred.away_win_lbl')].map((lbl,i)=>{
       const[odd,impl,bk,mPct,clr]=[[g.best_h,g.impl_h,g.best_bk_h,mp?.pH,'var(--green)'],[g.best_d,g.impl_d,g.best_bk_d,mp?.pD,'var(--amber)'],[g.best_a,g.impl_a,g.best_bk_a,mp?.pA,'var(--red)']
 ][i];
       return '<div class="odds-market-cell">'
         +'<div class="odds-market-label">'+niceOutcome(lbl)+'</div>'
         +'<div class="odds-market-price" style="color:'+oddsClr(odd)+'">'+(odd||'&ndash;')+'</div>'
         +'<div class="odds-market-book">'+(bk||'')+'</div>'
-        +(impl!=null?'<div class="odds-market-meta">Market says: '+impl+'%</div>':'')
-        +(mPct!=null?'<div class="odds-market-meta" style="color:'+clr+';font-weight:700">Model says: '+mPct+'%</div>':'')
+        +(impl!=null?`<div class="odds-market-meta">${t('odds.market_says')} ${impl}%</div>`:'')
+        +(mPct!=null?`<div class="odds-market-meta" style="color:${clr};font-weight:700">${t('odds.model_says')} ${mPct}%</div>`:'')
         +vtag(impl,mPct,lbl)+'</div>';
     }).join('');
     const bkRows=g.bookmakers.map(bk=>'<tr style="border-bottom:1px solid var(--br)">'
@@ -1832,19 +2244,19 @@ function renderOdds(games,el,provider='api-football'){
       +'</tr>').join('');
     const calcId=String(g.id||('odds-'+Math.random())).replace(/[^a-zA-Z0-9_-]/g,'');
     const calcOptions=[
-      ['Home win',g.best_h],
-      ['Draw',g.best_d],
-      ['Away win',g.best_a],
-      ['Over 2.5',g.best_o25],
-      ['Under 2.5',g.best_u25],
+      [t('odds.home_win'),g.best_h],
+      [t('odds.draw'),g.best_d],
+      [t('odds.away_win'),g.best_a],
+      [t('odds.over25'),g.best_o25],
+      [t('odds.under25'),g.best_u25],
     ].filter(x=>x[1]&&x[1]>1);
     const defaultOdd=(top?.odd||calcOptions[0]?.[1]||0);
     const calcSelect=calcOptions.map(([lbl,odd])=>'<option value="'+odd+'"'+(odd===defaultOdd?' selected':'')+'>'+lbl+' @ '+odd+'</option>').join('');
     const explain='<div class="odds-explain">'
-      +(likely?'<strong>Most likely result:</strong> '+likely.label+' ('+likely.pct+'% model chance, odds '+likely.odd+'). ':'')
-      +(top?'<strong>Best value price:</strong> '+top.label+' at '+top.odd+'. This is not necessarily the most likely result; it means the model thinks the bookmaker price is too high by '+top.edge.toFixed(1)+' percentage points.':'No model value edge found for this fixture.')
+      +(likely?`${t('odds.most_likely')} ${likely.label} (${likely.pct}% model chance, odds ${likely.odd}). `:'')
+      +(top?`${t('odds.best_value')} ${top.label} at ${top.odd}. ${t('odds.not_most_likely')} ${top.edge.toFixed(1)} ${t('odds.pp')}`:t('odds.no_value'))
       +'</div>';
-    const reco=top?'<div class="odds-reco"><div><div class="odds-reco-kicker">Best value price, not most likely</div><div class="odds-reco-main">'+top.label+'</div><div class="odds-reco-sub">'+(top.bk||'Best available bookmaker')+' · model edge +'+top.edge.toFixed(1)+'pp</div></div><div class="odds-reco-odd">'+top.odd+'</div></div>':'';
+    const reco=top?`<div class="odds-reco"><div><div class="odds-reco-kicker">${t('odds.best_value_kicker')}</div><div class="odds-reco-main">${top.label}</div><div class="odds-reco-sub">${top.bk||'Best available bookmaker'} · ${t('odds.model_edge')} +${top.edge.toFixed(1)}pp</div></div><div class="odds-reco-odd">${top.odd}</div></div>`:'';
     html+='<div class="card" style="margin-bottom:10px">'
       +'<div class="card-head"><div><span class="card-title">'+g.home+' <span style="font-weight:400;color:var(--tx2);opacity:.6">vs</span> '+g.away+'</span>'
       +'<span style="font-size:11px;color:var(--tx2);font-family:var(--mono);margin-left:10px">'+ds+'</span></div>'
@@ -1853,20 +2265,20 @@ function renderOdds(games,el,provider='api-football'){
       +'<div class="card-body">'+explain+reco+'<div class="odds-market-grid">'+oddsGrid+'</div>'
       +(g.best_o25||g.best_u25?'<div class="odds-total-grid">'
         +'<div class="odds-market-cell">'
-        +'<div class="odds-market-label">Over 2.5 goals</div>'
-        +'<div class="odds-market-price" style="font-size:22px;color:'+oddsClr(g.best_o25)+'">'+(g.best_o25||'&ndash;')+'</div>'
-        +(mp?'<div class="odds-market-meta">Model says: '+mp.pOver25+'%</div>':'')+'</div>'
+        +`<div class="odds-market-label">${t('odds.over25')}</div>`
+        +`<div class="odds-market-price" style="font-size:22px;color:${oddsClr(g.best_o25)}">${g.best_o25||'&ndash;'}</div>`
+        +(mp?`<div class="odds-market-meta">${t('odds.model_says')} ${mp.pOver25}%</div>`:'')+'</div>'
         +'<div class="odds-market-cell">'
-        +'<div class="odds-market-label">Under 2.5 goals</div>'
-        +'<div class="odds-market-price" style="font-size:22px;color:'+oddsClr(g.best_u25)+'">'+(g.best_u25||'&ndash;')+'</div>'
-        +(mp?'<div class="odds-market-meta">Model says: '+(100-mp.pOver25)+'%</div>':'')+'</div></div>':'')
+        +`<div class="odds-market-label">${t('odds.under25')}</div>`
+        +`<div class="odds-market-price" style="font-size:22px;color:${oddsClr(g.best_u25)}">${g.best_u25||'&ndash;'}</div>`
+        +(mp?`<div class="odds-market-meta">${t('odds.model_says')} ${(100-mp.pOver25)}%</div>`:'')+'</div></div>':'')
       +(calcOptions.length?'<div class="odds-calc">'
-        +'<div class="odds-calc-field"><div class="odds-calc-label">Pick</div><select id="odds-pick-'+calcId+'" onchange="updateOddsCalc(\''+calcId+'\')">'+calcSelect+'</select></div>'
-        +'<div class="odds-calc-field"><div class="odds-calc-label">Stake</div><input id="odds-stake-'+calcId+'" type="number" min="0" step="1" value="10" oninput="updateOddsCalc(\''+calcId+'\')"></div>'
-        +'<div class="odds-calc-output"><div class="odds-calc-label">Return</div><div id="odds-return-'+calcId+'" class="odds-calc-value">€'+(10*defaultOdd).toFixed(2)+'</div></div>'
-        +'<div class="odds-calc-output"><div class="odds-calc-label">Profit</div><div id="odds-profit-'+calcId+'" class="odds-calc-value">€'+((10*defaultOdd)-10).toFixed(2)+'</div></div>'
+        +`<div class="odds-calc-field"><div class="odds-calc-label">${t('odds.pick')}</div><select id="odds-pick-${calcId}" onchange="updateOddsCalc('${calcId}')">${calcSelect}</select></div>`
+        +`<div class="odds-calc-field"><div class="odds-calc-label">${t('odds.stake')}</div><input id="odds-stake-${calcId}" type="number" min="0" step="1" value="10" oninput="updateOddsCalc('${calcId}')"></div>`
+        +`<div class="odds-calc-output"><div class="odds-calc-label">${t('odds.return')}</div><div id="odds-return-${calcId}" class="odds-calc-value">€${(10*defaultOdd).toFixed(2)}</div></div>`
+        +`<div class="odds-calc-output"><div class="odds-calc-label">${t('odds.profit')}</div><div id="odds-profit-${calcId}" class="odds-calc-value">€${((10*defaultOdd)-10).toFixed(2)}</div></div>`
         +'</div>':'')
-      +'<details><summary style="font-size:11px;font-family:var(--mono);color:var(--tx2);cursor:pointer;padding:4px 0">Compare all '+g.num_bookmakers+' bookmakers</summary>'
+      +`<details><summary style="font-size:11px;font-family:var(--mono);color:var(--tx2);cursor:pointer;padding:4px 0">${t('odds.compare')} ${g.num_bookmakers} ${t('odds.bookmakers')}</summary>`
       +'<div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono)">'
       +'<thead><tr style="border-bottom:1px solid var(--br2)"><th style="text-align:left;padding:6px 8px;color:var(--tx2);font-family:var(--cond);letter-spacing:.5px">Book</th>'
       +'<th style="text-align:center;padding:6px 8px;color:var(--green)">1</th><th style="text-align:center;padding:6px 8px;color:var(--amber)">X</th>'
@@ -1880,25 +2292,25 @@ function renderOdds(games,el,provider='api-football'){
 // ── NAV ────────────────────────────────────────────────────────────────────────
 async function loadPredictionHistory(){
   const el=document.getElementById('hist-body');
-  el.innerHTML='<div class="loading-state">Scoring stored predictions...</div>';
+  el.innerHTML=`<div class="loading-state">${t('loading.scoring')}</div>`;
   try{
     const d=await fetch('/predictions?refresh=1&limit=150').then(r=>r.json());
     const s=d.summary||{};
     const rows=d.predictions||[];
     const pct=v=>v==null?'--':v+'%';
     let html=`<div class="kpi-row" style="margin-bottom:16px">
-      <div class="kpi"><div class="kpi-val">${s.total||0}</div><div class="kpi-lbl">remembered</div></div>
-      <div class="kpi"><div class="kpi-val">${s.graded||0}</div><div class="kpi-lbl">graded</div></div>
-      <div class="kpi"><div class="kpi-val">${pct(s.outcomeAccuracy)}</div><div class="kpi-lbl">outcome accuracy</div></div>
-      <div class="kpi"><div class="kpi-val">${s.avgBrier??'--'}</div><div class="kpi-lbl">avg brier</div></div>
+      <div class="kpi"><div class="kpi-val">${s.total||0}</div><div class="kpi-lbl">${t('hist.kpi.remembered')}</div></div>
+      <div class="kpi"><div class="kpi-val">${s.graded||0}</div><div class="kpi-lbl">${t('hist.kpi.graded')}</div></div>
+      <div class="kpi"><div class="kpi-val">${pct(s.outcomeAccuracy)}</div><div class="kpi-lbl">${t('hist.kpi.acc')}</div></div>
+      <div class="kpi"><div class="kpi-val">${s.avgBrier??'--'}</div><div class="kpi-lbl">${t('hist.kpi.brier')}</div></div>
     </div>`;
     if(!rows.length){
-      el.innerHTML=html+'<div class="error-state">No predictions saved yet. Run the Predictor once and I will start tracking it.</div>';
+      el.innerHTML=html+`<div class="error-state">${t('hist.no_predictions')}</div>`;
       return;
     }
-    html+=`<div class="card"><div class="card-head"><div><div class="card-title">Prediction Ledger</div><div style="font-size:12px;color:var(--tx2);margin-top:2px">Pending rows are graded automatically after the fixture finishes.</div></div></div><div class="card-body" style="padding:0;overflow-x:auto">
+    html+=`<div class="card"><div class="card-head"><div><div class="card-title">${t('hist.title')}</div><div style="font-size:12px;color:var(--tx2);margin-top:2px">${t('hist.pending_note')}</div></div></div><div class="card-body" style="padding:0;overflow-x:auto">
       <table class="stand-table"><thead><tr>
-        <th>Date</th><th>Match</th><th>Pick</th><th>Prob.</th><th>Score</th><th>Actual</th><th>Result</th><th>Brier</th>
+        <th>${t('hist.date')}</th><th>${t('hist.match')}</th><th>${t('hist.pick')}</th><th>${t('hist.prob')}</th><th>${t('hist.score')}</th><th>${t('hist.actual')}</th><th>${t('hist.result')}</th><th>${t('hist.brier')}</th>
       </tr></thead><tbody>`;
     rows.forEach(r=>{
       const created=r.createdAt?new Date(r.createdAt):null;
@@ -1912,7 +2324,7 @@ async function loadPredictionHistory(){
       const mt=r.metrics||{};
       const done=r.status==='graded';
       const ok=done&&mt.outcomeCorrect;
-      const result=done?(ok?'Hit':'Miss'):'Pending';
+      const result=done?(ok?t('hist.hit'):t('hist.miss')):t('hist.pending');
       const tag=done?(ok?'tag-green':'tag-red'):'tag-gray';
       html+=`<tr>
         <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
@@ -1928,7 +2340,7 @@ async function loadPredictionHistory(){
     html+='</tbody></table></div></div>';
     el.innerHTML=html;
   }catch(e){
-    el.innerHTML='<div class="error-state">Could not load prediction history: '+e.message+'</div>';
+    el.innerHTML=`<div class="error-state">${t('err.hist_failed')} ${e.message}</div>`;
   }
 }
 
@@ -1984,16 +2396,16 @@ async function onLgChange(){
   leagueVersion++;
   standRows=[];eloMap={};formMap={};teamStatsMap={};h2hCache={};playersCache={};oddsCache={};teamStatsMeta={};oddsMeta={};
   document.getElementById('fix-kpis').innerHTML='';
-  document.getElementById('fix-body').innerHTML='<div class="loading-state">Switching league...</div>';
-  document.getElementById('schedule-body').innerHTML='<div class="loading-state">Switching league...</div>';
-  document.getElementById('stand-body').innerHTML='<div class="loading-state">Switching league...</div>';
-  document.getElementById('res-body').innerHTML='<div class="loading-state">Switching league...</div>';
-  document.getElementById('ts-body').innerHTML='<div class="loading-state">Switching league...</div>';
-  document.getElementById('odds-body').innerHTML='<div class="loading-state">Switching league...</div>';
-  document.getElementById('predOut').innerHTML='<div class="pred-empty"><div class="pred-empty-icon">⚽</div><div>Load this league, then run a prediction.</div></div>';
+  document.getElementById('fix-body').innerHTML=`<div class="loading-state">${t('loading.switching')}</div>`;
+  document.getElementById('schedule-body').innerHTML=`<div class="loading-state">${t('loading.switching')}</div>`;
+  document.getElementById('stand-body').innerHTML=`<div class="loading-state">${t('loading.switching')}</div>`;
+  document.getElementById('res-body').innerHTML=`<div class="loading-state">${t('loading.switching')}</div>`;
+  document.getElementById('ts-body').innerHTML=`<div class="loading-state">${t('loading.switching')}</div>`;
+  document.getElementById('odds-body').innerHTML=`<div class="loading-state">${t('loading.switching')}</div>`;
+  document.getElementById('predOut').innerHTML=`<div class="pred-empty"><div class="pred-empty-icon">⚽</div><div>${t('pred.empty.title')}</div></div>`;
   const advMode=document.getElementById('advMode');
   if(advMode) advMode.value='current';
-  ['hSel','aSel'].forEach(id=>{document.getElementById(id).innerHTML='<option>Load standings first...</option>';});
+  ['hSel','aSel'].forEach(id=>{document.getElementById(id).innerHTML=`<option>${t('pred.load_standings')}</option>`;});
   const active=document.querySelector('.nav-btn.on');
   const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
   const idx=[...document.querySelectorAll('.nav-btn')].indexOf(active);
@@ -2022,7 +2434,7 @@ async function loadCoreData(){
 async function loadFixtures(){
   const reqLeague=lg, reqVersion=leagueVersion;
   const fixEl=document.getElementById('fix-body'),kpiEl=document.getElementById('fix-kpis');
-  fixEl.innerHTML='<div class="loading-state">Loading…</div>';
+  fixEl.innerHTML=`<div class="loading-state">${t('loading.generic')}</div>`;
   try{
     const today=new Date();
     const df=today.toISOString().split('T')[0];
@@ -2060,18 +2472,18 @@ async function loadFixtures(){
     const selectedLabel=(selectedOpt?.dataset?.baseLabel||selectedOpt?.textContent||reqLeague).replace(' [odds only]','');
     const leagueMatches=(mData.matches||[]).filter(m=>!m.competition?.code||m.competition.code===reqLeague);
     const matches=leagueMatches.filter(m=>{ const d=new Date(m.utcDate); return d>=today&&d<=cutoff; }).slice(0,15);
-    if(!matches.length){fixEl.innerHTML='<div class="error-state">No fixtures in the next 7 days.</div>';return;}
+    if(!matches.length){fixEl.innerHTML=`<div class="error-state">${t('err.no_fixtures')}</div>`;return;}
     const standMap={};
     table.forEach(r=>standMap[r.team.id]={pos:r.position,pts:r.points,idx:table.indexOf(r)});
     kpiEl.innerHTML=`
-      <div class="kpi"><div class="kpi-val">${matches.length}</div><div class="kpi-lbl">fixtures</div></div>
-      <div class="kpi"><div class="kpi-val">${table.length}</div><div class="kpi-lbl">teams</div></div>
-      <div class="kpi"><div class="kpi-val" style="font-size:20px">${selectedLabel}</div><div class="kpi-lbl">selected league</div></div>
-      <div class="kpi"><div class="kpi-val">${Object.keys(teamStatsMap).length}</div><div class="kpi-lbl">teams w/ shot data</div></div>`;
+      <div class="kpi"><div class="kpi-val">${matches.length}</div><div class="kpi-lbl">${t('kpi.fixtures')}</div></div>
+      <div class="kpi"><div class="kpi-val">${table.length}</div><div class="kpi-lbl">${t('kpi.teams')}</div></div>
+      <div class="kpi"><div class="kpi-val" style="font-size:20px">${selectedLabel}</div><div class="kpi-lbl">${t('kpi.selected_league')}</div></div>
+      <div class="kpi"><div class="kpi-val">${Object.keys(teamStatsMap).length}</div><div class="kpi-lbl">${t('kpi.teams_shot_data')}</div></div>`;
     let html=`<div class="trust-strip">
-      <span class="quality-badge ${Object.keys(teamStatsMap).length?'good':'warn'}">${Object.keys(teamStatsMap).length?'Rich stats loaded':'Rich stats building'}</span>
-      <span>Team stats updated ${timeAgo(teamStatsMeta[reqLeague]?.updatedAt)}</span>
-      <button class="mini-action" onclick="refreshLeague()">Refresh ${selectedLabel}</button>
+      <span class="quality-badge ${Object.keys(teamStatsMap).length?'good':'warn'}">${Object.keys(teamStatsMap).length?t('fix.rich_loaded'):t('fix.rich_building')}</span>
+      <span>${t('fix.stats_updated')} ${timeAgo(teamStatsMeta[reqLeague]?.updatedAt)}</span>
+      <button class="mini-action" onclick="refreshLeague()">${t('fix.refresh')} ${selectedLabel}</button>
     </div>`;
     matches.forEach(m=>{
       const hI=standMap[m.homeTeam.id]||{pos:10,pts:20,idx:9};
@@ -2120,10 +2532,10 @@ async function loadFixtures(){
             </div>
           </div>
           <div class="center-col">
-            <div class="vs-txt">VS</div>
+            <div class="vs-txt">VS</div><!-- keep VS as-is, universal -->
             <div class="match-dt">${ds}</div>
             <div class="pred-score">${pred.scoreH}–${pred.scoreA}</div>
-            <div class="score-note">most likely score</div>
+            <div class="score-note">${t('fix.most_likely_score')}</div>
           </div>
           <div class="team-side away">
             <div class="badge">${ini(m.awayTeam.name)}</div>
@@ -2137,7 +2549,7 @@ async function loadFixtures(){
         <div class="prob-section">
           <div class="prob-labels">
             <span>${m.homeTeam.shortName||m.homeTeam.name} ${pred.pH}%</span>
-            <span>Draw ${pred.pD}%</span>
+            <span>${t('fix.draw')} ${pred.pD}%</span>
             <span>${pred.pA}% ${m.awayTeam.shortName||m.awayTeam.name}</span>
           </div>
           <div class="prob-bar">
@@ -2148,23 +2560,23 @@ async function loadFixtures(){
           <div class="tags">
             <span class="quality-badge ${quality.cls}" title="${quality.hint}">${quality.label}</span>
             ${valueBadge}
-            <span class="tag ${favClass}">Outcome pick: ${fav}</span>
-            ${scoreConflict?'<span class="tag tag-gray" title="The scoreline is one rounded scenario; the outcome pick uses all possible scorelines.">scoreline differs</span>':''}
-            <span class="tag ${confClass}">Conf: ${pred.conf}%</span>
+            <span class="tag ${favClass}">${t('fix.outcome_pick')}: ${fav}</span>
+            ${scoreConflict?`<span class="tag tag-gray" title="The scoreline is one rounded scenario; the outcome pick uses all possible scorelines.">${t('fix.scoreline_differs')}</span>`:''}
+            <span class="tag ${confClass}">${t('fix.conf')}: ${pred.conf}%</span>
             <span class="tag tag-blue">xG: ${pred.hLam}–${pred.aLam}</span>
             <span class="tag tag-purple">Elo Δ: ${eloGap}</span>
           </div>
           <div class="markets-strip">
-            ${marketChip(pred.pOver25,'Over 2.5 goals','3 or more total goals')}
-            ${marketChip(pred.pOver35,'Over 3.5 goals','4 or more total goals')}
-            ${marketChip(pred.pBTTS,'Both teams score','Each team scores at least once')}
-            ${marketChip(pred.pHT_over05,'1st-half goal','At least 1 goal before half-time')}
-            ${marketChip(pred.pHT_over15,'1st-half over 1.5','2 or more goals before half-time')}
-            ${marketChip(pred.pCorners_over85,'Over 8.5 corners','9 or more total corners')}
-            ${marketChip(pred.pCorners_over105,'Over 10.5 corners','11 or more total corners')}
-            ${marketChip(pred.pCards_over25,'Over 2.5 cards','3 or more total cards')}
-            ${marketChip(pred.pHCS,`${m.homeTeam.shortName||m.homeTeam.name} clean sheet`,`${m.awayTeam.shortName||m.awayTeam.name} scores 0`)}
-            ${marketChip(pred.pACS,`${m.awayTeam.shortName||m.awayTeam.name} clean sheet`,`${m.homeTeam.shortName||m.homeTeam.name} scores 0`)}
+            ${marketChip(pred.pOver25,t('mkt.over25'),t('mkt.sub.over25'))}
+            ${marketChip(pred.pOver35,t('mkt.over35'),t('mkt.sub.over35'))}
+            ${marketChip(pred.pBTTS,t('mkt.btts'),t('mkt.sub.btts'))}
+            ${marketChip(pred.pHT_over05,t('mkt.ht_goal'),t('mkt.sub.ht_goal'))}
+            ${marketChip(pred.pHT_over15,t('mkt.ht_over15'),t('mkt.sub.ht_over15'))}
+            ${marketChip(pred.pCorners_over85,t('mkt.corners_85'),t('mkt.sub.corners_85'))}
+            ${marketChip(pred.pCorners_over105,t('mkt.corners_105'),t('mkt.sub.corners_105'))}
+            ${marketChip(pred.pCards_over25,t('mkt.cards_25'),t('mkt.sub.cards_25'))}
+            ${marketChip(pred.pHCS,t('mkt.home_cs',{team:m.homeTeam.shortName||m.homeTeam.name}),`${m.awayTeam.shortName||m.awayTeam.name} scores 0`)}
+            ${marketChip(pred.pACS,t('mkt.away_cs',{team:m.awayTeam.shortName||m.awayTeam.name}),`${m.homeTeam.shortName||m.homeTeam.name} scores 0`)}
           </div>
         </div>
       </div>`;
@@ -2172,7 +2584,7 @@ async function loadFixtures(){
     fixEl.innerHTML=html;
   }catch(e){
     if(e.message&&e.message.includes('429')){
-      fixEl.innerHTML='<div class="error-state" style="display:flex;align-items:center;gap:12px"><div style="font-size:24px">⏱</div><div><strong>Rate limited</strong> — the free API allows 10 calls/minute.<br>Wait 30 seconds then <a href="" style="color:inherit" onclick="location.reload();return false">reload the page</a>.</div></div>';
+      fixEl.innerHTML=`<div class="error-state" style="display:flex;align-items:center;gap:12px"><div style="font-size:24px">⏱</div><div><strong>${t('err.rate_limited')}</strong> — ${t('err.rate_limited_text')}<br>Wait 30 seconds then <a href="" style="color:inherit" onclick="location.reload();return false">${t('err.rate_limited_reload')}</a>.</div></div>`;
     } else {
       fixEl.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;
     }
@@ -2182,42 +2594,42 @@ async function loadFixtures(){
 let scheduleDays=14;
 
 function scheduleFocusTag(days){
-  if(days===0) return '<span class="tag tag-green">Focus today</span>';
-  if(days===1) return '<span class="tag tag-amber">Tomorrow</span>';
-  if(days<=3) return '<span class="tag tag-blue">Prepare soon</span>';
-  return '<span class="tag tag-gray">Monitor</span>';
+  if(days===0) return `<span class="tag tag-green">${t('sched.focus_today')}</span>`;
+  if(days===1) return `<span class="tag tag-amber">${t('sched.tomorrow')}</span>`;
+  if(days<=3) return `<span class="tag tag-blue">${t('sched.prepare_soon')}</span>`;
+  return `<span class="tag tag-gray">${t('sched.monitor')}</span>`;
 }
 
 async function loadSchedule(days=scheduleDays){
   scheduleDays=days;
   const reqLeague=lg, reqVersion=leagueVersion;
   const el=document.getElementById('schedule-body');
-  el.innerHTML='<div class="loading-state">Loading schedule…</div>';
+  el.innerHTML=`<div class="loading-state">${t('loading.schedule')}</div>`;
   try{
     const r=await fetch(`/schedule/${reqLeague}?days=${days}`);
     const d=await r.json();
     if(reqLeague!==lg||reqVersion!==leagueVersion)return;
-    if(!r.ok||d.error){el.innerHTML=`<div class="error-state">${d.error||'Schedule unavailable'}</div>`;return;}
+    if(!r.ok||d.error){el.innerHTML=`<div class="error-state">${d.error||t('err.schedule_unavail')}</div>`;return;}
     const buckets=d.buckets||[];
     const total=d.count||0;
     const today=(d.matches||[]).filter(m=>m.startsInDays===0).length;
     const next3=(d.matches||[]).filter(m=>m.startsInDays<=3).length;
     let html=`<div class="schedule-toolbar">
       <div>
-        <div class="schedule-title">Match timetable</div>
-        <div class="schedule-sub">Upcoming ${reqLeague} fixtures grouped by urgency. Start with Today and Next 3 days.</div>
+        <div class="schedule-title">${t('sched.title')}</div>
+        <div class="schedule-sub">${t('sched.sub',{league:reqLeague})}</div>
       </div>
       <div class="schedule-actions">
         ${[7,14,30].map(n=>`<button class="schedule-btn ${days===n?'on':''}" onclick="loadSchedule(${n})">${n} days</button>`).join('')}
       </div>
     </div>
     <div class="kpi-row">
-      <div class="kpi"><div class="kpi-val">${total}</div><div class="kpi-lbl">upcoming matches</div></div>
-      <div class="kpi"><div class="kpi-val" style="color:var(--green)">${today}</div><div class="kpi-lbl">today</div></div>
-      <div class="kpi"><div class="kpi-val" style="color:var(--amber)">${next3}</div><div class="kpi-lbl">next 3 days</div></div>
-      <div class="kpi"><div class="kpi-val">${days}</div><div class="kpi-lbl">day window</div></div>
+      <div class="kpi"><div class="kpi-val">${total}</div><div class="kpi-lbl">${t('kpi.upcoming')}</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:var(--green)">${today}</div><div class="kpi-lbl">${t('kpi.today')}</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:var(--amber)">${next3}</div><div class="kpi-lbl">${t('kpi.next3')}</div></div>
+      <div class="kpi"><div class="kpi-val">${days}</div><div class="kpi-lbl">${t('kpi.day_window')}</div></div>
     </div>`;
-    if(!buckets.length){el.innerHTML=html+'<div class="error-state">No scheduled matches in this time window.</div>';return;}
+    if(!buckets.length){el.innerHTML=html+`<div class="error-state">${t('err.no_schedule')}</div>`;return;}
     buckets.forEach(bucket=>{
       html+=`<div class="schedule-group">
         <div class="schedule-group-head"><div class="schedule-group-title">${bucket.label}</div><div class="schedule-count">${bucket.count}</div></div>
@@ -2239,7 +2651,7 @@ async function loadSchedule(days=scheduleDays){
     });
     el.innerHTML=html;
   }catch(e){
-    el.innerHTML=`<div class="error-state">Schedule error: ${e.message}</div>`;
+    el.innerHTML=`<div class="error-state">${t('err.schedule_unavail')}: ${e.message}</div>`;
   }
 }
 
@@ -2265,37 +2677,37 @@ async function loadStandings(){
     const drawRate=Math.round(table.reduce((s,r)=>s+r.draw,0)/Math.max(1,tGames)*100);
     const teamsWithSot=Object.values(teamStatsMap).filter(t=>t.sotPg!=null).length;
     let html=`<div class="kpi-row" style="margin-bottom:14px">
-      <div class="kpi"><div class="kpi-val">${table.length}</div><div class="kpi-lbl">teams</div></div>
-      <div class="kpi"><div class="kpi-val">${(tG/Math.max(1,tGames)).toFixed(2)}</div><div class="kpi-lbl">avg goals/game</div></div>
-      <div class="kpi"><div class="kpi-val">${drawRate}%</div><div class="kpi-lbl">draw rate</div></div>
-      <div class="kpi"><div class="kpi-val">${teamsWithSot}/${table.length}</div><div class="kpi-lbl">teams w/ SoT data</div></div>
+      <div class="kpi"><div class="kpi-val">${table.length}</div><div class="kpi-lbl">${t('kpi.teams')}</div></div>
+      <div class="kpi"><div class="kpi-val">${(tG/Math.max(1,tGames)).toFixed(2)}</div><div class="kpi-lbl">${t('kpi.avg_goals_game')}</div></div>
+      <div class="kpi"><div class="kpi-val">${drawRate}%</div><div class="kpi-lbl">${t('kpi.draw_rate')}</div></div>
+      <div class="kpi"><div class="kpi-val">${teamsWithSot}/${table.length}</div><div class="kpi-lbl">${t('kpi.teams_w_sot')}</div></div>
     </div>
     <div class="two-col">
-      <div class="card"><div class="card-head"><span class="card-title">Elo ratings — top 5</span></div><div class="card-body">${eloHtml}</div></div>
-      <div class="card"><div class="card-head"><span class="card-title">League stats</span></div><div class="card-body">
+      <div class="card"><div class="card-head"><span class="card-title">${t('stand.elo_top5')}</span></div><div class="card-body">${eloHtml}</div></div>
+      <div class="card"><div class="card-head"><span class="card-title">${t('stand.league_stats')}</span></div><div class="card-body">
         <div class="factors-grid">
-          <div class="factor"><div class="factor-name">total goals</div><div class="factor-val">${tG}</div></div>
-          <div class="factor"><div class="factor-name">avg goals/game</div><div class="factor-val">${(tG/Math.max(1,tGames)).toFixed(2)}</div></div>
-          <div class="factor"><div class="factor-name">games played</div><div class="factor-val">${tGames}</div></div>
-          <div class="factor"><div class="factor-name">draw rate</div><div class="factor-val">${drawRate}%</div></div>
+          <div class="factor"><div class="factor-name">${t('stand.total_goals')}</div><div class="factor-val">${tG}</div></div>
+          <div class="factor"><div class="factor-name">${t('stand.avg_goals')}</div><div class="factor-val">${(tG/Math.max(1,tGames)).toFixed(2)}</div></div>
+          <div class="factor"><div class="factor-name">${t('stand.games_played')}</div><div class="factor-val">${tGames}</div></div>
+          <div class="factor"><div class="factor-name">${t('stand.draw_rate')}</div><div class="factor-val">${drawRate}%</div></div>
         </div>
       </div></div>
     </div>
     <div class="card" style="overflow-x:auto"><table class="stand-table">
       <thead><tr>
-        <th title="League position">Rank</th>
-        <th>Team</th>
-        <th title="Matches played">Played</th>
-        <th title="Matches won">Wins</th>
-        <th title="Matches drawn">Draws</th>
-        <th title="Matches lost">Losses</th>
-        <th title="Goals scored">Goals For</th>
-        <th title="Goals conceded">Goals Against</th>
-        <th title="Goals for minus goals against">Goal Diff</th>
-        <th title="League points">Points</th>
-        <th title="Estimated team strength rating used by the prediction model">Model Rating</th>
-        <th title="Average shots on target per match">Shots on Target / match</th>
-        <th title="Recent results, newest first">Recent Form</th>
+        <th title="${t('stand.rank_tip')}">${t('stand.rank')}</th>
+        <th>${t('stand.team')}</th>
+        <th title="${t('stand.played_tip')}">${t('stand.played')}</th>
+        <th title="${t('stand.wins_tip')}">${t('stand.wins')}</th>
+        <th title="${t('stand.draws_tip')}">${t('stand.draws')}</th>
+        <th title="${t('stand.losses_tip')}">${t('stand.losses')}</th>
+        <th title="${t('stand.gf_tip')}">${t('stand.gf')}</th>
+        <th title="${t('stand.ga_tip')}">${t('stand.ga')}</th>
+        <th title="${t('stand.gd_tip')}">${t('stand.gd')}</th>
+        <th title="${t('stand.pts_tip')}">${t('stand.pts')}</th>
+        <th title="${t('stand.rating_tip')}">${t('stand.model_rating')}</th>
+        <th title="${t('stand.sot_tip')}">${t('stand.sot')}</th>
+        <th title="${t('stand.form_tip')}">${t('stand.form')}</th>
       </tr></thead><tbody>`;
     table.forEach(r=>{
       const form=(r.form||'').split(',').filter(Boolean).slice(-5);
@@ -2315,7 +2727,7 @@ async function loadStandings(){
     });
     html+='</tbody></table></div>';
     el.innerHTML=html;
-  }catch(e){el.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+  }catch(e){el.innerHTML=`<div class="error-state">${e.message}</div>`;}
 }
 
 async function loadResults(){
@@ -2334,18 +2746,18 @@ async function loadResults(){
       .filter(m=>m.status==='FINISHED'&&m.score?.fullTime?.home!=null&&m.score?.fullTime?.away!=null)
       .sort((a,b)=>new Date(b.utcDate)-new Date(a.utcDate))
       .slice(0,20);
-    if(!matches.length){el.innerHTML='<div class="error-state">No results found.</div>';return;}
+    if(!matches.length){el.innerHTML=`<div class="error-state">${t('err.no_results')}</div>`;return;}
     const goals=matches.map(m=>(m.score?.fullTime?.home||0)+(m.score?.fullTime?.away||0));
     const avgG=(goals.reduce((s,g)=>s+g,0)/Math.max(1,goals.length)).toFixed(2);
     const btts=matches.filter(m=>(m.score?.fullTime?.home||0)>0&&(m.score?.fullTime?.away||0)>0).length;
     const draws=matches.filter(m=>m.score?.fullTime?.home===m.score?.fullTime?.away).length;
     let html=`<div class="kpi-row" style="margin-bottom:16px">
-      <div class="kpi"><div class="kpi-val">${matches.length}</div><div class="kpi-lbl">results</div></div>
-      <div class="kpi"><div class="kpi-val">${avgG}</div><div class="kpi-lbl">avg goals</div></div>
-      <div class="kpi"><div class="kpi-val">${Math.round(btts/matches.length*100)}%</div><div class="kpi-lbl">BTTS rate</div></div>
-      <div class="kpi"><div class="kpi-val">${draws}</div><div class="kpi-lbl">draws</div></div>
+      <div class="kpi"><div class="kpi-val">${matches.length}</div><div class="kpi-lbl">${t('kpi.results')}</div></div>
+      <div class="kpi"><div class="kpi-val">${avgG}</div><div class="kpi-lbl">${t('kpi.avg_goals')}</div></div>
+      <div class="kpi"><div class="kpi-val">${Math.round(btts/matches.length*100)}%</div><div class="kpi-lbl">${t('kpi.btts_rate')}</div></div>
+      <div class="kpi"><div class="kpi-val">${draws}</div><div class="kpi-lbl">${t('kpi.draws')}</div></div>
     </div>
-    <div class="card" style="margin-bottom:14px"><div class="card-head"><span class="card-title">Goals per game — last 15</span></div>
+    <div class="card" style="margin-bottom:14px"><div class="card-head"><span class="card-title">${t('res.goals_chart')}</span></div>
     <div class="card-body"><div class="chart-wrap" style="height:150px"><canvas id="resChart"></canvas></div></div></div>`;
     matches.forEach(m=>{
       const hg=m.score?.fullTime?.home??'?',ag=m.score?.fullTime?.away??'?';
@@ -2354,7 +2766,7 @@ async function loadResults(){
       html+=`<div class="res-row">
         <div class="res-team" style="${isH?'color:var(--green)':isD?'':'opacity:.55'}">${m.homeTeam.shortName||m.homeTeam.name}</div>
         <div><div class="res-score">${hg}–${ag}</div><div class="res-date">${d}</div>
-          <div style="text-align:center;margin-top:3px"><span class="tag ${isD?'tag-amber':isH?'tag-green':'tag-red'}" style="font-size:9px">${isD?'Draw':isH?'Home win':'Away win'}</span></div>
+          <div style="text-align:center;margin-top:3px"><span class="tag ${isD?'tag-amber':isH?'tag-green':'tag-red'}" style="font-size:9px">${isD?t('res.draw'):isH?t('res.home_win'):t('res.away_win')}</span></div>
         </div>
         <div class="res-team away" style="${!isH&&!isD?'color:var(--red)':isD?'':'opacity:.55'}">${m.awayTeam.shortName||m.awayTeam.name}</div>
       </div>`;
@@ -2379,8 +2791,8 @@ async function loadResults(){
 
 function renderTeamStats(){
   const el=document.getElementById('ts-body');
-  if(!standRows.length){el.innerHTML='<div class="loading-state">Load Standings first to populate team data.</div>';return;}
-  if(Object.keys(teamStatsMap).length===0){el.innerHTML='<div class="loading-state">Shot data not yet loaded — visit Standings tab first.</div>';return;}
+  if(!standRows.length){el.innerHTML=`<div class="loading-state">${t('loading.standings_first')}</div>`;return;}
+  if(Object.keys(teamStatsMap).length===0){el.innerHTML=`<div class="loading-state">${t('loading.shot_data')}</div>`;return;}
   const rows=standRows.map(r=>{
     const s=teamStatsMap[r.team.id]||{};
     return{name:r.team.shortName||r.team.name,pos:r.position,pts:r.points,
@@ -2392,7 +2804,7 @@ function renderTeamStats(){
       real:s.hasRealData};
   });
   let html=`<div class="card" style="overflow-x:auto"><table class="stand-table">
-    <thead><tr><th>#</th><th>Team</th><th>Pts</th><th>SoT/g</th><th>Corners/g</th><th>Cards/g</th><th>Fouls/g</th><th>Poss%</th><th>Data</th></tr></thead><tbody>`;
+    <thead><tr><th>#</th><th>${t('stand.team')}</th><th>${t('stand.pts')}</th><th>${t('ts.sot')}</th><th>${t('ts.corners')}</th><th>${t('ts.cards')}</th><th>${t('ts.fouls')}</th><th>${t('ts.poss')}</th><th>${t('ts.data')}</th></tr></thead><tbody>`;
   rows.forEach(r=>{
     html+=`<tr><td style="font-family:var(--mono);font-size:11px;color:var(--tx2)">${r.pos}</td>
       <td><strong>${r.name}</strong></td>
@@ -2402,7 +2814,7 @@ function renderTeamStats(){
       <td style="font-family:var(--mono)">${r.cards}</td>
       <td style="font-family:var(--mono)">${r.fouls}</td>
       <td style="font-family:var(--mono)">${r.poss}</td>
-      <td><span class="tag ${r.real?'tag-green':'tag-gray'}" style="font-size:9px">${r.real?'real':'est.'}</span></td>
+      <td><span class="tag ${r.real?'tag-green':'tag-gray'}" style="font-size:9px">${r.real?t('ts.real'):t('ts.est')}</span></td>
     </tr>`;
   });
   html+='</tbody></table></div>';
@@ -2468,16 +2880,16 @@ async function rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,model,ha,fixtur
 }
 
 async function runDeepPred(){
-  if(!standRows.length){document.getElementById('predOut').innerHTML='<div class="error-state">Load Standings first.</div>';return;}
+  if(!standRows.length){document.getElementById('predOut').innerHTML=`<div class="error-state">${t('err.load_standings')}</div>`;return;}
   const hi=parseInt(document.getElementById('hSel').value);
   const ai=parseInt(document.getElementById('aSel').value);
-  if(isNaN(hi)||isNaN(ai)||hi===ai){document.getElementById('predOut').innerHTML='<div class="error-state">Select two different teams.</div>';return;}
+  if(isNaN(hi)||isNaN(ai)||hi===ai){document.getElementById('predOut').innerHTML=`<div class="error-state">${t('err.two_teams')}</div>`;return;}
   const mw=document.getElementById('modelSel').value;
   const ha=document.getElementById('haSel').value;
   const hRow=standRows[hi],aRow=standRows[ai];
   const hName=hRow.team.shortName||hRow.team.name;
   const aName=aRow.team.shortName||aRow.team.name;
-  document.getElementById('predOut').innerHTML='<div class="loading-state" style="padding:3rem">Fetching H2H…</div>';
+  document.getElementById('predOut').innerHTML=`<div class="loading-state" style="padding:3rem">${t('loading.h2h')}</div>`;
 
   let h2hData=null,oddsH=0,oddsD=0,oddsA=0,fixtureIntel=null;
   try{
@@ -2535,15 +2947,13 @@ function kellyFraction(odds,prob){
 function calcEV(odds,prob){ return prob*(odds-1)-(1-prob)*1; }
 function advisorHelpHtml(){
   return `<div class="advisor-help">
-    <div class="advisor-help-title">How to choose and place bets today</div>
-    A value bet appears when <strong>our model probability</strong> is higher than the <strong>market probability</strong> implied by the odds.
-    The difference is the <strong>edge</strong>. <strong>EV</strong> estimates long-run value, not a guaranteed profit.
-    The suggested stake uses a cautious Kelly formula, capped to avoid oversized bets.
+    <div class="advisor-help-title">${t('adv.help.title')}</div>
+    ${t('adv.help.text')}
     <div class="bet-reason" style="margin-top:12px">
-      <div class="bet-reason-cell"><div class="bet-reason-label">Safer choice</div><div class="bet-reason-help">Pick the top 2-3 individual bets. Each match is played separately, so one loss does not ruin the others.</div></div>
-      <div class="bet-reason-cell"><div class="bet-reason-label">Higher return</div><div class="bet-reason-help">Use the combined bet for 3-5 matches only if you accept more risk. Every leg must win.</div></div>
-      <div class="bet-reason-cell"><div class="bet-reason-label">How to place</div><div class="bet-reason-help">Open the bookmaker, find the match, choose the shown market, enter the suggested stake or less.</div></div>
-      <div class="bet-reason-cell"><div class="bet-reason-label">What to avoid</div><div class="bet-reason-help">Do not pick only the biggest profit. Prefer strong edge, sensible stake, and matches soon enough to track.</div></div>
+      <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.help.safer')}</div><div class="bet-reason-help">${t('adv.help.safer_text')}</div></div>
+      <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.help.higher')}</div><div class="bet-reason-help">${t('adv.help.higher_text')}</div></div>
+      <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.help.place')}</div><div class="bet-reason-help">${t('adv.help.place_text')}</div></div>
+      <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.help.avoid')}</div><div class="bet-reason-help">${t('adv.help.avoid_text')}</div></div>
     </div>
   </div>`;
 }
@@ -2573,14 +2983,14 @@ async function runAdvisor(){
 }
 
 async function runAdvisorAll(el,budget,risk,strategy,days){
-  el.innerHTML=`<div class="adv-scanning"><span class="adv-scanning-dot"></span>Scanning all supported leagues for value bets in the next ${days} day${days===1?'':'s'}…</div>`;
+  el.innerHTML=`<div class="adv-scanning"><span class="adv-scanning-dot"></span>${t('loading.scanning')} (${days}d)</div>`;
   try{
     const r=await fetch(`/advisor?risk=${risk}&top=30&days=${days}`);
     const d=await r.json();
     if(d.error){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
     if(!r.ok) throw new Error('HTTP '+r.status);
     if(!d.bets||!d.bets.length){
-      el.innerHTML=`<div class="error-state">No value bets found across ${d.leagues_scanned||15} leagues at ${risk} risk (≥${d.min_edge||8}% edge). Try Risky mode.</div>`;
+      el.innerHTML=`<div class="error-state">${t('err.no_value_multi',{leagues:d.leagues_scanned||15,risk,edge:d.min_edge||8})}</div>`;
       return;
     }
     const bets=d.bets.map(b=>{
@@ -2597,19 +3007,19 @@ async function runAdvisorAll(el,budget,risk,strategy,days){
     }
     renderAdvisor(el,singles,accaLegs,budget,risk,strategy,d.min_edge,d.leagues_scanned,true);
   }catch(e){
-    el.innerHTML=`<div class="error-state">Scan failed: ${e.message}. Check that APIFOOTBALL_KEY and ODDS_API_KEY are set in .env</div>`;
+    el.innerHTML=`<div class="error-state">${t('err.scan_failed',{msg:e.message})}</div>`;
   }
 }
 
 async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
-  el.innerHTML='<div class="loading-state">Scanning fixtures for value…</div>';
+  el.innerHTML=`<div class="loading-state">${t('loading.scanning')}</div>`;
   if(!standRows.length){
     await loadCoreData().catch(()=>{});
-    if(!standRows.length){el.innerHTML='<div class="error-state">Could not load standings. Visit Fixtures tab first.</div>';return;}
+    if(!standRows.length){el.innerHTML=`<div class="error-state">${t('err.no_standings')}</div>`;return;}
   }
-  el.innerHTML='<div class="loading-state">Fetching live odds…</div>';
+  el.innerHTML=`<div class="loading-state">${t('loading.fetching_odds')}</div>`;
   if(!await ensureOddsLoaded()){
-    el.innerHTML='<div class="error-state">Could not load odds for this league.</div>';return;
+    el.innerHTML=`<div class="error-state">${t('err.no_odds_league')}</div>`;return;
   }
   const minEdge=RISK_EDGE[risk]||8;
   const games=oddsCache[lg]||[];
@@ -2653,7 +3063,7 @@ async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
 
 function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesScanned,multiLeague){
   if(!singles.length&&!accaLegs.length){
-    el.innerHTML=`<div class="error-state">No value bets found at ${risk} risk (≥${minEdge}% edge). Try Risky mode.</div>`;
+    el.innerHTML=`<div class="error-state">${t('err.no_value',{risk,edge:minEdge})}</div>`;
     return;
   }
   const accaOdds=accaLegs.length?accaLegs.reduce((p,b)=>p*b.odds,1):1;
@@ -2668,14 +3078,14 @@ function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesS
     :'Dixon-Coles Poisson · Elo · form decay · live EU odds';
 
   let html=`${advisorHelpHtml()}<div class="kpi-row" style="margin-bottom:16px">
-    <div class="kpi"><div class="kpi-val" style="color:var(--green)">${singlesCount}</div><div class="kpi-lbl">individual value bets</div></div>
-    <div class="kpi"><div class="kpi-val">€${budget.toFixed(0)}</div><div class="kpi-lbl">your budget</div></div>
-    ${singles[0]?`<div class="kpi"><div class="kpi-val" style="color:var(--green)">+${(singles[0].ev*100).toFixed(1)}%</div><div class="kpi-lbl">top EV</div></div>`:'<div class="kpi"><div class="kpi-val">–</div><div class="kpi-lbl">top EV</div></div>'}
-    ${accaLegs.length>=2?`<div class="kpi"><div class="kpi-val" style="color:var(--purple)">${accaOdds.toFixed(2)}×</div><div class="kpi-lbl">${accaLegs.length}-match combined bet</div></div>`:`<div class="kpi"><div class="kpi-val">${leaguesScanned||1}</div><div class="kpi-lbl">leagues scanned</div></div>`}
+    <div class="kpi"><div class="kpi-val" style="color:var(--green)">${singlesCount}</div><div class="kpi-lbl">${t('kpi.indiv_bets')}</div></div>
+    <div class="kpi"><div class="kpi-val">€${budget.toFixed(0)}</div><div class="kpi-lbl">${t('kpi.your_budget')}</div></div>
+    ${singles[0]?`<div class="kpi"><div class="kpi-val" style="color:var(--green)">+${(singles[0].ev*100).toFixed(1)}%</div><div class="kpi-lbl">${t('kpi.top_ev')}</div></div>`:`<div class="kpi"><div class="kpi-val">–</div><div class="kpi-lbl">${t('kpi.top_ev')}</div></div>`}
+    ${accaLegs.length>=2?`<div class="kpi"><div class="kpi-val" style="color:var(--purple)">${accaOdds.toFixed(2)}×</div><div class="kpi-lbl">${t('kpi.combined_bet',{n:accaLegs.length})}</div></div>`:`<div class="kpi"><div class="kpi-val">${leaguesScanned||1}</div><div class="kpi-lbl">${t('kpi.leagues_scanned')}</div></div>`}
   </div>`;
 
   if(strategy!=='acca'&&singles.length){
-    html+=`<div class="section-label">Individual bets: lower risk, play each match separately</div>`;
+    html+=`<div class="section-label">${t('adv.singles_label')}</div>`;
     singles.forEach((b,i)=>{
       const ret=Math.round(b.stake*b.odds*100)/100;
       const profit=Math.max(0,ret-b.stake);
@@ -2690,35 +3100,35 @@ function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesS
             <strong>${b.label}</strong> @ <strong style="color:var(--green)">${b.odds}</strong>
             ${b.bk?`<span style="color:var(--tx3)"> · ${b.bk}</span>`:''}
           </div>
-          <div class="bet-meta"><strong>How to play:</strong> Open ${b.bk||'your bookmaker'}, find <strong>${b.match}</strong>, choose <strong>${b.label}</strong>, then stake about <strong>€${b.stake>0?b.stake.toFixed(2):'<1'}</strong> or less.</div>
+          <div class="bet-meta"><strong>${t('adv.how_to_play')}</strong> ${t('adv.how_to_play_text',{bk:b.bk||'your bookmaker',match:b.match,label:b.label,stake:b.stake>0?b.stake.toFixed(2):'<1'})}</div>
           <div class="bet-meta">${b.date}</div>
           <div class="bet-reason">
-            <div class="bet-reason-cell"><div class="bet-reason-label">Model chance</div><div class="bet-reason-val">${b.modelPct}%</div><div class="bet-reason-help">our predicted probability</div></div>
-            <div class="bet-reason-cell"><div class="bet-reason-label">Market chance</div><div class="bet-reason-val">${b.implPct}%</div><div class="bet-reason-help">probability implied by odds</div></div>
-            <div class="bet-reason-cell"><div class="bet-reason-label">Edge</div><div class="bet-reason-val" style="color:var(--green)">+${b.edge.toFixed(1)}pp</div><div class="bet-reason-help">model minus market</div></div>
-            <div class="bet-reason-cell"><div class="bet-reason-label">If stake wins</div><div class="bet-reason-val" style="color:var(--green)">€${ret}</div><div class="bet-reason-help">return, profit €${profit.toFixed(2)}</div></div>
+            <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.model_chance')}</div><div class="bet-reason-val">${b.modelPct}%</div><div class="bet-reason-help">${t('adv.model_pct_help')}</div></div>
+            <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.market_chance')}</div><div class="bet-reason-val">${b.implPct}%</div><div class="bet-reason-help">${t('adv.impl_pct_help')}</div></div>
+            <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.edge')}</div><div class="bet-reason-val" style="color:var(--green)">+${b.edge.toFixed(1)}pp</div><div class="bet-reason-help">${t('adv.model_minus_market')}</div></div>
+            <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.if_wins')}</div><div class="bet-reason-val" style="color:var(--green)">€${ret}</div><div class="bet-reason-help">${t('adv.return_profit',{profit:profit.toFixed(2)})}</div></div>
           </div>
         </div>
         <div class="bet-right">
-          <div class="bet-ev">EV +${(b.ev*100).toFixed(1)}%</div>
+          <div class="bet-ev">${t('adv.ev')} +${(b.ev*100).toFixed(1)}%</div>
           <div class="bet-stake">€${b.stake>0?b.stake.toFixed(2):'<1'}</div>
-          <div class="bet-stake-sub">suggested stake<br>return €${ret} · profit €${profit.toFixed(2)}</div>
+          <div class="bet-stake-sub">${t('adv.suggested_stake')}<br>${t('adv.stake_return_profit',{ret,profit:profit.toFixed(2)})}</div>
         </div>
       </div>`;
     });
   }
 
   if(strategy!=='singles'&&accaLegs.length>=2){
-    html+=`<div class="section-label" style="margin-top:16px">Combined bet: higher return, higher risk because every match must win</div>
+    html+=`<div class="section-label" style="margin-top:16px">${t('adv.acca_label')}</div>
     <div class="acca-card">
       <div class="acca-head">
         <div>
-          <div class="acca-head-title">${accaLegs.length}-Match Combined Bet</div>
-          <div class="acca-head-meta">Combined odds: ${accaOdds.toFixed(2)} · Model probability: ${(accaModelP*100).toFixed(1)}%</div>
+          <div class="acca-head-title">${t('adv.acca_title',{n:accaLegs.length})}</div>
+          <div class="acca-head-meta">${t('adv.acca_meta',{odds:accaOdds.toFixed(2),prob:(accaModelP*100).toFixed(1)})}</div>
         </div>
         <div style="text-align:right">
           <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:#fff">€${accaStake.toFixed(2)}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,.5)">suggested stake</div>
+          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,.5)">${t('adv.suggested_stake')}</div>
         </div>
       </div>
       <div class="acca-body">`;
@@ -2730,23 +3140,19 @@ function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesS
       </div>`;
     });
     html+=`<div class="adv-disclaimer" style="margin:12px 0 0">
-        To place this combined bet, add every listed match and market to the same bet slip. Only stake €${accaStake.toFixed(2)} or less, because one wrong leg loses the whole slip.
+        ${t('adv.acca_disclaimer',{stake:accaStake.toFixed(2)})}
       </div></div>
       <div class="acca-totals">
-        <div class="acca-tot-cell"><div class="acca-tot-label">Stake</div><div class="acca-tot-val">€${accaStake.toFixed(2)}</div></div>
-        <div class="acca-tot-cell"><div class="acca-tot-label">Potential return</div><div class="acca-tot-val" style="color:var(--green)">€${accaReturn.toFixed(2)}</div></div>
-        <div class="acca-tot-cell"><div class="acca-tot-label">Net profit</div><div class="acca-tot-val" style="color:var(--green)">+€${(accaReturn-accaStake).toFixed(2)}</div></div>
+        <div class="acca-tot-cell"><div class="acca-tot-label">${t('adv.acca_stake')}</div><div class="acca-tot-val">€${accaStake.toFixed(2)}</div></div>
+        <div class="acca-tot-cell"><div class="acca-tot-label">${t('adv.acca_return')}</div><div class="acca-tot-val" style="color:var(--green)">€${accaReturn.toFixed(2)}</div></div>
+        <div class="acca-tot-cell"><div class="acca-tot-label">${t('adv.acca_net_profit')}</div><div class="acca-tot-val" style="color:var(--green)">+€${(accaReturn-accaStake).toFixed(2)}</div></div>
       </div>
     </div>`;
   }else if(strategy!=='singles'&&accaLegs.length<2){
-    html+=`<div class="adv-disclaimer" style="margin-top:8px">Not enough qualifying matches for a combined bet at this risk level.</div>`;
+    html+=`<div class="adv-disclaimer" style="margin-top:8px">${t('adv.not_enough')}</div>`;
   }
 
-  html+=`<div class="adv-disclaimer">
-    &#9888; ${modelNote}. Results <strong>do not guarantee profit</strong>.
-    Kelly stakes capped at 25% per individual bet, 10% for combined bets.
-    EV is a long-run statistical measure — individual outcomes are random. Bet responsibly. 18+.
-  </div>`;
+  html+=`<div class="adv-disclaimer">${t('adv.disclaimer',{model:modelNote})}</div>`;
   el.innerHTML=html;
 }
 
@@ -2777,23 +3183,24 @@ async function fetchSuspensionWarnings(hId,aId,hName,aName){
   const teamBlock=(name,risks,scorers)=>{
     let s=`<div><div class="section-label" style="margin-bottom:6px">${name}</div>`;
     if(risks.length){
-      s+=`<div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-bottom:5px;font-weight:500">&#9888; Suspension risk (4+ YC in last 38)</div>`;
+      s+=`<div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-bottom:5px;font-weight:500">${t('player.suspension')}</div>`;
       risks.forEach(p=>s+=`<span class="susp-warn">&#128100; ${p.name} — ${p.yellows} YC</span>`);
     }
     if(scorers.length){
-      s+=`<div style="font-size:10px;font-family:var(--mono);color:var(--green);margin-top:8px;margin-bottom:5px;font-weight:500">&#9917; Key scorers</div>`;
-      scorers.forEach(p=>s+=`<span class="key-scorer">${p.name} — ${p.goals} goals</span>`);
+      s+=`<div style="font-size:10px;font-family:var(--mono);color:var(--green);margin-top:8px;margin-bottom:5px;font-weight:500">${t('player.key_scorers')}</div>`;
+      scorers.forEach(p=>s+=`<span class="key-scorer">${p.name} — ${p.goals} ${t('player.goals')}</span>`);
     }
     return s+'</div>';
   };
   warnDiv.innerHTML=`<div class="card" style="margin-top:10px">
-    <div class="card-head"><span class="card-title">Player intelligence</span><span class="data-badge">last 38 matches</span></div>
+    <div class="card-head"><span class="card-title">${t('player.intel')}</span><span class="data-badge">${t('player.last38')}</span></div>
     <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${teamBlock(hName,hRisks,hScorers)}
       ${teamBlock(aName,aRisks,aScorers)}
     </div></div>`;
 }
 
+applyI18n();
 loadModelCalibration().finally(()=>loadConfig().then(()=>loadFixtures()));
 </script>
 </body>
