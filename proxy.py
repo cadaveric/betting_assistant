@@ -1271,6 +1271,10 @@ class Handler(SimpleHTTPRequestHandler):
         path   = parsed.path
         qs     = parsed.query
 
+        if path == '/health':
+            self.send_response(200); self.send_header('Content-Type','text/plain')
+            self.end_headers(); self.wfile.write(b'ok'); return
+
         if path == '/login':
             body = LOGIN_HTML.encode()
             self.send_response(200)
