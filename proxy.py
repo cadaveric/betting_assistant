@@ -87,22 +87,21 @@ LOGIN_HTML = '''<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--amber:#F59E0B;--bg:#111318;--bg2:#1A1D26;--bg3:#222632;--tx:#EEF0F8;--tx2:#9DA3BB;--tx3:#5D637E;--br:rgba(255,255,255,.08);--br2:rgba(255,255,255,.14)}
-body{font-family:'Manrope',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.card{background:var(--bg2);border:1px solid var(--br);border-radius:16px;padding:44px 40px;width:100%;max-width:400px;box-shadow:0 24px 48px rgba(0,0,0,.4)}
+body{font-family:'Manrope',sans-serif;background:#DED3BF;color:#20251F;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#FFF9EE;border:1px solid rgba(55,44,28,.12);border-radius:16px;padding:44px 40px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(55,44,28,.12)}
 .logo{display:flex;align-items:center;gap:14px;margin-bottom:36px}
-.logo-mark{width:44px;height:44px;background:var(--amber);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo-text{font-size:21px;font-weight:700;letter-spacing:-.3px;color:var(--tx)}
-.logo-sub{font-size:10px;color:var(--tx3);font-family:'IBM Plex Mono',monospace;margin-top:3px;letter-spacing:.5px}
-h1{font-size:18px;font-weight:700;margin-bottom:6px;color:var(--tx)}
-.sub{font-size:13px;color:var(--tx2);margin-bottom:28px;line-height:1.5}
-label{display:block;font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:7px;letter-spacing:.5px;text-transform:uppercase}
-input{width:100%;height:42px;background:var(--bg3);border:1px solid var(--br2);border-radius:10px;padding:0 14px;font-size:14px;font-family:'Manrope',sans-serif;color:var(--tx);outline:none;transition:border-color .15s,box-shadow .15s}
-input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,158,11,.12)}
+.logo-mark{width:44px;height:44px;background:#10896C;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-text{font-size:21px;font-weight:800;letter-spacing:-.3px;color:#20251F}
+.logo-sub{font-size:10px;color:#8A9187;font-family:'IBM Plex Mono',monospace;margin-top:3px;letter-spacing:.5px}
+h1{font-size:18px;font-weight:700;margin-bottom:6px;color:#20251F}
+.sub{font-size:13px;color:#5A635B;margin-bottom:28px;line-height:1.5}
+label{display:block;font-size:11px;font-weight:700;color:#5A635B;margin-bottom:7px;letter-spacing:.5px;text-transform:uppercase}
+input{width:100%;height:42px;background:#DBCFBA;border:1px solid rgba(55,44,28,.18);border-radius:10px;padding:0 14px;font-size:14px;font-family:'Manrope',sans-serif;color:#20251F;outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus{border-color:#B76D12;box-shadow:0 0 0 3px rgba(183,109,18,.14)}
 .field{margin-bottom:18px}
-.btn{width:100%;height:44px;background:var(--amber);border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:'Manrope',sans-serif;color:#000;cursor:pointer;margin-top:8px;transition:opacity .15s;letter-spacing:.1px}
+.btn{width:100%;height:44px;background:#B76D12;border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:'Manrope',sans-serif;color:#fff;cursor:pointer;margin-top:8px;transition:opacity .15s;letter-spacing:.1px}
 .btn:hover{opacity:.88}
-.error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.22);border-radius:8px;padding:11px 14px;font-size:13px;color:#FCA5A5;margin-bottom:20px;display:none;line-height:1.5}
+.error{background:#FBE9E6;border:1px solid rgba(184,70,63,.25);border-radius:8px;padding:11px 14px;font-size:13px;color:#B8463F;margin-bottom:20px;display:none;line-height:1.5}
 .error.show{display:block}
 </style>
 </head>
@@ -111,14 +110,14 @@ input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,158,11,.12)}
   <div class="logo">
     <div class="logo-mark">
       <svg viewBox="0 0 24 24" fill="none" width="26" height="26">
-        <path d="M12 3L20 8V16L12 21L4 16V8L12 3Z" stroke="#000" stroke-width="1.5" fill="rgba(0,0,0,.15)"/>
-        <circle cx="12" cy="12" r="3.5" fill="#000" opacity=".7"/>
-        <line x1="12" y1="3" x2="12" y2="8.5" stroke="#000" stroke-width="1.5"/>
-        <line x1="20" y1="8" x2="15.2" y2="10.2" stroke="#000" stroke-width="1.5"/>
-        <line x1="20" y1="16" x2="15.2" y2="13.8" stroke="#000" stroke-width="1.5"/>
-        <line x1="12" y1="21" x2="12" y2="15.5" stroke="#000" stroke-width="1.5"/>
-        <line x1="4" y1="16" x2="8.8" y2="13.8" stroke="#000" stroke-width="1.5"/>
-        <line x1="4" y1="8" x2="8.8" y2="10.2" stroke="#000" stroke-width="1.5"/>
+        <path d="M12 3L20 8V16L12 21L4 16V8L12 3Z" stroke="#fff" stroke-width="1.5" fill="rgba(255,255,255,.15)"/>
+        <circle cx="12" cy="12" r="3.5" fill="#fff" opacity=".8"/>
+        <line x1="12" y1="3" x2="12" y2="8.5" stroke="#fff" stroke-width="1.5"/>
+        <line x1="20" y1="8" x2="15.2" y2="10.2" stroke="#fff" stroke-width="1.5"/>
+        <line x1="20" y1="16" x2="15.2" y2="13.8" stroke="#fff" stroke-width="1.5"/>
+        <line x1="12" y1="21" x2="12" y2="15.5" stroke="#fff" stroke-width="1.5"/>
+        <line x1="4" y1="16" x2="8.8" y2="13.8" stroke="#fff" stroke-width="1.5"/>
+        <line x1="4" y1="8" x2="8.8" y2="10.2" stroke="#fff" stroke-width="1.5"/>
       </svg>
     </div>
     <div>
