@@ -744,9 +744,9 @@ html,body{overflow-x:hidden}
   .topbar-right{gap:8px}
   .model-badge{display:none}
 
-  /* Nav — shrink buttons so all 9 fit without ugly scroll */
-  .nav{padding:3px}
-  .nav-btn{min-width:0;font-size:11px;padding:0 8px;height:30px;flex:1}
+  /* Nav — natural width buttons, scroll horizontally */
+  .nav{padding:3px;scroll-snap-type:x mandatory}
+  .nav-btn{flex:0 0 auto;min-width:0;font-size:11px;padding:0 10px;height:30px;white-space:nowrap;scroll-snap-align:start}
 
   /* KPI */
   .kpi{padding:12px 14px}
