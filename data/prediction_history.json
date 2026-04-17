@@ -1535,8 +1535,20 @@
       "cls": "warn",
       "hint": "team stats available, odds missing"
     },
-    "status": "pending",
-    "id": "6e7348c345283f3a"
+    "status": "graded",
+    "id": "6e7348c345283f3a",
+    "actual": {
+      "home": 1,
+      "away": 3,
+      "outcome": "A",
+      "utcDate": "2026-04-16T18:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.8138
+    },
+    "gradedAt": "2026-04-17T08:11:26.221122+00:00"
   },
   {
     "createdAt": "2026-04-16T06:03:50.296527+00:00",
@@ -1581,8 +1593,20 @@
       "cls": "warn",
       "hint": "team stats available, odds missing"
     },
-    "status": "pending",
-    "id": "a6495ef9182e2e8a"
+    "status": "graded",
+    "id": "a6495ef9182e2e8a",
+    "actual": {
+      "home": 0,
+      "away": 0,
+      "outcome": "D",
+      "utcDate": "2026-04-16T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.7422
+    },
+    "gradedAt": "2026-04-17T08:11:27.106008+00:00"
   },
   {
     "createdAt": "2026-04-16T06:07:42.593173+00:00",
@@ -1627,8 +1651,20 @@
       "cls": "warn",
       "hint": "team stats available, odds missing"
     },
-    "status": "pending",
-    "id": "e0e8d43591b40aa1"
+    "status": "graded",
+    "id": "e0e8d43591b40aa1",
+    "actual": {
+      "home": 1,
+      "away": 3,
+      "outcome": "A",
+      "utcDate": "2026-04-16T16:45:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.9006
+    },
+    "gradedAt": "2026-04-17T08:11:28.489078+00:00"
   },
   {
     "createdAt": "2026-04-16T06:08:25.906744+00:00",
@@ -1673,8 +1709,20 @@
       "cls": "warn",
       "hint": "team stats available, odds missing"
     },
-    "status": "pending",
-    "id": "ef905e1976eb70b4"
+    "status": "graded",
+    "id": "ef905e1976eb70b4",
+    "actual": {
+      "home": 1,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-16T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": false,
+      "scoreCorrect": false,
+      "brier": 0.7422
+    },
+    "gradedAt": "2026-04-17T08:11:28.622844+00:00"
   },
   {
     "createdAt": "2026-04-16T06:08:59.777258+00:00",
@@ -1719,7 +1767,19 @@
       "cls": "warn",
       "hint": "team stats available, odds missing"
     },
-    "status": "pending",
-    "id": "96991c728319f0ed"
+    "status": "graded",
+    "id": "96991c728319f0ed",
+    "actual": {
+      "home": 4,
+      "away": 0,
+      "outcome": "H",
+      "utcDate": "2026-04-16T19:00:00+00:00"
+    },
+    "metrics": {
+      "outcomeCorrect": true,
+      "scoreCorrect": false,
+      "brier": 0.1442
+    },
+    "gradedAt": "2026-04-17T08:11:28.756829+00:00"
   }
 ]
