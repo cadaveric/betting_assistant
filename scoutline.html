@@ -739,18 +739,25 @@ html,body{overflow-x:hidden}
 
 /* ── MOBILE RESPONSIVE ── */
 @media(max-width:600px){
-  /* Topbar */
-  .topbar{gap:10px;padding:14px 0 12px}
-  .topbar-right{gap:8px}
+  /* Topbar — compact 2-row layout */
+  .topbar{gap:8px;padding:12px 0 10px;flex-wrap:wrap}
+  .brand-sub{display:none}
+  .brand-name{font-size:17px}
+  .logo-mark{width:34px;height:34px}
+  .logo-mark svg{width:20px;height:20px}
+  .topbar-right{width:100%;gap:8px;flex-wrap:wrap}
+  .topbar-right .lang-toggle{order:1}
+  .topbar-right #lgSel{order:3;flex:1 1 100%;min-width:0!important;width:100%}
+  .topbar-right a[href="/logout"]{order:2;margin-left:auto}
   .model-badge{display:none}
 
-  /* Nav — natural width buttons, scroll horizontally */
-  .nav{padding:3px;scroll-snap-type:x mandatory}
+  /* Nav — scrollable with fade hint at right edge */
+  .nav{padding:3px;scroll-snap-type:x mandatory;-webkit-mask-image:linear-gradient(to right,black 85%,transparent 100%);mask-image:linear-gradient(to right,black 85%,transparent 100%)}
   .nav-btn{flex:0 0 auto;min-width:0;font-size:11px;padding:0 10px;height:30px;white-space:nowrap;scroll-snap-align:start}
 
   /* KPI */
   .kpi{padding:12px 14px}
-  .kpi-val{font-size:22px}
+  .kpi-val{font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* Match cards */
   .tname{font-size:13px}
