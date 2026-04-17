@@ -739,30 +739,40 @@ html,body{overflow-x:hidden}
 .lang-btn:not(.active):hover{color:var(--tx);background:rgba(255,255,255,.06)}
 
 /* ── MOBILE RESPONSIVE ── */
+#mob-menu-btn{display:none}
+#mob-nav-close-btn{display:none}
 @media(max-width:600px){
-  /* Topbar — compact 2-row layout */
-  .topbar{gap:8px;padding:12px 0 10px;flex-wrap:wrap}
+  /* Topbar — logo+brand on left, lang+signout on right, select below */
+  .topbar{gap:6px;padding:10px 0 8px;flex-wrap:wrap;align-items:center}
   .brand-sub{display:none}
   .brand-name{font-size:17px}
   .logo-mark{width:34px;height:34px}
   .logo-mark svg{width:20px;height:20px}
-  .topbar-right{width:100%;gap:8px;flex-wrap:wrap}
-  .topbar-right .lang-toggle{order:1}
+  .topbar-right{flex:1;min-width:0;gap:8px;flex-wrap:wrap;align-items:center}
+  .topbar-right .lang-toggle{order:1;margin-left:auto}
+  .topbar-right a[href="/logout"]{order:2}
   .topbar-right #lgSel{order:3;flex:1 1 100%;min-width:0!important;width:100%}
-  .topbar-right a[href="/logout"]{order:2;margin-left:auto}
   .model-badge{display:none}
 
-  /* Nav — scrollable with fade hint at right edge */
-  .nav{padding:3px;scroll-snap-type:x mandatory;-webkit-mask-image:linear-gradient(to right,black 85%,transparent 100%);mask-image:linear-gradient(to right,black 85%,transparent 100%)}
-  .nav-btn{flex:0 0 auto;min-width:0;font-size:11px;padding:0 10px;height:30px;white-space:nowrap;scroll-snap-align:start}
+  /* Nav — hidden; shown as full-screen overlay when .mob-open */
+  .nav{display:none}
+  .nav.mob-open{display:flex;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;flex-direction:column;background:var(--bg);padding:16px;gap:4px;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 0 0 100vmax rgba(0,0,0,.35)}
+  .nav-btn{width:100%!important;flex:none!important;height:48px;font-size:15px!important;padding:0 16px!important;text-align:left;border-radius:12px;white-space:nowrap}
+  #mob-nav-close-btn{display:flex;align-items:center;justify-content:flex-end;gap:8px;background:none;border:none;font-size:15px;font-weight:700;color:var(--tx2);cursor:pointer;padding:8px 4px;margin-bottom:8px;align-self:stretch}
 
-  /* KPI */
-  .kpi{padding:12px 14px}
-  .kpi-val{font-size:18px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Hamburger button */
+  #mob-menu-btn{display:flex;align-items:center;gap:10px;width:100%;height:40px;padding:0 14px;background:var(--bg2);border:1px solid var(--br);border-radius:10px;font-size:14px;font-weight:600;color:var(--tx);cursor:pointer;margin-bottom:14px}
 
-  /* Match cards */
+  /* KPI tiles — single column, horizontal (value left, label right) */
+  .kpi-row{grid-template-columns:1fr;gap:6px}
+  .kpi{padding:10px 14px;display:flex;align-items:center;gap:14px}
+  .kpi-val{font-size:20px!important;white-space:nowrap;margin-bottom:0;line-height:1}
+  .kpi-lbl{flex:1;font-size:13px}
+
+  /* Match cards — no reversed away team when stacked */
   .tname{font-size:13px}
   .badge{width:32px;height:32px;font-size:9px}
+  .team-side.away{flex-direction:row;text-align:left}
 
   /* Predictor hero */
   .pred-score-big{font-size:44px}
@@ -818,9 +828,7 @@ html,body{overflow-x:hidden}
 }
 
 @media(max-width:400px){
-  .nav-btn{font-size:10px;padding:0 5px}
   .pred-score-big{font-size:36px;letter-spacing:-1px}
-  .kpi-row{grid-template-columns:repeat(2,1fr)}
   .factors-grid{grid-template-columns:1fr}
   .pred-data-grid{grid-template-columns:repeat(2,1fr)}
   .acca-totals{grid-template-columns:1fr}
@@ -914,6 +922,7 @@ html,body{overflow-x:hidden}
 </div>
 
 <div class="nav">
+  <button id="mob-nav-close-btn" onclick="closeMobMenu()">✕ Close</button>
   <button class="nav-btn on" onclick="nav('fixtures')" data-i18n="nav.fixtures">Fixtures</button>
   <button class="nav-btn" onclick="nav('schedule')" data-i18n="nav.schedule">Schedule</button>
   <button class="nav-btn" onclick="nav('predictor')" data-i18n="nav.predictor">Predictor</button>
@@ -924,6 +933,12 @@ html,body{overflow-x:hidden}
   <button class="nav-btn" onclick="nav('advisor')" data-i18n="nav.advisor">&#9733; Advisor</button>
   <button class="nav-btn" onclick="nav('history')" data-i18n="nav.history">History</button>
 </div>
+
+<button id="mob-menu-btn" onclick="toggleMobMenu()">
+  <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><rect width="16" height="2" rx="1" fill="currentColor"/><rect y="5" width="16" height="2" rx="1" fill="currentColor"/><rect y="10" width="16" height="2" rx="1" fill="currentColor"/></svg>
+  <span id="mob-active-pg" data-i18n="nav.fixtures">Fixtures</span>
+  <span style="margin-left:auto;font-size:11px;opacity:.5">▼</span>
+</button>
 
 <div id="pg-fixtures" class="page on">
   <div id="fix-kpis" class="kpi-row"></div>
@@ -2436,12 +2451,19 @@ async function loadPredictionHistory(){
   }
 }
 
+function toggleMobMenu(){document.querySelector('.nav').classList.toggle('mob-open');}
+function closeMobMenu(){document.querySelector('.nav').classList.remove('mob-open');}
+
 async function nav(pg){
+  closeMobMenu();
   const navPages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>
     b.classList.toggle('on',navPages[i]===pg));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   document.getElementById('pg-'+pg).classList.add('on');
+  const activeBtn=document.querySelector('.nav-btn.on');
+  const lbl=document.getElementById('mob-active-pg');
+  if(lbl&&activeBtn)lbl.textContent=activeBtn.textContent.trim();
   if(pg==='fixtures') await loadFixtures();
   else if(pg==='schedule') await loadSchedule();
   else if(pg==='standings') await loadStandings();
