@@ -3,17 +3,18 @@
 import sqlite3, hashlib, secrets, sys, os, getpass
 
 AUTH_DB = os.path.join('data', 'users.db')
+PW_ITERATIONS = 100_000
 
-def _hash_pw(password, salt):
-    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 200_000).hex()
+def _hash_pw(password, salt, iterations=PW_ITERATIONS):
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), iterations).hex()
 
 def create_user(username, password):
     os.makedirs('data', exist_ok=True)
     salt = secrets.token_hex(32)
     con = sqlite3.connect(AUTH_DB)
     try:
-        con.execute('INSERT INTO users (username, pw_hash, salt) VALUES (?,?,?)',
-                    (username, _hash_pw(password, salt), salt))
+        con.execute('INSERT INTO users (username, pw_hash, salt, iterations) VALUES (?,?,?,?)',
+                    (username, _hash_pw(password, salt), salt, PW_ITERATIONS))
         con.commit()
         print(f'  User "{username}" created.')
     except sqlite3.IntegrityError:
@@ -42,8 +43,8 @@ def list_users():
 def change_password(username, password):
     salt = secrets.token_hex(32)
     con = sqlite3.connect(AUTH_DB)
-    cur = con.execute('UPDATE users SET pw_hash=?, salt=? WHERE username=?',
-                      (_hash_pw(password, salt), salt, username))
+    cur = con.execute('UPDATE users SET pw_hash=?, salt=?, iterations=? WHERE username=?',
+                      (_hash_pw(password, salt), salt, PW_ITERATIONS, username))
     con.commit(); con.close()
     if cur.rowcount:
         print(f'  Password updated for "{username}".')

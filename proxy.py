@@ -26,35 +26,44 @@ AUTH_DB   = os.path.join('data', 'users.db')
 SESSIONS  = {}   # token -> {'user': str, 'expires': float}
 SESSION_TTL = 7 * 24 * 3600   # 7 days
 
+PW_ITERATIONS = 100_000
+
 def _init_auth_db():
     os.makedirs('data', exist_ok=True)
     con = sqlite3.connect(AUTH_DB)
     con.execute('''CREATE TABLE IF NOT EXISTS users (
-        id       INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT    UNIQUE NOT NULL,
-        pw_hash  TEXT    NOT NULL,
-        salt     TEXT    NOT NULL,
-        created  TEXT    NOT NULL DEFAULT (datetime('now'))
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT    UNIQUE NOT NULL,
+        pw_hash    TEXT    NOT NULL,
+        salt       TEXT    NOT NULL,
+        iterations INTEGER NOT NULL DEFAULT 200000,
+        created    TEXT    NOT NULL DEFAULT (datetime('now'))
     )''')
+    # migrate existing rows that lack the iterations column
+    try:
+        con.execute('ALTER TABLE users ADD COLUMN iterations INTEGER NOT NULL DEFAULT 200000')
+    except Exception:
+        pass
     con.commit(); con.close()
 
-def _hash_pw(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100_000).hex()
+def _hash_pw(password: str, salt: str, iterations: int) -> str:
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), iterations).hex()
 
 def auth_check_user(username: str, password: str) -> bool:
     try:
         con = sqlite3.connect(AUTH_DB)
-        row = con.execute('SELECT pw_hash, salt FROM users WHERE username=?', (username,)).fetchone()
+        row = con.execute('SELECT pw_hash, salt, iterations FROM users WHERE username=?', (username,)).fetchone()
         con.close()
         if not row: return False
-        return secrets.compare_digest(row[0], _hash_pw(password, row[1]))
+        return secrets.compare_digest(row[0], _hash_pw(password, row[1], row[2]))
     except Exception: return False
 
 def auth_create_user(username: str, password: str):
     salt = secrets.token_hex(32)
-    pw_hash = _hash_pw(password, salt)
+    pw_hash = _hash_pw(password, salt, PW_ITERATIONS)
     con = sqlite3.connect(AUTH_DB)
-    con.execute('INSERT INTO users (username, pw_hash, salt) VALUES (?,?,?)', (username, pw_hash, salt))
+    con.execute('INSERT INTO users (username, pw_hash, salt, iterations) VALUES (?,?,?,?)',
+                (username, pw_hash, salt, PW_ITERATIONS))
     con.commit(); con.close()
 
 def session_create(username: str) -> str:
