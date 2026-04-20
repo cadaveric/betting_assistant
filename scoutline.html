@@ -1033,53 +1033,54 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
   .kpi-lbl{font-size:10px!important;line-height:1.3!important}
 }
 /* ─── HISTORY PAGE ─────────────────────────────────────── */
-/* History body fills the shell like every other section */
 #hist-body{width:100%}
-/* Stat strip: compact inline row, not full-width tiles */
+/* Stat strip spans full width — matches the card below */
 #pg-history .kpi-row{
-  display:inline-flex!important;width:auto!important;
+  display:flex!important;width:100%!important;
   gap:0!important;margin-bottom:12px!important;
   background:var(--bg2);border-radius:var(--r);
   border:1px solid var(--br);box-shadow:var(--shadow);overflow:hidden
 }
 #pg-history .kpi{
-  min-width:120px;max-width:180px;flex:none!important;
-  padding:7px 14px 7px 18px!important
+  flex:1!important;min-width:0;
+  padding:10px 16px!important;
+  border-right:1px solid var(--br)
 }
-/* Prediction Ledger card */
+#pg-history .kpi:last-child{border-right:none}
+/* Ledger card */
 #pg-history .card-head{padding:10px 16px!important}
 #pg-history .card-title{font-size:13px!important}
 #pg-history .card-head>div>div:last-child{font-size:11px!important;margin-top:1px!important}
 /* Scrollable fixed-height table */
-#pg-history .card-body{max-height:420px!important;overflow:auto!important;padding:0!important}
+#pg-history .card-body{max-height:460px!important;overflow:auto!important;padding:0!important}
 /* Sticky headers */
 #pg-history .stand-table thead th{
   position:sticky;top:0;z-index:2;
   background:#F7F0E4;box-shadow:0 1px 0 rgba(55,44,28,.12);
   padding:6px 10px!important;font-size:10px!important
 }
-/* Fixed column layout — prevent table stretching */
-#pg-history .stand-table{table-layout:fixed;width:100%}
+/* Percentage-based columns — no single column dominates */
+#pg-history .stand-table{table-layout:fixed;width:100%;min-width:680px}
 #pg-history .stand-table th:nth-child(1),
-#pg-history .stand-table td:nth-child(1){width:108px}
+#pg-history .stand-table td:nth-child(1){width:11%}
 #pg-history .stand-table th:nth-child(2),
-#pg-history .stand-table td:nth-child(2){width:auto}
+#pg-history .stand-table td:nth-child(2){width:26%}
 #pg-history .stand-table th:nth-child(3),
-#pg-history .stand-table td:nth-child(3){width:110px}
+#pg-history .stand-table td:nth-child(3){width:15%}
 #pg-history .stand-table th:nth-child(4),
-#pg-history .stand-table td:nth-child(4){width:58px;text-align:center}
+#pg-history .stand-table td:nth-child(4){width:7%;text-align:center}
 #pg-history .stand-table th:nth-child(5),
-#pg-history .stand-table td:nth-child(5){width:58px;text-align:center}
+#pg-history .stand-table td:nth-child(5){width:8%;text-align:center}
 #pg-history .stand-table th:nth-child(6),
-#pg-history .stand-table td:nth-child(6){width:58px;text-align:center}
+#pg-history .stand-table td:nth-child(6){width:8%;text-align:center}
 #pg-history .stand-table th:nth-child(7),
-#pg-history .stand-table td:nth-child(7){width:80px;text-align:center}
+#pg-history .stand-table td:nth-child(7){width:11%;text-align:center}
 #pg-history .stand-table th:nth-child(8),
-#pg-history .stand-table td:nth-child(8){width:64px;text-align:right}
-/* Truncate long match names */
-#pg-history .stand-table td:nth-child(2){overflow:hidden}
+#pg-history .stand-table td:nth-child(8){width:8%;text-align:right}
+/* Truncate overflowing cells */
+#pg-history .stand-table td{padding:5px 10px!important;font-size:12px!important;overflow:hidden;text-overflow:ellipsis}
+#pg-history .stand-table td:nth-child(1){white-space:nowrap}
 #pg-history .stand-table td:nth-child(2) strong{white-space:nowrap}
-#pg-history .stand-table td{padding:5px 10px!important;font-size:12px!important}
 /* ─── TAG TOOLTIPS ───────────────────────────────────────── */
 .tag[data-tip]{position:relative;cursor:help}
 .tag[data-tip]:hover::after{
