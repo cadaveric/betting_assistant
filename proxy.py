@@ -216,6 +216,61 @@ ODDS_CACHE_TTL = 1800  # 30 min
 ODDS_LAST_ERROR = {}
 ODDS_FALLBACK_ENABLED = os.environ.get('ODDS_FALLBACK_ENABLED', '').lower() in ('1', 'true', 'yes')
 
+# ── Understat (free, no key — top-5 EU leagues xG data) ─────────────────────
+UNDERSTAT_LEAGUE_MAP = {
+    'PL': 'EPL', 'PD': 'La_liga', 'BL1': 'Bundesliga',
+    'SA': 'Serie_A', 'FL1': 'Ligue_1',
+}
+UNDERSTAT_TTL = 21600  # 6 h
+
+def _fetch_understat(comp):
+    us_code = UNDERSTAT_LEAGUE_MAP.get(comp)
+    if not us_code:
+        return {}
+    ck = f'understat_{comp}'
+    cached = get_cache(ck)
+    if cached is not None:
+        return cached
+    try:
+        url = f'https://understat.com/league/{us_code}'
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        })
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
+            html = resp.read().decode('utf-8')
+        m = _re.search(r"var teamsData\s*=\s*JSON\.parse\('(.+?)'\)", html)
+        if not m:
+            print(f'[Understat] teamsData not found for {comp}'); return {}
+        import urllib.parse as _up
+        teams_raw = json.loads(_up.unquote(m.group(1)))
+        result = {}
+        for _tid, td in teams_raw.items():
+            name    = td.get('title', '')
+            history = td.get('history', [])
+            if not history: continue
+            def _avg(vals): return round(sum(vals)/len(vals), 4) if vals else None
+            all_m  = history
+            home_m = [x for x in history if x.get('h_a') == 'h']
+            away_m = [x for x in history if x.get('h_a') == 'a']
+            def _xg(lst):  return [float(x.get('xG',  0)) for x in lst]
+            def _xga(lst): return [float(x.get('xGA', 0)) for x in lst]
+            norm = _re.sub(r'[^a-z0-9]', '', name.lower())
+            result[norm] = {
+                'name': name,
+                'xgPg':      _avg(_xg(all_m)),   'xgaPg':      _avg(_xga(all_m)),
+                'xgHomePg':  _avg(_xg(home_m)),  'xgaHomePg':  _avg(_xga(home_m)),
+                'xgAwayPg':  _avg(_xg(away_m)),  'xgaAwayPg':  _avg(_xga(away_m)),
+            }
+        set_cache(ck, result, UNDERSTAT_TTL)
+        print(f'[Understat] {comp}: loaded {len(result)} teams')
+        return result
+    except Exception as e:
+        print(f'[Understat] {comp} failed: {e}'); return {}
+
 # ── ClubElo (free, no key required) ──────────────────────────────────────────
 CLUBELO_BASE    = 'http://api.clubelo.com'
 CLUBELO_TTL     = 86400  # 24 h — ratings update weekly
@@ -1513,6 +1568,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/calibration':         self.handle_calibration()
         elif path == '/clubelo':             self.send_json(_fetch_clubelo())
+        elif path.startswith('/understat/'): self.send_json(_fetch_understat(path.split('/')[-1].upper()))
         elif path == '/config':
             self.send_json({'apif': bool(APIF_KEY),
                             'odds': bool(APIF_KEY or ODDS_API_KEY),

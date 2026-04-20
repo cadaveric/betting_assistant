@@ -1906,6 +1906,31 @@ function computeForm(table,matches){
   });
 }
 
+// ── UNDERSTAT xG — fills xgPg/xgaPg for top-5 EU leagues when APIF lacks it ──
+const UNDERSTAT_LGS=new Set(['PL','PD','BL1','SA','FL1']);
+async function loadUnderstatStats(){
+  if(!UNDERSTAT_LGS.has(lg))return;
+  try{
+    const d=await fetch('/understat/'+lg).then(r=>r.ok?r.json():null);
+    if(!d||Object.keys(d).length===0)return;
+    standRows.forEach(r=>{
+      const us=d[_normName(r.team.name)]||d[_normName(r.team.shortName)];
+      if(!us)return;
+      const tid=r.team.id;
+      const ex=teamStatsMap[tid]||{};
+      if(ex.xgPg!=null)return; // APIF data already present — don't override
+      teamStatsMap[tid]={
+        ...ex,
+        xgPg:us.xgPg,       xgaPg:us.xgaPg,
+        xgHomePg:us.xgHomePg, xgaHomePg:us.xgaHomePg,
+        xgAwayPg:us.xgAwayPg, xgaAwayPg:us.xgaAwayPg,
+      };
+    });
+    computeLiveBaselines();
+    console.log('[Understat] merged xG for',lg);
+  }catch(e){console.warn('[Understat] failed:',e.message);}
+}
+
 // ── RICH TEAM STATS — loaded from proxy /teamstats/{lg} endpoint ─────────────
 async function loadTeamStats(showProgress){
   const reqLeague=lg, reqVersion=leagueVersion;
@@ -1942,6 +1967,7 @@ async function loadTeamStats(showProgress){
       });
       console.log('[Stats] Loaded '+Object.keys(teamStatsMap).length+' teams from proxy');
       computeLiveBaselines();
+      loadUnderstatStats(); // backfill xG for any teams APIF didn't cover
       return true;
     }
     // Still building on proxy side — return false, caller can retry
@@ -2894,6 +2920,7 @@ async function loadFixtures(){
     // If not ready yet, show fixtures anyway and retry stats quietly after 10s
     if(Object.keys(teamStatsMap).length===0){
       const requestedLeague=lg;
+      loadUnderstatStats(); // use Understat xG immediately while APIF stats build
       setTimeout(async()=>{
         if(lg!==requestedLeague) return;
         await loadTeamStats(false);
