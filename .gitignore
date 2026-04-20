@@ -1,3 +1,8 @@
+# Secrets — never commit
+.env
+*.env
+.env.*
+
 # Local runtime cache
 scoutline_cache.json
 data/scoutline_cache.json
