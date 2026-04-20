@@ -835,6 +835,117 @@ html,body{overflow-x:hidden}
   .stand-table{min-width:420px}
   .odds-market-grid{grid-template-columns:1fr}
 }
+
+/* ─── SCOUTLINE POLISH PASS ──────────────────────────────────────── */
+
+/* 1. Logo — white icon on green gradient */
+.logo-mark svg path,.logo-mark svg circle,.logo-mark svg line{stroke:rgba(255,255,255,.9)}
+.logo-mark svg path:first-child{fill:rgba(255,255,255,.18)}
+.logo-mark svg circle{fill:rgba(255,255,255,.85);opacity:1}
+
+/* 2. KPI tiles — left accent stripe per position */
+.kpi{position:relative;padding-left:22px}
+.kpi::before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 2px 2px 0}
+.kpi-row>.kpi:nth-child(4n+1)::before{background:var(--green)}
+.kpi-row>.kpi:nth-child(4n+2)::before{background:var(--blue)}
+.kpi-row>.kpi:nth-child(4n+3)::before{background:var(--amber)}
+.kpi-row>.kpi:nth-child(4n+4)::before{background:var(--teal)}
+/* Small-value variant for league name tile */
+.kpi-val-sm{font-size:18px!important;letter-spacing:-.02em}
+/* Accuracy color coding */
+.kpi-acc-good{color:var(--green)!important}
+.kpi-acc-warn{color:var(--amber)!important}
+.kpi-acc-bad{color:var(--red)!important}
+@media(max-width:600px){
+  .kpi{padding-left:16px}
+  .kpi::before{top:0;bottom:0}
+}
+
+/* 3. Loading spinner */
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.loading-state::before{content:'';width:14px;height:14px;border:2px solid rgba(55,44,28,.15);border-top-color:var(--amber);border-radius:50%;animation:ls-spin .7s linear infinite;flex-shrink:0}
+@keyframes ls-spin{to{transform:rotate(360deg)}}
+
+/* 4. Error state — left border for emphasis */
+.error-state{border-left:3px solid var(--red);border-radius:0 10px 10px 0}
+
+/* 5. Sign-out button — subdued to match warm theme */
+a[href="/logout"]{background:rgba(184,70,63,.10)!important;color:#9B322D!important;border:1px solid rgba(184,70,63,.20)!important}
+a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!important}
+
+/* 6. Probability bar — flush segments, no ugly gap seams */
+.prob-bar{gap:0}
+.pb-h{border-radius:4px 0 0 4px}
+.pb-d{border-radius:0}
+.pb-a{border-radius:0 4px 4px 0}
+
+/* 7. Team name overflow — ellipsis on long names */
+.tname{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-side.away .tname{text-align:right}
+@media(max-width:600px){.tname{max-width:110px}}
+
+/* 8. Center column — pill background to visually anchor the VS score */
+.center-col{background:rgba(55,44,28,.05);border-radius:12px;padding:10px 8px}
+
+/* 9. Market chips — hover lift */
+.mchip{transition:transform .15s,box-shadow .15s}
+.mchip:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(55,44,28,.12)}
+
+/* 10. Standings — zebra rows */
+.stand-table tbody tr:nth-child(even) td{background:rgba(55,44,28,.025)}
+
+/* 11. Nav active — green underline dot */
+.nav-btn{position:relative}
+.nav-btn.on::after{content:'';position:absolute;bottom:3px;left:25%;right:25%;height:2px;border-radius:1px;background:var(--green)}
+
+/* 12. Match hover — green tint border */
+.match:hover{border-color:rgba(16,137,108,.25);box-shadow:0 6px 24px rgba(16,137,108,.08)}
+
+/* 13. Advisor help card — use CSS variables */
+.advisor-help{background:var(--al);border-color:rgba(183,109,18,.18);color:var(--tx);font-size:13px}
+.advisor-help strong,.advisor-help-title{color:var(--tx)}
+
+/* 14. Bet reason cells — use theme vars */
+.bet-reason-cell{background:var(--bg3);border-color:var(--br)}
+.bet-reason-val{color:var(--tx)}
+
+/* 15. Section labels — uppercase tracking for hierarchy */
+.section-label{text-transform:uppercase;letter-spacing:.05em;font-size:10px}
+.pred-mkt-section-label{text-transform:uppercase;letter-spacing:.05em;font-size:10px}
+
+/* 16. Topbar — prevent wrapping on medium screens, hide model-badge */
+@media(min-width:601px) and (max-width:860px){
+  .model-badge{display:none}
+}
+
+/* 17. History table — win/loss row tints */
+.hist-row-win td{background:rgba(16,137,108,.04)!important}
+.hist-row-loss td{background:rgba(184,70,63,.04)!important}
+
+/* 18. Predictor data grid — bottom border to close off the panel */
+.pred-data-grid{border-bottom:1px solid var(--br)}
+
+/* 19. Acca leg hover */
+.acca-leg{transition:background .12s;padding-left:4px;padding-right:4px;border-radius:4px}
+.acca-leg:hover{background:rgba(55,44,28,.03)}
+
+/* 20. Form dots — cleaner corner radius */
+.fd{border-radius:5px}
+
+/* 21. vs-txt — spaced uppercase */
+.vs-txt{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:var(--tx3)}
+
+/* 22. Result rows hover */
+.res-row:hover{border-color:rgba(16,137,108,.22);box-shadow:0 4px 14px rgba(16,137,108,.07)}
+
+/* 23. Bet card — on mobile, add top border color instead of right panel bg */
+@media(max-width:760px){
+  .bet-right{background:linear-gradient(135deg,#123A32,#0F2E29)!important;border-radius:10px}
+}
+
+/* 24. Schedule rows hover */
+.schedule-row{transition:border-color .15s,box-shadow .15s}
+.schedule-row:hover{border-color:rgba(16,137,108,.22);box-shadow:0 6px 18px rgba(16,137,108,.07)}
 </style>
 </head>
 <body>
@@ -842,14 +953,14 @@ html,body{overflow-x:hidden}
 <div class="topbar">
   <div class="logo-mark">
     <svg viewBox="0 0 24 24" fill="none">
-      <path d="M12 3L20 8V16L12 21L4 16V8L12 3Z" stroke="#000" stroke-width="1.5" fill="rgba(0,0,0,.15)"/>
-      <circle cx="12" cy="12" r="3.5" fill="#000" opacity=".7"/>
-      <line x1="12" y1="3" x2="12" y2="8.5" stroke="#000" stroke-width="1.5"/>
-      <line x1="20" y1="8" x2="15.2" y2="10.2" stroke="#000" stroke-width="1.5"/>
-      <line x1="20" y1="16" x2="15.2" y2="13.8" stroke="#000" stroke-width="1.5"/>
-      <line x1="12" y1="21" x2="12" y2="15.5" stroke="#000" stroke-width="1.5"/>
-      <line x1="4" y1="16" x2="8.8" y2="13.8" stroke="#000" stroke-width="1.5"/>
-      <line x1="4" y1="8" x2="8.8" y2="10.2" stroke="#000" stroke-width="1.5"/>
+      <path d="M12 3L20 8V16L12 21L4 16V8L12 3Z" stroke="rgba(255,255,255,.9)" stroke-width="1.5" fill="rgba(255,255,255,.18)"/>
+      <circle cx="12" cy="12" r="3.5" fill="rgba(255,255,255,.85)"/>
+      <line x1="12" y1="3" x2="12" y2="8.5" stroke="rgba(255,255,255,.9)" stroke-width="1.5"/>
+      <line x1="20" y1="8" x2="15.2" y2="10.2" stroke="rgba(255,255,255,.9)" stroke-width="1.5"/>
+      <line x1="20" y1="16" x2="15.2" y2="13.8" stroke="rgba(255,255,255,.9)" stroke-width="1.5"/>
+      <line x1="12" y1="21" x2="12" y2="15.5" stroke="rgba(255,255,255,.9)" stroke-width="1.5"/>
+      <line x1="4" y1="16" x2="8.8" y2="13.8" stroke="rgba(255,255,255,.9)" stroke-width="1.5"/>
+      <line x1="4" y1="8" x2="8.8" y2="10.2" stroke="rgba(255,255,255,.9)" stroke-width="1.5"/>
     </svg>
   </div>
   <div>
@@ -1764,15 +1875,6 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     hDataBadge=hMissing?hDataBadge+' +inj':hDataBadge;
     aDataBadge=aMissing?aDataBadge+' +inj':aDataBadge;
   }
-  hLam=Math.max(0.2,Math.min(4.5,hLam*h2hLamAdjH));
-  aLam=Math.max(0.2,Math.min(4.5,aLam*h2hLamAdjA));
-
-  const dcRhoDefault=calPrior.suggestedRho||tune.dcRho||-0.13;
-  const dcMat=buildDCMatrix(hLam,aLam,dcRhoDefault);
-  const {hW:hWinDC,dr:drawDC,aW:aWinDC}=dcProbs(dcMat);
-  const eloExp=1/(1+Math.pow(10,(aElo-hElo)/400));
-  const hFF=hF.pct!=null?hF.pct:0.5;
-  const aFF=aF.pct!=null?aF.pct:0.5;
 
   let h2hFactor=0,h2hLamAdjH=1.0,h2hLamAdjA=1.0;
   if(h2hData?.aggregates&&(h2hData.aggregates.numberOfMatches||0)>=3){
@@ -1783,6 +1885,16 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
       h2hLamAdjA=Math.max(0.85,Math.min(1.15,1+(agg.h2hAvgGoalsA/lgAvg-1)*0.20));
     }
   }
+
+  hLam=Math.max(0.2,Math.min(4.5,hLam*h2hLamAdjH));
+  aLam=Math.max(0.2,Math.min(4.5,aLam*h2hLamAdjA));
+
+  const dcRhoDefault=calPrior.suggestedRho||tune.dcRho||-0.13;
+  const dcMat=buildDCMatrix(hLam,aLam,dcRhoDefault);
+  const {hW:hWinDC,dr:drawDC,aW:aWinDC}=dcProbs(dcMat);
+  const eloExp=1/(1+Math.pow(10,(aElo-hElo)/400));
+  const hFF=hF.pct!=null?hF.pct:0.5;
+  const aFF=aF.pct!=null?aF.pct:0.5;
 
   let implH=0,implD=0,implA=0,hasOdds=false;
   const bH=oddsH||hS?.avgOddsHW||0;
@@ -2347,7 +2459,7 @@ function renderOdds(games,el,provider='api-football'){
     +`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">${t('odds.kpi.fixtures')}</div></div>`
     +`<div class="kpi"><div class="kpi-val">${games[0]?.num_bookmakers??'?'}</div><div class="kpi-lbl">${t('odds.kpi.books')}</div></div>`
     +`<div class="kpi"><div class="kpi-val" style="color:var(--green)">${valueGames.length}</div><div class="kpi-lbl">${t('odds.kpi.value')}</div></div>`
-    +`<div class="kpi"><div class="kpi-val" style="font-size:20px">${provider}</div><div class="kpi-lbl">${t('odds.kpi.provider')}</div></div>`
+    +`<div class="kpi"><div class="kpi-val kpi-val-sm">${provider}</div><div class="kpi-lbl">${t('odds.kpi.provider')}</div></div>`
     +`</div><div style="font-size:11px;font-family:var(--mono);color:var(--tx2);margin-bottom:14px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:12px 16px;line-height:1.9">`
     +`<strong style="color:var(--blue)">${t('odds.how_to_read')}</strong> ${t('odds.how_to_read_text')} ${timeAgo(oddsMeta[lg]?.updatedAt)} &middot; `
     +`<span class="tag tag-green" style="font-size:9px">${t('vtag.value')}</span> = ${t('odds.model_sees')}</div>`;
@@ -2442,10 +2554,11 @@ async function loadPredictionHistory(){
     const s=d.summary||{};
     const rows=d.predictions||[];
     const pct=v=>v==null?'--':v+'%';
+    const accCls=s.outcomeAccuracy==null?'':s.outcomeAccuracy>=50?'kpi-acc-good':s.outcomeAccuracy>=35?'kpi-acc-warn':'kpi-acc-bad';
     let html=`<div class="kpi-row" style="margin-bottom:16px">
       <div class="kpi"><div class="kpi-val">${s.total||0}</div><div class="kpi-lbl">${t('hist.kpi.remembered')}</div></div>
       <div class="kpi"><div class="kpi-val">${s.graded||0}</div><div class="kpi-lbl">${t('hist.kpi.graded')}</div></div>
-      <div class="kpi"><div class="kpi-val">${pct(s.outcomeAccuracy)}</div><div class="kpi-lbl">${t('hist.kpi.acc')}</div></div>
+      <div class="kpi"><div class="kpi-val ${accCls}">${pct(s.outcomeAccuracy)}</div><div class="kpi-lbl">${t('hist.kpi.acc')}</div></div>
       <div class="kpi"><div class="kpi-val">${s.avgBrier??'--'}</div><div class="kpi-lbl">${t('hist.kpi.brier')}</div></div>
     </div>`;
     if(!rows.length){
@@ -2470,7 +2583,8 @@ async function loadPredictionHistory(){
       const ok=done&&mt.outcomeCorrect;
       const result=done?(ok?t('hist.hit'):t('hist.miss')):t('hist.pending');
       const tag=done?(ok?'tag-green':'tag-red'):'tag-gray';
-      html+=`<tr>
+      const rowCls=done?(ok?'hist-row-win':'hist-row-loss'):'';
+      html+=`<tr class="${rowCls}">
         <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
         <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div></td>
         <td>${pickLbl}</td>
@@ -2629,7 +2743,7 @@ async function loadFixtures(){
     kpiEl.innerHTML=`
       <div class="kpi"><div class="kpi-val">${matches.length}</div><div class="kpi-lbl">${t('kpi.fixtures')}</div></div>
       <div class="kpi"><div class="kpi-val">${table.length}</div><div class="kpi-lbl">${t('kpi.teams')}</div></div>
-      <div class="kpi"><div class="kpi-val" style="font-size:20px">${selectedLabel}</div><div class="kpi-lbl">${t('kpi.selected_league')}</div></div>
+      <div class="kpi"><div class="kpi-val kpi-val-sm">${selectedLabel}</div><div class="kpi-lbl">${t('kpi.selected_league')}</div></div>
       <div class="kpi"><div class="kpi-val">${Object.keys(teamStatsMap).length}</div><div class="kpi-lbl">${t('kpi.teams_shot_data')}</div></div>`;
     let html=`<div class="trust-strip">
       <span class="quality-badge ${Object.keys(teamStatsMap).length?'good':'warn'}">${Object.keys(teamStatsMap).length?t('fix.rich_loaded'):t('fix.rich_building')}</span>
