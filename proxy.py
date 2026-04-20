@@ -160,7 +160,8 @@ if(p.get('err')){const e=document.getElementById('err');e.textContent=p.get('err
 '''
 DISK_CACHE_FILE = os.environ.get('CACHE_FILE', 'scoutline_cache.json')
 PREDICTION_FILE = os.environ.get('PREDICTION_FILE', os.path.join('data', 'prediction_history.json'))
-ODDS_HISTORY_FILE = os.environ.get('ODDS_HISTORY_FILE', os.path.join('data', 'odds_history.json'))
+ODDS_HISTORY_FILE  = os.environ.get('ODDS_HISTORY_FILE',  os.path.join('data', 'odds_history.json'))
+CALIBRATION_FILE   = os.environ.get('CALIBRATION_FILE',  os.path.join('data', 'league_calibration.json'))
 
 # ── API-Football Pro (api-sports.io) ─────────────────────────────────────────
 APIF_KEY  = (os.environ.get('APIFOOTBALL_KEY')
@@ -214,6 +215,16 @@ ODDS_REGION    = 'eu'
 ODDS_CACHE_TTL = 1800  # 30 min
 ODDS_LAST_ERROR = {}
 ODDS_FALLBACK_ENABLED = os.environ.get('ODDS_FALLBACK_ENABLED', '').lower() in ('1', 'true', 'yes')
+
+# ── Football-Data.org (free tier — for league calibration) ────────────────────
+FD_KEY          = os.environ.get('FOOTBALL_DATA_KEY', '')
+FD_BASE         = 'https://api.football-data.org/v4'
+FD_LEAGUE_MAP   = {
+    'PL':'PL','ELC':'ELC','L1':'EL1','L2':'EL2',
+    'BL1':'BL1','PD':'PD','SA':'SA','FL1':'FL1',
+    'CL':'CL','EL':'EL','DED':'DED','PPL':'PPL','BSA':'BSA',
+}
+CALIBRATION_SEASONS = [2021, 2022, 2023, 2024]
 
 ODDS_SPORT_KEYS = {
     'PL':  'soccer_epl',             'ELC': 'soccer_efl_champ',
@@ -369,6 +380,17 @@ def _over25_prob(lh, la, max_g=7):
         for j in range(max_g + 1):
             if i + j > 2: p += pi * _poisson_pmf(j, la)
     return p
+
+def _dc_draw_prob(lh, la, rho, max_g=7):
+    """DC-corrected draw probability for a given rho."""
+    def _tau(i, j):
+        if i == 0 and j == 0: return 1 - lh * la * rho
+        if i == 1 and j == 0: return 1 + la * rho
+        if i == 0 and j == 1: return 1 + lh * rho
+        if i == 1 and j == 1: return 1 - rho
+        return 1.0
+    return sum(_poisson_pmf(k, lh) * _poisson_pmf(k, la) * _tau(k, k)
+               for k in range(max_g + 1))
 
 # Prediction ledger
 def _prediction_path():
@@ -549,12 +571,130 @@ def _avg(vals):
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
+# ── League calibration (football-data.org historical data) ───────────────────
+_calibration_lock     = threading.Lock()
+_calibration_building = False
+
+def _load_calibration():
+    return _load_json_file(CALIBRATION_FILE, {})
+
+def fetch_fd_season(fd_code, season):
+    if not FD_KEY:
+        return []
+    cache_key = f'/fd_cal/{fd_code}/{season}'
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+    url = f'{FD_BASE}/competitions/{fd_code}/matches?season={season}&status=FINISHED'
+    try:
+        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'X-Auth-Token': FD_KEY, 'User-Agent': 'Scoutline/2.0'})
+        with urllib.request.urlopen(req, timeout=25, context=ctx) as r:
+            raw = json.loads(r.read())
+            results = []
+            for m in raw.get('matches', []):
+                sc = (m.get('score') or {}).get('fullTime') or {}
+                hg, ag = sc.get('home'), sc.get('away')
+                if hg is not None and ag is not None:
+                    try: results.append((int(hg), int(ag)))
+                    except (TypeError, ValueError): pass
+            set_cache(cache_key, results, ttl=7 * 24 * 3600)
+            print(f'  [FD] {fd_code}/{season}: {len(results)} matches')
+            return results
+    except Exception as e:
+        print(f'  [FD] {fd_code}/{season} failed: {e}')
+        return []
+
+def build_league_calibration():
+    global _calibration_building
+    with _calibration_lock:
+        if _calibration_building: return
+        _calibration_building = True
+    try:
+        print('  [CAL] Building league calibration from football-data.org...')
+        leagues = {}
+        for comp, fd_code in FD_LEAGUE_MAP.items():
+            all_matches = []
+            for season in CALIBRATION_SEASONS:
+                all_matches.extend(fetch_fd_season(fd_code, season))
+                time.sleep(0.25)
+            if len(all_matches) < 50:
+                print(f'  [CAL] {comp}: insufficient data ({len(all_matches)} matches)')
+                continue
+            n      = len(all_matches)
+            h_wins = sum(1 for h, a in all_matches if h > a)
+            draws  = sum(1 for h, a in all_matches if h == a)
+            a_wins = n - h_wins - draws
+            avg_hg = sum(h for h, a in all_matches) / n
+            avg_ag = sum(a for h, a in all_matches) / n
+            over25 = sum(1 for h, a in all_matches if h + a > 2)
+            btts   = sum(1 for h, a in all_matches if h > 0 and a > 0)
+            # binary-search rho so DC draw rate ≈ historical draw rate
+            target_dr = draws / n
+            best_rho, best_diff = -0.13, float('inf')
+            for rho100 in range(-25, -5):
+                rho_c = rho100 / 100.0
+                diff  = abs(_dc_draw_prob(avg_hg, avg_ag, rho_c) - target_dr)
+                if diff < best_diff:
+                    best_diff, best_rho = diff, rho_c
+            ha_factor = avg_hg / avg_ag if avg_ag > 0 else 1.1
+            leagues[comp] = {
+                'n': n,
+                'homeWinPct':   round(h_wins / n, 4),
+                'drawPct':      round(draws   / n, 4),
+                'awayWinPct':   round(a_wins  / n, 4),
+                'avgHomeGoals': round(avg_hg, 3),
+                'avgAwayGoals': round(avg_ag, 3),
+                'avgTotalGoals':round(avg_hg + avg_ag, 3),
+                'homeAdvFactor':round(ha_factor, 3),
+                'over25Rate':   round(over25 / n, 4),
+                'bttsRate':     round(btts   / n, 4),
+                'suggestedRho': round(_clamp(best_rho, -0.25, -0.06), 3),
+            }
+            print(f'  [CAL] {comp}: n={n} homeAdv={ha_factor:.3f} '
+                  f'draw={draws/n:.3f} rho={best_rho}')
+        if leagues:
+            result = {'builtAt': _dt.datetime.now(_dt.timezone.utc).isoformat(), 'leagues': leagues}
+            _save_json_file(CALIBRATION_FILE, result)
+            print(f'  [CAL] Saved calibration for {len(leagues)} leagues')
+            return result
+        return {}
+    finally:
+        with _calibration_lock:
+            _calibration_building = False
+
+def _calibration_is_stale():
+    cal = _load_calibration()
+    if not cal or not cal.get('leagues'):
+        return True
+    try:
+        age = (_dt.datetime.now(_dt.timezone.utc) -
+               _dt.datetime.fromisoformat(cal['builtAt'])).total_seconds()
+        return age > 7 * 24 * 3600
+    except Exception:
+        return True
+
 def _prediction_tuning(rows):
     graded = [r for r in rows if r.get('status') == 'graded']
 
-    def build(sample, min_ready=20):
+    def build(sample, comp=None, min_ready=20):
+        cal_data   = _load_calibration()
+        cal_leagues = cal_data.get('leagues', {}) if cal_data else {}
+        cal        = cal_leagues.get(comp or '') or {}
+        N_PRIOR    = 80  # virtual sample weight for historical prior
+
         if not sample:
+            if cal:
+                ha_mult  = round(cal.get('homeAdvFactor', 1.1) / 1.1, 3)
+                rho_val  = round(cal.get('suggestedRho', -0.13), 3)
+                o25_adj  = round(_clamp((cal.get('over25Rate', 0.52) - 0.52) * 100, -8, 8), 1)
+                return {'graded': 0, 'ready': True, 'prior_source': 'historical',
+                        'bias': {'home': 0, 'draw': 0, 'away': 0},
+                        'homeAdvMultiplier': ha_mult, 'dcRho': rho_val,
+                        'oddsWeightScale': 1.0, 'richDataWeightScale': 1.0,
+                        'over25Adjustment': o25_adj, 'diagnostics': {}}
             return {'graded': 0, 'ready': False}
+
         n = len(sample)
         actual_counts = {'H': 0, 'D': 0, 'A': 0}
         pred_sum = {'home': 0.0, 'draw': 0.0, 'away': 0.0}
@@ -590,19 +730,41 @@ def _prediction_tuning(rows):
         brier_est = _avg([(r.get('metrics') or {}).get('brier') for r in est_rows])
         over_delta = (_avg(over_actuals) or 0) - (_avg(over_preds) or 0) if over_preds else 0
 
+        # Bayesian blend: prior from historical calibration, obs from predictions
+        def blend(prior_val, obs_val):
+            if prior_val is None:
+                return obs_val
+            return (N_PRIOR * prior_val + n * obs_val) / (N_PRIOR + n)
+
+        obs_ha_corr  = 1.0 + (deltas['home'] - deltas['away']) / 1000
+        obs_rho      = -0.13 - deltas['draw'] / 400
+        prior_ha_corr = cal.get('homeAdvFactor', 1.1) / 1.1 if cal else None
+        prior_rho     = cal.get('suggestedRho', -0.13) if cal else None
+        prior_o25     = (cal.get('over25Rate', 0.52) - 0.52) * 100 if cal else None
+
+        ha_mult  = round(_clamp(blend(prior_ha_corr, obs_ha_corr), 0.90, 1.15), 3)
+        rho_val  = round(_clamp(blend(prior_rho, obs_rho), -0.25, -0.06), 3)
+        if over_preds:
+            o25_adj = round(_clamp(blend(prior_o25, over_delta / 2), -8, 8), 1)
+        elif prior_o25 is not None:
+            o25_adj = round(_clamp(prior_o25, -8, 8), 1)
+        else:
+            o25_adj = 0.0
+
         return {
             'graded': n,
-            'ready': n >= min_ready,
+            'ready': bool(cal) or n >= min_ready,
+            'prior_source': 'historical+observed' if cal else 'observed',
             'bias': {
                 'home': round(_clamp(deltas['home'] / 500, -0.04, 0.04), 4),
                 'draw': round(_clamp(deltas['draw'] / 500, -0.04, 0.04), 4),
                 'away': round(_clamp(deltas['away'] / 500, -0.04, 0.04), 4),
             },
-            'homeAdvMultiplier': round(_clamp(1 + (deltas['home'] - deltas['away']) / 1000, 0.94, 1.06), 3),
-            'dcRho': round(_clamp(-0.13 - deltas['draw'] / 400, -0.22, -0.06), 3),
+            'homeAdvMultiplier': ha_mult,
+            'dcRho': rho_val,
             'oddsWeightScale': round(_clamp(1 + ((brier_no_odds or brier_all or 0) - (brier_odds or brier_all or 0)) * 0.35, 0.85, 1.25), 3),
             'richDataWeightScale': round(_clamp(1 + ((brier_est or brier_all or 0) - (brier_rich or brier_all or 0)) * 0.25, 0.9, 1.2), 3),
-            'over25Adjustment': round(_clamp(over_delta / 2, -8, 8), 1),
+            'over25Adjustment': o25_adj,
             'diagnostics': {
                 'avgBrier': round(brier_all, 4) if brier_all is not None else None,
                 'oddsRows': len(odds_rows),
@@ -615,8 +777,8 @@ def _prediction_tuning(rows):
     leagues = {}
     for comp in sorted({r.get('competition') for r in graded if r.get('competition')}):
         sample = [r for r in graded if r.get('competition') == comp]
-        leagues[comp] = build(sample, 25)
-    return {'global': build(graded, 15), 'leagues': leagues}
+        leagues[comp] = build(sample, comp=comp, min_ready=25)
+    return {'global': build(graded, comp=None, min_ready=15), 'leagues': leagues}
 
 def _data_path(path):
     if os.path.isabs(path):
@@ -1316,6 +1478,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/predictions':         self.handle_predictions(qs)
+        elif path == '/calibration':         self.handle_calibration()
         elif path == '/config':
             self.send_json({'apif': bool(APIF_KEY),
                             'odds': bool(APIF_KEY or ODDS_API_KEY),
@@ -1543,6 +1706,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({'fixture_id': fixture_id, 'referee': referee, 'refereeCardsPg': ref_cards_pg,
                         'competition': comp, 'injuries': out_injuries,
                         'lineups': lineups_out, 'events': event_summary})
+
+    def handle_calibration(self):
+        cal = _load_calibration()
+        if cal and cal.get('leagues') and not _calibration_is_stale():
+            self.send_json(cal); return
+        threading.Thread(target=build_league_calibration, daemon=True).start()
+        self.send_json(cal or {'leagues': {}, 'building': True})
 
     def handle_odds(self, comp):
         if comp not in APIF_LEAGUE_MAP:
@@ -1775,6 +1945,10 @@ if __name__ == '__main__':
             print(f'  [TS] PL from disk ({len(ts["teams"])} teams)')
         elif APIF_KEY:
             build_teamstats('PL')
+        if FD_KEY and _calibration_is_stale():
+            threading.Thread(target=build_league_calibration, daemon=True).start()
+        elif not FD_KEY:
+            print('  [CAL] FOOTBALL_DATA_KEY not set — skipping calibration build')
     threading.Thread(target=startup, daemon=True).start()
     server = ThreadingHTTPServer(('', PORT), Handler)
     try: server.serve_forever()

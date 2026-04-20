@@ -1474,6 +1474,7 @@ let modelCalibration={
   global:{ready:false,graded:0,bias:{home:0,draw:0,away:0},homeAdvMultiplier:1,dcRho:-0.13,oddsWeightScale:1,richDataWeightScale:1,over25Adjustment:0},
   leagues:{}
 };
+let leagueCalibrationData={};
 
 // ── API ──────────────────────────────────────────────────────────────────────
 async function api(path){
@@ -1489,19 +1490,36 @@ async function postJson(path,payload){
 function prefetch(comp){ fetch('/prefetch/'+comp).catch(()=>{}); }
 async function loadModelCalibration(){
   try{
-    const d=await fetch('/predictions?refresh=1&limit=500').then(r=>r.json());
+    const [predResp,calResp]=await Promise.all([
+      fetch('/predictions?refresh=1&limit=500'),
+      fetch('/calibration').catch(()=>null)
+    ]);
+    const d=await predResp.json();
     const tuning=d.summary?.tuning;
     if(tuning) modelCalibration=tuning;
+    if(calResp?.ok){
+      const calData=await calResp.json().catch(()=>null);
+      if(calData?.leagues) leagueCalibrationData=calData.leagues;
+    }
   }catch(e){}
 }
 function activeTune(){
-  const fallback={ready:false,graded:0,bias:{home:0,draw:0,away:0},homeAdvMultiplier:1,dcRho:-0.13,oddsWeightScale:1,richDataWeightScale:1,over25Adjustment:0};
+  const cal=leagueCalibrationData?.[lg]||{};
+  const fallback={
+    ready:!!cal.suggestedRho,graded:0,
+    bias:{home:0,draw:0,away:0},
+    homeAdvMultiplier:cal.homeAdvFactor?round3(cal.homeAdvFactor/1.1):1,
+    dcRho:cal.suggestedRho||-0.13,
+    oddsWeightScale:1,richDataWeightScale:1,
+    over25Adjustment:cal.over25Rate?Math.round((cal.over25Rate-0.52)*100):0,
+  };
   const leagueTune=modelCalibration.leagues?.[lg];
   if(leagueTune?.ready)return {...fallback,...leagueTune,bias:{...fallback.bias,...(leagueTune.bias||{})}};
   const globalTune=modelCalibration.global;
   if(globalTune?.ready)return {...fallback,...globalTune,bias:{...fallback.bias,...(globalTune.bias||{})}};
   return fallback;
 }
+function round3(v){return Math.round(v*1000)/1000;}
 async function refreshLeague(){
   const reqLeague=lg;
   const active=document.querySelector('.nav-btn.on');
@@ -1670,7 +1688,7 @@ const LG_CORN={PL:4.5,ELC:4.6,PD:4.2,BL1:4.8,SA:4.0,FL1:4.1,PPL:4.3,DED:4.7,CL:4
 const LG_CARD={PL:1.4,ELC:1.5,PD:1.7,BL1:1.3,SA:1.6,FL1:1.5,PPL:1.5,DED:1.3,CL:1.3,EL:1.3,EC:1.3,WC:1.3,BSA:1.6};
 
 // ── DEEP PREDICT v2 ───────────────────────────────────────────────────────────
-function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fixtureIntel){
+function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fixtureIntel,oddsNumBooks){
   const h=standRows[hi], a=standRows[ai];
   const tune=activeTune();
   const hElo=eloMap[h.team.id]||1500, aElo=eloMap[a.team.id]||1500;
@@ -1678,10 +1696,11 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const aF=formMap[a.team.id]||{pct:0.5,games:1,formGFpg:1.2,formGApg:1.2,results:[]};
   const hS=teamStatsMap[h.team.id]||null;
   const aS=teamStatsMap[a.team.id]||null;
-  const lgAvg=liveLgAvg||LG_AVG[lg]||1.35;
+  const lgAvg=liveLgAvg||(leagueCalibrationData?.[lg]?.avgHomeGoals||LG_AVG[lg])||1.35;
   const lgSot=liveLgSot||LG_SOT[lg]||4.8;
   const lgConv=LG_CONV[lg]||0.285;
-  const haBase=(parseFloat(haBoost)||1.1)*(tune.homeAdvMultiplier||1);
+  const calPrior=leagueCalibrationData?.[lg]||{};
+  const haBase=parseFloat(haBoost)||(tune.homeAdvMultiplier||calPrior.homeAdvFactor||1.1);
   const hL5=hS?.last5||{}, aL5=aS?.last5||{};
   const hVenueXg=hS?.xgHomePg??hS?.xgPg, aVenueXga=aS?.xgaAwayPg??aS?.xgaPg;
   const aVenueXg=aS?.xgAwayPg??aS?.xgPg, hVenueXga=hS?.xgaHomePg??hS?.xgaPg;
@@ -1745,18 +1764,24 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     hDataBadge=hMissing?hDataBadge+' +inj':hDataBadge;
     aDataBadge=aMissing?aDataBadge+' +inj':aDataBadge;
   }
+  hLam=Math.max(0.2,Math.min(4.5,hLam*h2hLamAdjH));
+  aLam=Math.max(0.2,Math.min(4.5,aLam*h2hLamAdjA));
 
-  const dcMat=buildDCMatrix(hLam,aLam,tune.dcRho||-0.13);
+  const dcRhoDefault=calPrior.suggestedRho||tune.dcRho||-0.13;
+  const dcMat=buildDCMatrix(hLam,aLam,dcRhoDefault);
   const {hW:hWinDC,dr:drawDC,aW:aWinDC}=dcProbs(dcMat);
   const eloExp=1/(1+Math.pow(10,(aElo-hElo)/400));
   const hFF=hF.pct!=null?hF.pct:0.5;
   const aFF=aF.pct!=null?aF.pct:0.5;
 
-  let h2hFactor=0;
-  if(h2hData?.aggregates){
+  let h2hFactor=0,h2hLamAdjH=1.0,h2hLamAdjA=1.0;
+  if(h2hData?.aggregates&&(h2hData.aggregates.numberOfMatches||0)>=3){
     const agg=h2hData.aggregates;
-    const hW=agg.homeTeam?.wins||0,aW=agg.awayTeam?.wins||0;
-    h2hFactor=((hW-aW)/Math.max(1,agg.numberOfMatches||1))*0.12;
+    h2hFactor=((agg.weightedHomeWinRate||0)-(agg.weightedAwayWinRate||0))*0.15;
+    if(agg.h2hAvgGoalsH!=null&&agg.h2hAvgGoalsA!=null&&lgAvg>0){
+      h2hLamAdjH=Math.max(0.85,Math.min(1.15,1+(agg.h2hAvgGoalsH/lgAvg-1)*0.20));
+      h2hLamAdjA=Math.max(0.85,Math.min(1.15,1+(agg.h2hAvgGoalsA/lgAvg-1)*0.20));
+    }
   }
 
   let implH=0,implD=0,implA=0,hasOdds=false;
@@ -1772,12 +1797,19 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const moveA=oddsMove?.away?Math.max(-0.03,Math.min(0.03,-oddsMove.away*0.015)):0;
 
   let wH,wD,wA;
-  const oddsW=hasOdds?Math.max(0.08,Math.min(0.22,0.15*(tune.oddsWeightScale||1))):0;
-  const poisW=hasOdds?Math.max(0.30,0.50-oddsW):0.45;
+  // quality-aware odds weight: more bookmakers → higher confidence in market signal
+  const numBooks=oddsNumBooks||0;
+  const oddsQual=numBooks>=5?'high':numBooks>=2?'medium':(hasOdds?'low':'none');
+  const baseOddsW={high:0.40,medium:0.28,low:0.18,none:0}[oddsQual];
+  const oddsW=hasOdds?Math.max(0.15,Math.min(0.45,baseOddsW*(tune.oddsWeightScale||1))):0;
+  const poisW=hasOdds?Math.max(0.25,0.55-oddsW):0.48;
+  const eloW=hasOdds?Math.max(0.08,0.20-oddsW*0.25):0.20;
+  const formWgt=hasOdds?Math.max(0.06,0.15-oddsW*0.18):0.15;
   if(modelW==='form'){
     wH=hWinDC*0.35+hFF*0.35+eloExp*0.2+Math.max(0,h2hFactor)*0.1;
     wA=aWinDC*0.35+(1-hFF)*0.3+(1-eloExp)*0.2+Math.max(0,-h2hFactor)*0.15;
-    wD=drawDC*0.7+0.07;
+    const fc=Math.max(0,0.5-Math.abs(hFF-aFF)/100)*2,ec=Math.max(0,0.5-Math.abs(eloExp-0.5))*2;
+    wD=drawDC*0.65+fc*0.07+ec*0.07+(leagueCalibrationData?.[lg]?.drawPct||0.27)*0.08;
   } else if(modelW==='elo'){
     wH=hWinDC*0.2+eloExp*0.65+hFF*0.1+Math.max(0,h2hFactor)*0.05;
     wA=aWinDC*0.2+(1-eloExp)*0.65+(1-aFF)*0.1+Math.max(0,-h2hFactor)*0.05;
@@ -1785,9 +1817,14 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   } else if(modelW==='poisson'){
     wH=hWinDC; wD=drawDC; wA=aWinDC;
   } else {
-    wH=hWinDC*poisW+eloExp*0.2+hFF*0.15+Math.max(0,h2hFactor)*0.1+(hasOdds?implH*oddsW:0)+moveH+(tune.bias?.home||0);
-    wA=aWinDC*poisW+(1-eloExp)*0.15+(1-hFF)*0.15+Math.max(0,-h2hFactor)*0.1+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
-    wD=drawDC*0.55+(hasOdds?implD*oddsW:0)+0.07+moveD+(tune.bias?.draw||0);
+    // convergence signals: evenly-matched teams → more draws
+    const formConv=Math.max(0,0.5-Math.abs(hFF-aFF)/100)*2;
+    const eloConv=Math.max(0,0.5-Math.abs(eloExp-0.5))*2;
+    const drawConvBoost=formConv*0.07+eloConv*0.07;
+    const leaguePriorDraw=leagueCalibrationData?.[lg]?.drawPct||0.27;
+    wH=hWinDC*poisW+eloExp*eloW+hFF*formWgt+Math.max(0,h2hFactor)*0.1+(hasOdds?implH*oddsW:0)+moveH+(tune.bias?.home||0);
+    wA=aWinDC*poisW+(1-eloExp)*(eloW*0.75)+(1-hFF)*formWgt+Math.max(0,-h2hFactor)*0.1+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
+    wD=drawDC*0.65+drawConvBoost+(hasOdds?implD*oddsW:leaguePriorDraw*0.08)+moveD+(tune.bias?.draw||0);
   }
   const tot=wH+wD+wA;
   const pH=Math.round(wH/tot*100), pD=Math.round(wD/tot*100), pA=100-pH-pD;
@@ -1855,7 +1892,7 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     pH,pD,pA,conf,scoreH,scoreA,
     hLam:hLam.toFixed(2),aLam:aLam.toFixed(2),
     hDataBadge,aDataBadge,hasOdds,ha:ha.toFixed(2),
-    tuningApplied:!!tune.ready,tuningGraded:tune.graded||0,tuningRho:tune.dcRho||-0.13,
+    tuningApplied:!!tune.ready,tuningGraded:tune.graded||0,tuningRho:dcRhoDefault,
     bH:bH||null,bD:bD||null,bA:bA||null,
     implH:Math.round(implH*100),implD:Math.round(implD*100),implA:Math.round(implA*100),
     hElo,aElo,h2hFactor:h2hFactor.toFixed(3),
@@ -3026,7 +3063,7 @@ async function runDeepPred(){
     }
   }
 
-  const p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel);
+  const p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel,fxOdds?.num_bookmakers||0);
   window._lastPred={p,hName,aName};
   document.getElementById('predOut').innerHTML=renderPredResult(p,hName,aName,h2hData);
   rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,mw,ha,fixtureIntel).catch(e=>console.warn('Prediction history save failed',e));
@@ -3038,15 +3075,32 @@ async function runDeepPred(){
 }
 
 function buildH2HAggregates(matches,hId,aId){
-  let hW=0,aW=0,draws=0;
-  matches.forEach(m=>{
-    const mhg=m.score.fullTime.home,mag=m.score.fullTime.away;
+  const decayW=[1.0,0.85,0.70,0.55,0.40,0.30,0.22,0.16,0.12,0.09];
+  const sorted=[...matches].sort((a,b)=>(b.utcDate||'').localeCompare(a.utcDate||''));
+  let hWw=0,aWw=0,drw=0,totalW=0,hGoalsW=0,aGoalsW=0,h2hDrawCount=0;
+  sorted.forEach((m,i)=>{
+    const mhg=m.score?.fullTime?.home,mag=m.score?.fullTime?.away;
     if(mhg==null||mag==null)return;
+    const w=decayW[i]||0.07;
     const isHome=m.homeTeam.id===hId;
     const gf=isHome?mhg:mag, ga=isHome?mag:mhg;
-    if(gf>ga)hW++; else if(gf<ga)aW++; else draws++;
+    if(gf>ga)hWw+=w; else if(gf<ga)aWw+=w; else{drw+=w;h2hDrawCount++;}
+    hGoalsW+=(isHome?mhg:mag)*w;
+    aGoalsW+=(isHome?mag:mhg)*w;
+    totalW+=w;
   });
-  return{matches,aggregates:{numberOfMatches:matches.length,homeTeam:{wins:hW},awayTeam:{wins:aW},draws}};
+  const n=matches.length;
+  return{matches,aggregates:{
+    numberOfMatches:n,
+    homeTeam:{wins:Math.round(hWw/(totalW||1)*n)},
+    awayTeam:{wins:Math.round(aWw/(totalW||1)*n)},
+    draws:Math.round(drw/(totalW||1)*n),
+    weightedHomeWinRate:totalW>0?hWw/totalW:0.5,
+    weightedAwayWinRate:totalW>0?aWw/totalW:0.5,
+    h2hAvgGoalsH:totalW>0?hGoalsW/totalW:null,
+    h2hAvgGoalsA:totalW>0?aGoalsW/totalW:null,
+    h2hDrawRate:n>0?h2hDrawCount/n:null,
+  }};
 }
 
 
