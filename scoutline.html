@@ -2886,7 +2886,7 @@ async function loadFixtures(){
         ];
         if(fxO.best_o25){const impl25=Math.round(1/fxO.best_o25*100);checks.push({label:'O2.5',edge:pred.pOver25-impl25});}
         const best=checks.reduce((b,c)=>c.edge>b.edge?c:b,{edge:-Infinity});
-        if(best.edge>=8){const vLbl={Home:'Home win',Draw:'Draw',Away:'Away win',O2.5:'Over 2.5'}[best.label]||best.label;valueBadge=`<span class="tag tag-green" style="font-size:9px" data-tip="Value bet: our model gives ${vLbl} ${best.edge.toFixed(0)}% more probability than the bookmaker implies — positive expected value edge.">● VALUE: ${vLbl} +${best.edge.toFixed(0)}%</span>`;}
+        if(best.edge>=8){const _vMap={'Home':'Home win','Draw':'Draw','Away':'Away win','O2.5':'Over 2.5'};const vLbl=_vMap[best.label]||best.label;valueBadge=`<span class="tag tag-green" style="font-size:9px" data-tip="Value bet: our model gives ${vLbl} ${best.edge.toFixed(0)}% more probability than the bookmaker implies — positive expected value edge.">● VALUE: ${vLbl} +${best.edge.toFixed(0)}%</span>`;}
       }
       const d=new Date(m.utcDate);
       const ds=d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
