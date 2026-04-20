@@ -1008,14 +1008,50 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
 }
 .csel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:199}
 
+/* ─── KPI COMPACT STRIP — desktop ───────────────────────── */
+@media(min-width:601px){
+  .kpi-row{display:flex!important;grid-template-columns:unset!important;gap:0!important;
+    background:var(--bg2);border-radius:var(--r);border:1px solid var(--br);
+    box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+  .kpi{flex:1;min-width:0;padding:8px 12px 8px 18px!important;
+    background:transparent!important;box-shadow:none!important;
+    border-radius:0!important;border:none!important;
+    border-right:1px solid var(--br)!important;position:relative}
+  .kpi:last-child{border-right:none!important}
+  .kpi::before{top:0!important;bottom:0!important}
+  .kpi-val{font-size:18px!important;margin-bottom:1px!important;letter-spacing:-.02em!important}
+  .kpi-val-sm{font-size:12px!important;line-height:1.3!important;letter-spacing:0!important}
+  .kpi-lbl{font-size:10px!important}
+}
 /* ─── KPI TILES MOBILE REFINEMENT ──────────────────────── */
 @media(max-width:600px){
   .kpi-row{grid-template-columns:1fr 1fr!important;gap:8px!important}
-  .kpi{padding:12px 12px 12px 16px!important;display:block!important}
+  .kpi{padding:10px 10px 10px 14px!important;display:block!important}
   .kpi::before{top:0!important;bottom:0!important}
-  .kpi-val{font-size:20px!important;white-space:normal!important;margin-bottom:2px!important;line-height:1.1!important}
-  .kpi-val-sm{font-size:13px!important;line-height:1.2!important}
-  .kpi-lbl{font-size:11px!important;line-height:1.3!important}
+  .kpi-val{font-size:17px!important;white-space:normal!important;margin-bottom:2px!important;line-height:1.1!important}
+  .kpi-val-sm{font-size:12px!important;line-height:1.2!important}
+  .kpi-lbl{font-size:10px!important;line-height:1.3!important}
+}
+/* ─── HISTORY PAGE COMPACT ───────────────────────────────── */
+#pg-history .card-head{padding:10px 16px!important}
+#pg-history .card-title{font-size:13px!important}
+#pg-history .stand-table th{padding:5px 10px!important;font-size:10px!important}
+#pg-history .stand-table td{padding:5px 10px!important;font-size:12px!important}
+#pg-history .kpi-row{margin-bottom:10px!important}
+/* ─── TAG TOOLTIPS ───────────────────────────────────────── */
+.tag[data-tip]{position:relative;cursor:help}
+.tag[data-tip]:hover::after{
+  content:attr(data-tip);
+  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:rgba(32,37,31,.92);color:#fff;font-size:11px;font-weight:500;
+  padding:6px 10px;border-radius:8px;white-space:nowrap;max-width:260px;
+  white-space:normal;text-align:center;line-height:1.4;
+  pointer-events:none;z-index:999;
+  box-shadow:0 4px 14px rgba(0,0,0,.25)
+}
+.tag[data-tip]:hover::before{
+  content:'';position:absolute;bottom:calc(100% + 1px);left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:rgba(32,37,31,.92);pointer-events:none;z-index:999
 }
 </style>
 </head>
@@ -2850,7 +2886,7 @@ async function loadFixtures(){
         ];
         if(fxO.best_o25){const impl25=Math.round(1/fxO.best_o25*100);checks.push({label:'O2.5',edge:pred.pOver25-impl25});}
         const best=checks.reduce((b,c)=>c.edge>b.edge?c:b,{edge:-Infinity});
-        if(best.edge>=8) valueBadge=`<span class="tag tag-green" style="font-size:9px">&#9679; VALUE ${best.label} +${best.edge.toFixed(0)}%</span>`;
+        if(best.edge>=8){const vLbl={Home:'Home win',Draw:'Draw',Away:'Away win',O2.5:'Over 2.5'}[best.label]||best.label;valueBadge=`<span class="tag tag-green" style="font-size:9px" data-tip="Value bet: our model gives ${vLbl} ${best.edge.toFixed(0)}% more probability than the bookmaker implies — positive expected value edge.">● VALUE: ${vLbl} +${best.edge.toFixed(0)}%</span>`;}
       }
       const d=new Date(m.utcDate);
       const ds=d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
@@ -2906,8 +2942,8 @@ async function loadFixtures(){
             <span class="tag ${favClass}">${t('fix.outcome_pick')}: ${fav}</span>
             ${scoreConflict?`<span class="tag tag-gray" title="The scoreline is one rounded scenario; the outcome pick uses all possible scorelines.">${t('fix.scoreline_differs')}</span>`:''}
             <span class="tag ${confClass}">${t('fix.conf')}: ${pred.conf}%</span>
-            <span class="tag tag-blue">xG: ${pred.hLam}–${pred.aLam}</span>
-            <span class="tag tag-purple">Elo Δ: ${eloGap}</span>
+            <span class="tag tag-blue" data-tip="Expected Goals (xG): model's predicted goals per team, based on attack strength, defensive weakness, and shot volume. Higher = more attacking threat.">xG ${pred.hLam} – ${pred.aLam}</span>
+            <span class="tag tag-purple" data-tip="Elo rating gap between the two teams. Under 50 = evenly matched. 100–200 = clear advantage. Over 200 = strong favourite.">Elo gap: ${eloGap}</span>
           </div>
           <div class="markets-strip">
             ${marketChip(pred.pOver25,t('mkt.over25'),t('mkt.sub.over25'))}
