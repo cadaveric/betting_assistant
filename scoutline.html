@@ -1743,6 +1743,7 @@ let modelCalibration={
   leagues:{}
 };
 let leagueCalibrationData={};
+let clubEloData={};  // normalized_name -> {name, elo, country} from ClubElo API
 
 // ── API ──────────────────────────────────────────────────────────────────────
 async function api(path){
@@ -1758,9 +1759,10 @@ async function postJson(path,payload){
 function prefetch(comp){ fetch('/prefetch/'+comp).catch(()=>{}); }
 async function loadModelCalibration(){
   try{
-    const [predResp,calResp]=await Promise.all([
+    const [predResp,calResp,ceResp]=await Promise.all([
       fetch('/predictions?refresh=1&limit=500'),
-      fetch('/calibration').catch(()=>null)
+      fetch('/calibration').catch(()=>null),
+      fetch('/clubelo').catch(()=>null)
     ]);
     const d=await predResp.json();
     const tuning=d.summary?.tuning;
@@ -1768,6 +1770,10 @@ async function loadModelCalibration(){
     if(calResp?.ok){
       const calData=await calResp.json().catch(()=>null);
       if(calData?.leagues) leagueCalibrationData=calData.leagues;
+    }
+    if(ceResp?.ok){
+      const ceData=await ceResp.json().catch(()=>null);
+      if(ceData&&Object.keys(ceData).length>0) clubEloData=ceData;
     }
   }catch(e){}
 }
@@ -1852,9 +1858,20 @@ function marketChip(pct,label,help){
 }
 
 // ── ELO ──────────────────────────────────────────────────────────────────────
+function _normName(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+
 function computeElo(table){
   eloMap={};
   table.forEach(r=>{
+    // Try ClubElo (external, research-grade ratings) first
+    const norm=_normName(r.team.name);
+    const normS=_normName(r.team.shortName);
+    const ce=clubEloData[norm]||clubEloData[normS];
+    if(ce){
+      eloMap[r.team.id]=ce.elo;
+      return;
+    }
+    // Fallback: derive from standings when ClubElo has no match
     const ptsPct=r.points/Math.max(1,r.playedGames*3);
     const gdPct=(r.goalDifference+50)/100;
     eloMap[r.team.id]=Math.round(1500+(table.length-r.position)*18+ptsPct*120+gdPct*60);

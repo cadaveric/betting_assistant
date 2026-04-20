@@ -216,6 +216,39 @@ ODDS_CACHE_TTL = 1800  # 30 min
 ODDS_LAST_ERROR = {}
 ODDS_FALLBACK_ENABLED = os.environ.get('ODDS_FALLBACK_ENABLED', '').lower() in ('1', 'true', 'yes')
 
+# ── ClubElo (free, no key required) ──────────────────────────────────────────
+CLUBELO_BASE    = 'http://api.clubelo.com'
+CLUBELO_TTL     = 86400  # 24 h — ratings update weekly
+
+def _fetch_clubelo():
+    today = _dt.date.today().isoformat()
+    ck = f'clubelo_{today}'
+    cached = get_cache(ck)
+    if cached is not None:
+        return cached
+    try:
+        url = f'{CLUBELO_BASE}/{today}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Scoutline/1.0'})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            text = resp.read().decode('utf-8')
+        result = {}
+        for line in text.strip().split('\n')[1:]:
+            parts = line.split(',')
+            if len(parts) < 5: continue
+            club, country, level, elo_str = parts[1], parts[2], parts[3], parts[4]
+            try:
+                norm = _re.sub(r'[^a-z0-9]', '', club.lower())
+                result[norm] = {'name': club, 'elo': round(float(elo_str)),
+                                'country': country, 'level': int(level or 1)}
+            except (ValueError, IndexError):
+                continue
+        set_cache(ck, result, CLUBELO_TTL)
+        print(f'[ClubElo] loaded {len(result)} clubs')
+        return result
+    except Exception as e:
+        print(f'[ClubElo] fetch failed: {e}')
+        return {}
+
 # ── Football-Data.org (free tier — for league calibration) ────────────────────
 FD_KEY          = os.environ.get('FOOTBALL_DATA_KEY', '')
 FD_BASE         = 'https://api.football-data.org/v4'
@@ -1479,6 +1512,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/calibration':         self.handle_calibration()
+        elif path == '/clubelo':             self.send_json(_fetch_clubelo())
         elif path == '/config':
             self.send_json({'apif': bool(APIF_KEY),
                             'odds': bool(APIF_KEY or ODDS_API_KEY),
