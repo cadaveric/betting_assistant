@@ -1035,9 +1035,23 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
 /* ─── HISTORY PAGE COMPACT ───────────────────────────────── */
 #pg-history .card-head{padding:10px 16px!important}
 #pg-history .card-title{font-size:13px!important}
-#pg-history .stand-table th{padding:5px 10px!important;font-size:10px!important}
-#pg-history .stand-table td{padding:5px 10px!important;font-size:12px!important}
 #pg-history .kpi-row{margin-bottom:10px!important}
+/* Scrollable fixed-height table panel */
+#pg-history .card-body{
+  max-height:420px!important;
+  overflow:auto!important;
+  padding:0!important
+}
+/* Sticky column headers stay visible while scrolling */
+#pg-history .stand-table thead th{
+  position:sticky;top:0;z-index:2;
+  background:#F7F0E4;
+  box-shadow:0 1px 0 rgba(55,44,28,.12);
+  padding:6px 10px!important;font-size:10px!important
+}
+#pg-history .stand-table td{padding:5px 10px!important;font-size:12px!important}
+/* Tighten the pending note under the card title */
+#pg-history .card-head>div>div:last-child{font-size:11px!important;margin-top:1px!important}
 /* ─── TAG TOOLTIPS ───────────────────────────────────────── */
 .tag[data-tip]{position:relative;cursor:help}
 .tag[data-tip]:hover::after{
