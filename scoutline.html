@@ -586,7 +586,7 @@ select:focus,input:focus,.pred-team-sel:focus,.pred-opt-sel:focus{
 @media(max-width:700px){
   .shell{padding:0 16px 70px}
   .topbar-right{width:100%}
-  #lgSel{width:100%;min-width:0!important}
+  #lgSelWrap{width:100%;min-width:0!important}
   .match-top{grid-template-columns:1fr;gap:14px}
   .center-col{order:-1}
 }
@@ -751,7 +751,7 @@ html,body{overflow-x:hidden}
   .topbar-right{flex:1;min-width:0;gap:8px;flex-wrap:wrap;align-items:center}
   .topbar-right .lang-toggle{order:1;margin-left:auto}
   .topbar-right a[href="/logout"]{order:2}
-  .topbar-right #lgSel{order:3;flex:1 1 100%;min-width:0!important;width:100%}
+  .topbar-right #lgSelWrap{order:3;flex:1 1 100%;min-width:0!important;width:100%}
   .model-badge{display:none}
 
   /* Nav — hidden; shown as full-screen overlay when .mob-open */
@@ -946,6 +946,77 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
 /* 24. Schedule rows hover */
 .schedule-row{transition:border-color .15s,box-shadow .15s}
 .schedule-row:hover{border-color:rgba(16,137,108,.22);box-shadow:0 6px 18px rgba(16,137,108,.07)}
+
+/* 25. kpi-val-sm — sans font for text values (league name tile) */
+.kpi-val-sm{font-family:var(--sans)!important;font-weight:700}
+
+/* ─── CUSTOM LEAGUE SELECTOR ──────────────────────────── */
+.csel-wrap{position:relative;min-width:230px;z-index:200}
+.csel-btn{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  width:100%;height:36px;padding:0 10px 0 14px;
+  background:#FFFDF8;border:1px solid rgba(55,44,28,.18);border-radius:10px;
+  cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--tx);
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset;
+  transition:border-color .15s,box-shadow .15s;text-align:left
+}
+.csel-btn:hover{border-color:rgba(16,137,108,.35)}
+.csel-btn.open{border-color:var(--green);box-shadow:0 0 0 3px rgba(16,137,108,.12)}
+.csel-btn-arrow{flex-shrink:0;transition:transform .2s;color:var(--tx3)}
+.csel-btn.open .csel-btn-arrow{transform:rotate(180deg)}
+.csel-drop{
+  display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:270px;
+  background:#FFFDF8;border:1px solid rgba(55,44,28,.16);border-radius:14px;
+  box-shadow:0 16px 40px rgba(62,49,30,.18);overflow:hidden;
+  max-height:55vh;overflow-y:auto;
+  animation:csDrop .15s ease
+}
+@keyframes csDrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.csel-drop.open{display:block}
+.csel-section{border-bottom:1px solid rgba(55,44,28,.07)}
+.csel-section:last-child{border-bottom:none}
+.csel-sect-head{
+  padding:8px 14px 4px;font-size:9px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--tx3);font-family:var(--sans);
+  background:rgba(55,44,28,.04)
+}
+.csel-opt{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;font-size:12px;font-weight:500;color:var(--tx);
+  cursor:pointer;transition:background .1s;font-family:var(--sans);gap:8px
+}
+.csel-opt:hover{background:rgba(16,137,108,.07);color:var(--gd)}
+.csel-opt.csel-sel{background:rgba(16,137,108,.11);color:var(--green);font-weight:700}
+.csel-opt .odds-tag{
+  font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;
+  background:rgba(55,44,28,.07);color:var(--tx3);letter-spacing:.04em;flex-shrink:0;white-space:nowrap
+}
+/* Mobile — bottom sheet */
+@media(max-width:600px){
+  .csel-wrap{min-width:0;width:100%}
+  .csel-drop{
+    position:fixed;top:auto;bottom:0;left:0;right:0;width:100%;min-width:0;
+    max-height:72vh;border-radius:20px 20px 0 0;
+    box-shadow:0 -8px 30px rgba(0,0,0,.2);
+    animation:csSheet .2s ease
+  }
+  @keyframes csSheet{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .csel-drop::before{
+    content:'';display:block;width:36px;height:4px;border-radius:2px;
+    background:rgba(55,44,28,.2);margin:10px auto 6px
+  }
+}
+.csel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:199}
+
+/* ─── KPI TILES MOBILE REFINEMENT ──────────────────────── */
+@media(max-width:600px){
+  .kpi-row{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .kpi{padding:12px 12px 12px 16px!important;display:block!important}
+  .kpi::before{top:0!important;bottom:0!important}
+  .kpi-val{font-size:20px!important;white-space:normal!important;margin-bottom:2px!important;line-height:1.1!important}
+  .kpi-val-sm{font-size:13px!important;line-height:1.2!important}
+  .kpi-lbl{font-size:11px!important;line-height:1.3!important}
+}
 </style>
 </head>
 <body>
@@ -973,7 +1044,14 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
       <button class="lang-btn" id="langBtnBg" onclick="setLang('bg')">BG</button>
     </div>
     <span class="model-badge">Rich model v2</span>
-    <select id="lgSel" onchange="onLgChange()" style="min-width:230px">
+    <div class="csel-wrap" id="lgSelWrap">
+      <button class="csel-btn" id="lgSelBtn" type="button" onclick="toggleLgDrop(event)">
+        <span id="lgSelTxt">Premier League</span>
+        <svg class="csel-btn-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="csel-drop" id="lgSelDrop"></div>
+    </div>
+    <select id="lgSel" onchange="onLgChange()" hidden>
       <optgroup label="── England (full data)">
         <option value="PL">Premier League</option>
         <option value="ELC">Championship</option>
@@ -3481,6 +3559,64 @@ async function fetchSuspensionWarnings(hId,aId,hName,aName){
       ${teamBlock(aName,aRisks,aScorers)}
     </div></div>`;
 }
+
+// ── CUSTOM LEAGUE DROPDOWN ────────────────────────────────────────────────────
+function buildLgDrop(){
+  const sel=document.getElementById('lgSel');
+  const drop=document.getElementById('lgSelDrop');
+  if(!sel||!drop) return;
+  const cur=sel.value;
+  let html='';
+  Array.from(sel.querySelectorAll('optgroup')).forEach(og=>{
+    const raw=og.getAttribute('label')||'';
+    const lbl=raw.replace(/^──\s*/,'').replace(/\s*\(full data\)/i,'').replace(/\s*\[odds only\]/i,'').trim();
+    html+=`<div class="csel-section"><div class="csel-sect-head">${lbl}</div>`;
+    Array.from(og.querySelectorAll('option')).forEach(opt=>{
+      const oddsOnly=opt.textContent.includes('[odds only]');
+      const name=opt.textContent.replace(' [odds only]','').trim();
+      const val=opt.value;
+      const isSel=cur===val?'csel-sel':'';
+      const safe=name.replace(/'/g,'&#39;');
+      html+=`<div class="csel-opt ${isSel}" onclick="selectLg('${val}','${safe}')"><span>${name}</span>${oddsOnly?'<span class="odds-tag">ODDS</span>':''}</div>`;
+    });
+    html+='</div>';
+  });
+  drop.innerHTML=html;
+  // Sync display text
+  const selOpt=sel.options[sel.selectedIndex];
+  if(selOpt) document.getElementById('lgSelTxt').textContent=selOpt.textContent.replace(' [odds only]','').trim();
+}
+function toggleLgDrop(e){
+  e.stopPropagation();
+  const btn=document.getElementById('lgSelBtn');
+  const drop=document.getElementById('lgSelDrop');
+  if(drop.classList.contains('open')){closeLgDrop();return;}
+  buildLgDrop();
+  btn.classList.add('open');
+  drop.classList.add('open');
+  if(window.innerWidth<=600){
+    const ov=document.createElement('div');
+    ov.className='csel-overlay';ov.id='lgSelOv';
+    ov.onclick=closeLgDrop;
+    document.body.appendChild(ov);
+  }
+}
+function closeLgDrop(){
+  document.getElementById('lgSelBtn')?.classList.remove('open');
+  document.getElementById('lgSelDrop')?.classList.remove('open');
+  document.getElementById('lgSelOv')?.remove();
+}
+function selectLg(val,name){
+  const sel=document.getElementById('lgSel');
+  if(!sel)return;
+  sel.value=val;
+  document.getElementById('lgSelTxt').textContent=name;
+  closeLgDrop();
+  onLgChange();
+}
+document.addEventListener('click',e=>{
+  if(!document.getElementById('lgSelWrap')?.contains(e.target)) closeLgDrop();
+});
 
 applyI18n();
 loadModelCalibration().finally(()=>loadConfig().then(()=>loadFixtures()));
