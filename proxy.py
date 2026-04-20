@@ -1627,7 +1627,7 @@ class Handler(SimpleHTTPRequestHandler):
         m = _re.match(r'/competitions/(\w+)/standings', api_path)
         if m:
             result = apif_standings(m.group(1))
-            if result: self.send_json(result); return
+            if result is not None: self.send_json(result); return
             self.send_json({'error': f'No standings for {m.group(1)}'}, 404); return
         m = _re.match(r'/competitions/(\w+)/matches', api_path)
         if m:
@@ -1641,7 +1641,7 @@ class Handler(SimpleHTTPRequestHandler):
                                    qs.get('homeTeam', [None])[0],
                                    qs.get('awayTeam', [None])[0],
                                    qs.get('limit',    [None])[0])
-            if result: self.send_json(result); return
+            if result is not None: self.send_json(result); return  # empty list = valid (no fixtures)
             self.send_json({'error': f'No fixtures for {comp}'}, 404); return
         self.send_json({'error': f'Unknown route: {api_path}'}, 404)
 
