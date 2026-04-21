@@ -2164,12 +2164,45 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   }));
   pOver15=Math.round(pOver15*100); pOver25=Math.round(pOver25*100);
   pOver35=Math.round(pOver35*100); pOver45=Math.round(pOver45*100); pBTTS=Math.round(pBTTS*100);
+  const pOver25Raw=pOver25; // preserve raw for calibration display
+  // Apply learned calibration: bin-level correction from graded history, then global adj.
+  const calibMap=tune.over25CalibMap||null;
+  function applyOver25Calib(raw){
+    if(!calibMap) return raw;
+    const keys=[15,40,60,85];
+    // find surrounding bin midpoints
+    let lo=keys[0],hi=keys[keys.length-1];
+    for(let i=0;i<keys.length-1;i++){if(raw>=keys[i]&&raw<keys[i+1]){lo=keys[i];hi=keys[i+1];break;}}
+    const loB=calibMap[String(lo)],hiB=calibMap[String(hi)];
+    if(!loB||loB.actual==null) return raw;
+    let binActual;
+    if(raw<=keys[0]) binActual=loB.actual;
+    else if(raw>=keys[keys.length-1]) binActual=(calibMap['85']||{}).actual??raw;
+    else{
+      if(!hiB||hiB.actual==null) binActual=loB.actual;
+      else{const t=(raw-lo)/(hi-lo); binActual=Math.round(loB.actual*(1-t)+hiB.actual*t);}
+    }
+    const binN=(raw<=keys[0]?loB.n:(raw>=keys[keys.length-1]?(calibMap['85']||{}).n:Math.round((loB.n+hiB.n)/2)))||0;
+    const alpha=Math.min(0.45,binN/22); // max 45% trust in calibration (grows with sample size)
+    return Math.max(1,Math.min(99,Math.round(raw*(1-alpha)+binActual*alpha)));
+  }
+  pOver25=applyOver25Calib(pOver25);
   if(tune.over25Adjustment){
     const adj=tune.over25Adjustment;
     pOver25=Math.max(1,Math.min(99,Math.round(pOver25+adj)));
     pOver15=Math.max(1,Math.min(99,Math.round(pOver15+adj*0.45)));
     pOver35=Math.max(1,Math.min(99,Math.round(pOver35+adj*0.55)));
     pOver45=Math.max(1,Math.min(99,Math.round(pOver45+adj*0.35)));
+  }
+  // Derive calibration reliability hint for over25 (which bin, how many graded)
+  function over25CalibHint(raw){
+    if(!calibMap) return null;
+    const keys=[15,40,60,85];
+    let binKey=keys[0];
+    for(let i=keys.length-1;i>=0;i--){if(raw>=keys[i]){binKey=keys[i];break;}}
+    const b=calibMap[String(binKey)];
+    if(!b||b.n<3) return null;
+    return {n:b.n,hit:b.hit,actual:b.actual};
   }
   const pHCS=Math.round(Math.exp(-aLam)*100), pACS=Math.round(Math.exp(-hLam)*100);
 
@@ -2231,7 +2264,8 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     refereeName:fixtureIntel?.referee||null,
     refereeCardsPg:fixtureIntel?.refereeCardsPg??null,
     matrix,hDist,aDist,
-    pOver15,pOver25,pOver35,pOver45,pBTTS,pNoBTTS:100-pBTTS,
+    pOver15,pOver25,pOver25Raw,pOver35,pOver45,pBTTS,pNoBTTS:100-pBTTS,
+    over25CalibHint:over25CalibHint(pOver25Raw),
     pHCS,pACS,pHT05,pHT15,pHT_BTTS,pHT_H,pHT_D,pHT_A,
     hCornLam:hCL.toFixed(1),aCornLam:aCL.toFixed(1),totalCornLam:totCorn.toFixed(1),
     pCorn85,pCorn105,totalCardLam:totCard.toFixed(1),pCard25,pCard35,pHWnil,pAWnil,
@@ -2278,9 +2312,15 @@ function renderPoissonMatrix(matrix,hName,aName){
   return html+'</div>';
 }
 
-function mCard(icon,label,value,pct,sub,isReal){
+function mCard(icon,label,value,pct,sub,isReal,calibHint){
   const col=pct>=65?'#10B981':pct>=50?'#F59E0B':'#EF4444';
   const badge=isReal?`<span class="data-badge">real</span>`:`<span class="data-badge est">est.</span>`;
+  let calibLine='';
+  if(calibHint&&calibHint.n>=3){
+    const hitPct=Math.round(calibHint.hit/calibHint.n*100);
+    const calibCol=hitPct>=55?'#10B981':hitPct>=40?'#F59E0B':'#EF4444';
+    calibLine=`<div style="font-size:10px;font-family:var(--mono);color:${calibCol};margin-top:3px">hist: ${calibHint.hit}/${calibHint.n} (${hitPct}%) at this confidence</div>`;
+  }
   return`<div class="market-card">
     <div class="market-icon">${icon}</div>
     <div class="market-label">${label}${badge}</div>
@@ -2288,6 +2328,7 @@ function mCard(icon,label,value,pct,sub,isReal){
     <div class="market-prob" style="color:${col}">${pct}%</div>
     <div class="market-bar"><div class="market-fill" style="width:${pct}%;background:${col}"></div></div>
     <div class="market-sub">${sub}</div>
+    ${calibLine}
   </div>`;
 }
 
@@ -2351,7 +2392,7 @@ function renderMarkets(p,hName,aName){
   <div><div class="section-label">${t('section.goals')}</div>
     <div class="markets-grid">
       ${mCard('⚽',t('mkt.over15'),`xG total: ${tLam}`,p.pOver15,t('mkt.sub.btts'),p.hDataBadge==='real SoT')}
-      ${mCard('⚽',t('mkt.over25'),`λ: ${tLam}`,p.pOver25,t('mkt.sub.over25'),p.hDataBadge==='real SoT')}
+      ${mCard('⚽',t('mkt.over25'),`λ: ${tLam}${p.pOver25Raw!==p.pOver25?' (raw '+p.pOver25Raw+'%)':''}`,p.pOver25,t('mkt.sub.over25'),p.hDataBadge==='real SoT',p.over25CalibHint)}
       ${mCard('⚽',t('mkt.over35'),`${hName} λ ${p.hLam}`,p.pOver35,t('mkt.sub.over35'),p.hDataBadge==='real SoT')}
       ${mCard('⚽',t('mkt.over45'),`λ ${tLam}`,p.pOver45,t('mkt.sub.over45'),p.hDataBadge==='real SoT')}
       ${mCard('🎯',t('mkt.btts'),`H scores ${Math.round((1-Math.exp(-parseFloat(p.hLam)))*100)}% · A ${Math.round((1-Math.exp(-parseFloat(p.aLam)))*100)}%`,p.pBTTS,t('mkt.sub.btts'),p.hDataBadge==='real SoT')}
@@ -2376,7 +2417,7 @@ function renderMarkets(p,hName,aName){
       ${mCard('⏱',`HT: ${aName}`,`${aName} ahead`,p.pHT_A,t('mkt.sub.ht_away'),false)}
     </div>
   </div>
-  <div><div class="section-label">${t('section.corners_lbl')} ${p.cornersReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`}</div>
+  <div><div class="section-label">${t('section.corners_lbl')} ${p.cornersReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`}<span style="font-size:10px;font-weight:400;color:var(--tx3);margin-left:8px">no calibration data · use with caution</span></div>
     <div class="markets-grid">
       ${mCard('📐',t('mkt.corners_85'),`${hName}: ${p.hCorners} · ${aName}: ${p.aCorners}`,p.pCorners_over85,`xTotal: ${p.totalCorners}`,p.cornersReal)}
       ${mCard('📐',t('mkt.corners_105'),`total: ${p.totalCorners}`,p.pCorners_over105,t('mkt.sub.corners_105'),p.cornersReal)}

@@ -775,7 +775,7 @@ def _prediction_tuning(rows):
             if cal:
                 ha_mult  = round(cal.get('homeAdvFactor', 1.1) / 1.1, 3)
                 rho_val  = round(cal.get('suggestedRho', -0.13), 3)
-                o25_adj  = round(_clamp((cal.get('over25Rate', 0.52) - 0.52) * 100, -8, 8), 1)
+                o25_adj  = round(_clamp((cal.get('over25Rate', 0.52) - 0.52) * 100, -20, 20), 1)
                 return {'graded': 0, 'ready': True, 'prior_source': 'historical',
                         'bias': {'home': 0, 'draw': 0, 'away': 0},
                         'homeAdvMultiplier': ha_mult, 'dcRho': rho_val,
@@ -818,6 +818,19 @@ def _prediction_tuning(rows):
         brier_est = _avg([(r.get('metrics') or {}).get('brier') for r in est_rows])
         over_delta = (_avg(over_actuals) or 0) - (_avg(over_preds) or 0) if over_preds else 0
 
+        # Calibration map: for each confidence bin, compute Bayesian-smoothed actual hit rate.
+        # This exposes bin-level over/under-confidence (e.g. model says 85% but only 29% hit).
+        N_CAL_PRIOR = 8   # virtual samples at base rate (52%) for Bayesian smoothing
+        over25_calib_map = None
+        if over_preds:
+            over25_calib_map = {}
+            for lo, hi, mid in [(0, 30, 15), (30, 50, 40), (50, 70, 60), (70, 101, 85)]:
+                pairs = [(p, a) for p, a in zip(over_preds, over_actuals) if lo <= p < hi]
+                n_bin = len(pairs)
+                n_hit = sum(1 for _, a in pairs if a >= 100)
+                smoothed = round((n_hit * 100 + N_CAL_PRIOR * 52) / (n_bin + N_CAL_PRIOR)) if n_bin > 0 else None
+                over25_calib_map[str(mid)] = {'n': n_bin, 'hit': n_hit, 'actual': smoothed}
+
         # Bayesian blend: prior from historical calibration, obs from predictions
         def blend(prior_val, obs_val):
             if prior_val is None:
@@ -833,9 +846,9 @@ def _prediction_tuning(rows):
         ha_mult  = round(_clamp(blend(prior_ha_corr, obs_ha_corr), 0.90, 1.15), 3)
         rho_val  = round(_clamp(blend(prior_rho, obs_rho), -0.25, -0.06), 3)
         if over_preds:
-            o25_adj = round(_clamp(blend(prior_o25, over_delta / 2), -8, 8), 1)
+            o25_adj = round(_clamp(blend(prior_o25, over_delta / 2), -20, 20), 1)
         elif prior_o25 is not None:
-            o25_adj = round(_clamp(prior_o25, -8, 8), 1)
+            o25_adj = round(_clamp(prior_o25, -20, 20), 1)
         else:
             o25_adj = 0.0
 
@@ -853,6 +866,7 @@ def _prediction_tuning(rows):
             'oddsWeightScale': round(_clamp(1 + ((brier_no_odds or brier_all or 0) - (brier_odds or brier_all or 0)) * 0.35, 0.85, 1.25), 3),
             'richDataWeightScale': round(_clamp(1 + ((brier_est or brier_all or 0) - (brier_rich or brier_all or 0)) * 0.25, 0.9, 1.2), 3),
             'over25Adjustment': o25_adj,
+            'over25CalibMap': over25_calib_map,
             'diagnostics': {
                 'avgBrier': round(brier_all, 4) if brier_all is not None else None,
                 'oddsRows': len(odds_rows),
