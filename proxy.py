@@ -208,13 +208,8 @@ APIF_LEAGUE_MAP = {
     'WC':  {'id': 1,   'season': 2026}, 'EC':  {'id': 4,   'season': 2024},
 }
 
-# ── Odds Providers ────────────────────────────────────────────────────────────
-ODDS_API_KEY   = os.environ.get('ODDS_API_KEY', '')
-ODDS_API_BASE  = 'https://api.the-odds-api.com/v4'
-ODDS_REGION    = 'eu'
+# ── Odds (API-Football only) ──────────────────────────────────────────────────
 ODDS_CACHE_TTL = 1800  # 30 min
-ODDS_LAST_ERROR = {}
-ODDS_FALLBACK_ENABLED = os.environ.get('ODDS_FALLBACK_ENABLED', '').lower() in ('1', 'true', 'yes')
 
 # ── Understat (free, no key — top-5 EU leagues xG data) ─────────────────────
 UNDERSTAT_LEAGUE_MAP = {
@@ -314,40 +309,6 @@ FD_LEAGUE_MAP   = {
 }
 CALIBRATION_SEASONS = [2021, 2022, 2023, 2024]
 
-ODDS_SPORT_KEYS = {
-    'PL':  'soccer_epl',             'ELC': 'soccer_efl_champ',
-    'L1':  'soccer_england_league1', 'L2':  'soccer_england_league2',
-    'PD':  'soccer_spain_la_liga',   'PD2': 'soccer_spain_segunda_division',
-    'BL1': 'soccer_germany_bundesliga', 'BL2': 'soccer_germany_bundesliga2',
-    'SA':  'soccer_italy_serie_a',   'SB':  'soccer_italy_serie_b',
-    'FL1': 'soccer_france_ligue_one','FL2': 'soccer_france_ligue_two',
-    'PPL': 'soccer_portugal_primeira_liga',
-    'DED': 'soccer_netherlands_eredivisie',
-    'TSL': 'soccer_turkey_super_league',
-    'SP':  'soccer_spl',
-    'SC1': 'soccer_scotland_championship',
-    'GL':  'soccer_greece_super_league',
-    'BPL': 'soccer_belgium_first_div',
-    'AFL': 'soccer_austria_bundesliga',
-    'PEK': 'soccer_poland_ekstraklasa',
-    'DSL': 'soccer_denmark_superliga',
-    'SSL': 'soccer_switzerland_superleague',
-    'NOR': 'soccer_norway_eliteserien',
-    'SWE': 'soccer_sweden_allsvenskan',
-    'RUS': 'soccer_russia_premier_league',
-    'CL':  'soccer_uefa_champs_league',
-    'EL':  'soccer_uefa_europa_league',
-    'ECL': 'soccer_uefa_europa_conference_league',
-    'BSA': 'soccer_brazil_campeonato',  'BSB': 'soccer_brazil_serie_b',
-    'MLS': 'soccer_usa_mls',
-    'ARG': 'soccer_argentina_primera_division',
-    'LMX': 'soccer_mexico_ligamx',
-    'SPL': 'soccer_saudi_arabia_pro_league',
-    'JPL': 'soccer_japan_j_league',
-    'KCL': 'soccer_korea_kleague1',
-    'WC':  'soccer_fifa_world_cup',
-    'EC':  'soccer_uefa_european_championship',
-}
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 cache = {}
@@ -1408,39 +1369,6 @@ def fetch_apif_odds(comp):
     print(f'  [APIF-ODDS] {comp}: {len(games)} games')
     return games
 
-def fetch_odds(sport_key, markets='h2h,totals'):
-    ODDS_LAST_ERROR.pop(sport_key, None)
-    cache_key = f'/odds_api/{sport_key}/{markets}'
-    cached = get_cache(cache_key)
-    if cached is not None: return cached
-    url = (f'{ODDS_API_BASE}/sports/{sport_key}/odds'
-           f'?apiKey={ODDS_API_KEY}&regions={ODDS_REGION}'
-           f'&markets={markets}&oddsFormat=decimal')
-    try:
-        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Scoutline/2.0'})
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
-            remaining = r.headers.get('x-requests-remaining', '?')
-            used      = r.headers.get('x-requests-used', '?')
-            print(f'  [ODDS] {sport_key}: used={used} remaining={remaining}')
-            data = json.loads(r.read())
-            with cache_lock:
-                cache[_key(cache_key)] = {'data': data, 'ts': time.time(), 'ttl': ODDS_CACHE_TTL}
-            return data
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', 'ignore')
-        try:
-            detail = json.loads(body)
-            msg = detail.get('message') or detail.get('error_code') or body
-            code = detail.get('error_code')
-        except Exception:
-            msg, code = body or str(e), None
-        ODDS_LAST_ERROR[sport_key] = {'status': e.code, 'message': msg, 'code': code}
-        print(f'  [ODDS] {sport_key} failed: HTTP {e.code} {msg}')
-        return []
-    except Exception as e:
-        ODDS_LAST_ERROR[sport_key] = {'status': 503, 'message': str(e), 'code': None}
-        print(f'  [ODDS] {sport_key} failed: {e}'); return []
 
 def _enrich_odds_rows(game):
     bk_rows = game.get('bookmakers') or []
@@ -1466,52 +1394,14 @@ def _enrich_odds_rows(game):
         'best_o25': max(o25) if o25 else None, 'best_u25': max(u25) if u25 else None,
         'impl_h': impl_h, 'impl_d': impl_d, 'impl_a': impl_a,
         'bookmakers': bk_rows, 'num_bookmakers': len(bk_rows),
-        'source': game.get('source', 'the-odds-api'),
+        'source': game.get('source', 'api-football'),
     }]
-
-def _normalize_odds_games(raw_games):
-    enriched = []
-    for game in (raw_games or []):
-        home = game.get('home_team', ''); away = game.get('away_team', '')
-        bk_rows = []
-        for bk in game.get('bookmakers', []):
-            row = {'name': bk['title'], 'key': bk['key']}
-            for mkt in bk.get('markets', []):
-                if mkt['key'] == 'h2h':
-                    for o in mkt['outcomes']:
-                        if o['name'] == home:    row['h'] = o['price']
-                        elif o['name'] == 'Draw': row['d'] = o['price']
-                        else:                    row['a'] = o['price']
-                elif mkt['key'] == 'totals':
-                    for o in mkt['outcomes']:
-                        if o.get('point') == 2.5:
-                            if o['name'] == 'Over':  row['o25'] = o['price']
-                            if o['name'] == 'Under': row['u25'] = o['price']
-            bk_rows.append(row)
-        enriched.extend(_enrich_odds_rows({
-            'id': game.get('id'), 'commence_time': game.get('commence_time'),
-            'home': home, 'away': away, 'bookmakers': bk_rows, 'source': 'the-odds-api',
-        }))
-    return enriched
 
 def get_normalized_odds(comp):
     games = fetch_apif_odds(comp)
     if games:
         return _record_odds_snapshot(comp, games), 'api-football', None
-
-    sport_key = ODDS_SPORT_KEYS.get(comp)
-    if not sport_key:
-        return [], 'api-football', {'status': 404, 'message': f'No fallback odds key for {comp}', 'code': None}
-    if APIF_KEY and not ODDS_FALLBACK_ENABLED:
-        return [], 'api-football', {'status': 404, 'message': 'No API-Football odds found for this league right now. The Odds API fallback is disabled to avoid quota errors; set ODDS_FALLBACK_ENABLED=1 if you want to use it.', 'code': None}
-    if not ODDS_API_KEY:
-        return [], 'api-football', {'status': 503, 'message': 'No API-Football odds found, and ODDS_API_KEY fallback is not set in .env', 'code': None}
-
-    raw = fetch_odds(sport_key, markets='h2h,totals')
-    games = _normalize_odds_games(raw or [])
-    err = ODDS_LAST_ERROR.get(sport_key)
-    source = 'the-odds-api'
-    return _record_odds_snapshot(comp, games), source, err if not games else None
+    return [], 'api-football', {'status': 404, 'message': f'No odds available for {comp} right now — API-Football may not have published odds for upcoming fixtures yet.', 'code': None}
 
 def _advisor_standings_map(comp):
     """Lightweight fallback model data when detailed teamstats are not cached."""
@@ -1531,7 +1421,7 @@ def _advisor_standings_map(comp):
     return name_map
 
 # Leagues the advisor scans by default (all leagues with odds keys)
-ADVISOR_LEAGUES = [c for c in APIF_LEAGUE_MAP if c in ODDS_SPORT_KEYS]
+ADVISOR_LEAGUES = list(APIF_LEAGUE_MAP.keys())
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(SimpleHTTPRequestHandler):
@@ -1585,17 +1475,15 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/understat/'): self.send_json(_fetch_understat(path.split('/')[-1].upper()))
         elif path == '/config':
             self.send_json({'apif': bool(APIF_KEY),
-                            'odds': bool(APIF_KEY or ODDS_API_KEY),
-                            'odds_provider': 'api-football' if APIF_KEY else 'the-odds-api',
-                            'odds_fallback': ODDS_FALLBACK_ENABLED,
+                            'odds': bool(APIF_KEY),
+                            'odds_provider': 'api-football',
                             'full_data_leagues': list(APIF_LEAGUE_MAP.keys())})
         elif path == '/status':
             with teamstats_lock:
                 ts = dict(teamstats_status)
             self.send_json({'ts': ts, 'apif': bool(APIF_KEY),
-                            'odds': bool(APIF_KEY or ODDS_API_KEY),
-                            'odds_provider': 'api-football' if APIF_KEY else 'the-odds-api',
-                            'odds_fallback': ODDS_FALLBACK_ENABLED,
+                            'odds': bool(APIF_KEY),
+                            'odds_provider': 'api-football',
                             'cache_entries': len(cache),
                             'ttl': CACHE_TTL})
         else:
@@ -1829,7 +1717,6 @@ class Handler(SimpleHTTPRequestHandler):
                             'games': [], 'count': 0}, err.get('status') or 503); return
         info = APIF_LEAGUE_MAP.get(comp) or {}
         self.send_json({'competition': comp, 'provider': source,
-                        'sport_key': ODDS_SPORT_KEYS.get(comp),
                         'games': games, 'count': len(games),
                         'cache': cache_meta(f'/apif_odds/{comp}/{info.get("id")}/{info.get("season")}')})
 
@@ -1917,9 +1804,8 @@ class Handler(SimpleHTTPRequestHandler):
         now = _dt.datetime.now(_dt.timezone.utc)
         cutoff = now + _dt.timedelta(days=days)
 
-        if not APIF_KEY and not ODDS_API_KEY:
-            self.send_json({'error': 'No odds provider configured — set APIFOOTBALL_KEY first, or ODDS_API_KEY as fallback'}); return
-        ODDS_LAST_ERROR.clear()
+        if not APIF_KEY:
+            self.send_json({'error': 'APIFOOTBALL_KEY not set — required for odds'}); return
 
         def fetch_league(comp):
             games, source, _err = get_normalized_odds(comp)
@@ -1990,11 +1876,6 @@ class Handler(SimpleHTTPRequestHandler):
                         'edge': edge, 'ev': round(ev, 4), 'kellyFrac': round(kf, 4),
                     })
         bets.sort(key=lambda x: -x['ev'])
-        if not bets and ODDS_LAST_ERROR:
-            first = next(iter(ODDS_LAST_ERROR.values()))
-            self.send_json({'error': first['message'], 'error_code': first.get('code'),
-                            'bets': [], 'total': 0, 'leagues_scanned': len(league_games),
-                            'risk': risk, 'min_edge': min_edge}, first.get('status') or 503); return
         self.send_json({'bets': bets[:top_n], 'total': len(bets),
                         'leagues_scanned': len(league_games), 'risk': risk,
                         'min_edge': min_edge, 'days': days})
@@ -2027,17 +1908,13 @@ if __name__ == '__main__':
     _init_auth_db()
     load_disk_cache(); atexit.register(save_disk_cache)
     apif_status = 'configured' if APIF_KEY else 'missing - set APIFOOTBALL_KEY in .env'
-    odds_status = (
-        'API-Football primary' + (' + fallback' if ODDS_FALLBACK_ENABLED and ODDS_API_KEY else '')
-        if APIF_KEY else ('The Odds API fallback' if ODDS_API_KEY else 'missing odds provider')
-    )
     print(f'''
   ============================================================
   Scoutline - API-Football Pro
   ------------------------------------------------------------
   Open:    http://localhost:{PORT}/scoutline.html
   APIF:    {apif_status}
-  ODDS:    {odds_status}
+  ODDS:    API-Football (sole provider)
   Leagues: {len(APIF_LEAGUE_MAP)} supported
   ============================================================
 ''')
