@@ -1930,12 +1930,18 @@ async function loadUnderstatStats(){
       if(!us)return;
       const tid=r.team.id;
       const ex=teamStatsMap[tid]||{};
-      if(ex.xgPg!=null)return; // APIF data already present — don't override
+      // Skip only if APIF already has complete venue-split xG — the data deepPredict needs.
+      // APIF often has overall xgPg but not venue splits; Understat always has both.
+      if(ex.xgHomePg!=null&&ex.xgaHomePg!=null&&ex.xgAwayPg!=null&&ex.xgaAwayPg!=null)return;
       teamStatsMap[tid]={
         ...ex,
-        xgPg:us.xgPg,       xgaPg:us.xgaPg,
-        xgHomePg:us.xgHomePg, xgaHomePg:us.xgaHomePg,
-        xgAwayPg:us.xgAwayPg, xgaAwayPg:us.xgaAwayPg,
+        // Prefer APIF value when present; fill gaps from Understat
+        xgPg:     ex.xgPg     ??us.xgPg,
+        xgaPg:    ex.xgaPg    ??us.xgaPg,
+        xgHomePg: ex.xgHomePg ??us.xgHomePg,
+        xgaHomePg:ex.xgaHomePg??us.xgaHomePg,
+        xgAwayPg: ex.xgAwayPg ??us.xgAwayPg,
+        xgaAwayPg:ex.xgaAwayPg??us.xgaAwayPg,
       };
     });
     computeLiveBaselines();
