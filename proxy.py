@@ -441,6 +441,25 @@ def _dc_draw_prob(lh, la, rho, max_g=7):
     return sum(_poisson_pmf(k, lh) * _poisson_pmf(k, la) * _tau(k, k)
                for k in range(max_g + 1))
 
+def _match_probs_dc(lh, la, rho=-0.13, max_g=7):
+    """Dixon-Coles corrected 1X2 probabilities (increases draw vs plain Poisson)."""
+    def _tau(i, j):
+        if i == 0 and j == 0: return max(0.0, 1 - lh * la * rho)
+        if i == 1 and j == 0: return max(0.0, 1 + la * rho)
+        if i == 0 and j == 1: return max(0.0, 1 + lh * rho)
+        if i == 1 and j == 1: return max(0.0, 1 - rho)
+        return 1.0
+    ph = pd = pa = 0.0
+    for i in range(max_g + 1):
+        pi = _poisson_pmf(i, lh)
+        for j in range(max_g + 1):
+            p = pi * _poisson_pmf(j, la) * _tau(i, j)
+            if i > j:    ph += p
+            elif i == j: pd += p
+            else:        pa += p
+    tot = ph + pd + pa
+    return (ph/tot, pd/tot, pa/tot) if tot else (1/3, 1/3, 1/3)
+
 # Prediction ledger
 def _prediction_path():
     path = PREDICTION_FILE
@@ -741,7 +760,8 @@ def _prediction_tuning(rows):
                         'bias': {'home': 0, 'draw': 0, 'away': 0},
                         'homeAdvMultiplier': ha_mult, 'dcRho': rho_val,
                         'oddsWeightScale': 1.0, 'richDataWeightScale': 1.0,
-                        'over25Adjustment': o25_adj, 'diagnostics': {}}
+                        'over25Adjustment': o25_adj, 'over25CalibMap': None,
+                        'outcomeCalibMap': None, 'diagnostics': {}}
             return {'graded': 0, 'ready': False}
 
         n = len(sample)
@@ -792,6 +812,33 @@ def _prediction_tuning(rows):
                 smoothed = round((n_hit * 100 + N_CAL_PRIOR * 52) / (n_bin + N_CAL_PRIOR)) if n_bin > 0 else None
                 over25_calib_map[str(mid)] = {'n': n_bin, 'hit': n_hit, 'actual': smoothed}
 
+        # 1X2 outcome calibration: per-outcome confidence-bin Bayesian calibration maps.
+        # Corrects systematic over/under-confidence in each outcome bucket as graded history grows.
+        N_1X2_PRIOR = 25  # virtual samples at typical base rate (higher prior = slower to trust observations)
+        _OUTCOME_PRIOR = {'H': 44, 'D': 27, 'A': 29}
+        _PROB_KEY      = {'H': 'home', 'D': 'draw', 'A': 'away'}
+        outcome_calib_map = {}
+        graded_with_actual = [r for r in sample if (r.get('actual') or {}).get('outcome')]
+        if graded_with_actual:
+            for outcome in ('H', 'D', 'A'):
+                prob_key = _PROB_KEY[outcome]
+                pr = _OUTCOME_PRIOR[outcome]
+                pv = [
+                    ((r.get('probabilities') or {}).get(prob_key) or 0,
+                     1 if (r.get('actual') or {}).get('outcome') == outcome else 0)
+                    for r in graded_with_actual
+                ]
+                bins = {}
+                for lo, hi, mid in [(0, 25, 12), (25, 40, 32), (40, 55, 47), (55, 70, 62), (70, 101, 85)]:
+                    pairs = [(p, a) for p, a in pv if lo <= p < hi]
+                    n_bin = len(pairs); n_hit = sum(a for _, a in pairs)
+                    bins[str(mid)] = {
+                        'n': n_bin, 'hit': n_hit,
+                        'actual': round((n_hit * 100 + N_1X2_PRIOR * pr) / (n_bin + N_1X2_PRIOR)) if n_bin > 0 else None
+                    }
+                if any(v['n'] > 0 for v in bins.values()):
+                    outcome_calib_map[outcome] = bins
+
         # Bayesian blend: prior from historical calibration, obs from predictions
         def blend(prior_val, obs_val):
             if prior_val is None:
@@ -828,6 +875,7 @@ def _prediction_tuning(rows):
             'richDataWeightScale': round(_clamp(1 + ((brier_est or brier_all or 0) - (brier_rich or brier_all or 0)) * 0.25, 0.9, 1.2), 3),
             'over25Adjustment': o25_adj,
             'over25CalibMap': over25_calib_map,
+            'outcomeCalibMap': outcome_calib_map or None,
             'diagnostics': {
                 'avgBrier': round(brier_all, 4) if brier_all is not None else None,
                 'oddsRows': len(odds_rows),
@@ -1822,12 +1870,15 @@ class Handler(SimpleHTTPRequestHandler):
                 except Exception as e:
                     print(f'  [ADV] fetch error: {e}')
 
+        cal_data = _load_calibration()
+        cal_leagues = cal_data.get('leagues', {}) if cal_data else {}
         bets = []
         for comp, games in league_games.items():
             ts_cache = get_cache(f'/teamstats/{comp}') or {}
             name_map = ts_cache.get('name_map', {})
             if games and not name_map:
                 name_map = _advisor_standings_map(comp)
+            comp_rho = cal_leagues.get(comp, {}).get('suggestedRho', -0.13)
             for game in games:
                 if not game.get('impl_h'): continue
                 raw_dt = (game.get('commence_time') or '').replace('Z', '+00:00')
@@ -1843,13 +1894,14 @@ class Handler(SimpleHTTPRequestHandler):
                 hdata = _fuzzy_match(home, name_map)
                 adata = _fuzzy_match(away, name_map)
                 if not hdata or not adata: continue
-                h_xg  = hdata.get('xg_pg')  or (hdata.get('sotPg') or 0)*0.30 or hdata.get('goals_pg')  or 1.2
-                h_xga = hdata.get('xga_pg') or hdata.get('goals_ag_pg') or 1.1
-                a_xg  = adata.get('xg_pg')  or (adata.get('sotPg') or 0)*0.30 or adata.get('goals_pg')  or 1.0
-                a_xga = adata.get('xga_pg') or adata.get('goals_ag_pg') or 1.2
+                # Use venue-split xG when available (home team's home xG, away team's away xG)
+                h_xg  = hdata.get('xgHomePg') or hdata.get('xg_pg')  or (hdata.get('sotPg') or 0)*0.30 or hdata.get('goals_pg')  or 1.2
+                h_xga = hdata.get('xgaHomePg') or hdata.get('xga_pg') or hdata.get('goals_ag_pg') or 1.1
+                a_xg  = adata.get('xgAwayPg') or adata.get('xg_pg')  or (adata.get('sotPg') or 0)*0.30 or adata.get('goals_pg')  or 1.0
+                a_xga = adata.get('xgaAwayPg') or adata.get('xga_pg') or adata.get('goals_ag_pg') or 1.2
                 lh    = max(0.2, ((h_xg + a_xga) / 2) * 1.10)
                 la    = max(0.2,  (a_xg + h_xga) / 2)
-                ph, pd, pa = _match_probs(lh, la)
+                ph, pd, pa = _match_probs_dc(lh, la, rho=comp_rho)
                 po25  = _over25_prob(lh, la)
                 dt    = game.get('commence_time', '')
                 outcomes = [

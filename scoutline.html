@@ -2139,7 +2139,24 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     wD=drawDC*0.65+drawConvBoost+(hasOdds?implD*oddsW:leaguePriorDraw*0.08)+moveD+(tune.bias?.draw||0);
   }
   const tot=wH+wD+wA;
-  const pH=Math.round(wH/tot*100), pD=Math.round(wD/tot*100), pA=100-pH-pD;
+  let pH=Math.round(wH/tot*100), pD=Math.round(wD/tot*100), pA=100-pH-pD;
+  // Apply learned 1X2 calibration: bin-level Bayesian correction from graded history.
+  // Shrinks over-confident predictions toward the historically observed rate per bin.
+  const outcomeCalibMap=tune.outcomeCalibMap||null;
+  if(outcomeCalibMap){
+    const applyOC=(raw,oc)=>{
+      const bm=outcomeCalibMap[oc]; if(!bm) return raw;
+      const bk=[12,32,47,62,85];
+      let key=bk[0]; for(let i=bk.length-1;i>=0;i--){if(raw>=bk[i]){key=bk[i];break;}}
+      const b=bm[String(key)];
+      if(!b||b.actual==null||b.n<3) return raw;
+      const alpha=Math.min(0.30,b.n/40); // max 30% trust, grows with sample size
+      return Math.max(1,Math.min(99,Math.round(raw*(1-alpha)+b.actual*alpha)));
+    };
+    const cH=applyOC(pH,'H'),cD=applyOC(pD,'D'),cA=applyOC(pA,'A');
+    const cTot=cH+cD+cA;
+    if(cTot>0){pH=Math.round(cH/cTot*100);pD=Math.round(cD/cTot*100);pA=100-pH-pD;}
+  }
   let conf=Math.max(pH,pD,pA);
   if(hasOdds){
     const oLead=implH>implD&&implH>implA?'H':implA>implH&&implA>implD?'A':'D';
@@ -2215,10 +2232,17 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const htT=htH+htD+htA;
   const pHT_H=Math.round(htH/htT*100),pHT_D=Math.round(htD/htT*100),pHT_A=100-pHT_H-pHT_D;
 
-  const hCornBase=hS?.cornHomePg??hS?.last5?.cornPg??hS?.cornPg??LG_CORN[lg]??4.5;
-  const aCornBase=aS?.cornAwayPg??aS?.last5?.cornPg??aS?.cornPg??LG_CORN[lg]??4.0;
-  const hCL=hCornBase*(hLam/lgAvg);
-  const aCL=aCornBase*(aLam/lgAvg);
+  // Corner lambda: independent attack×defense model (same structure as goals Poisson).
+  // Removes goal-rate scaling which caused large over/under-estimation in defensive or attacking matches.
+  const lgCS=teamStatsMeta[lg]?.leagueAverages||{};
+  const lgCornH=lgCS.homeCornersForPg||LG_CORN[lg]||4.5;
+  const lgCornA=lgCS.awayCornersForPg||LG_CORN[lg]||4.0;
+  const hCornAtt=hS?.cornHomePg??hS?.cornPg??lgCornH;
+  const aCornDef=aS?.cornAllowedAwayPg??lgCornH;
+  const aCornAtt=aS?.cornAwayPg??aS?.cornPg??lgCornA;
+  const hCornDef=hS?.cornAllowedHomePg??lgCornA;
+  const hCL=Math.max(1.0,(hCornAtt*aCornDef)/lgCornH);
+  const aCL=Math.max(1.0,(aCornAtt*hCornDef)/lgCornA);
   const totCorn=hCL+aCL;
   const pCorn85=Math.round((1-[0,1,2,3,4,5,6,7,8].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
   const pCorn105=Math.round((1-[0,1,2,3,4,5,6,7,8,9,10].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
