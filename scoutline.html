@@ -1985,7 +1985,7 @@ async function loadTeamStats(showProgress){
       });
       console.log('[Stats] Loaded '+Object.keys(teamStatsMap).length+' teams from proxy');
       computeLiveBaselines();
-      loadUnderstatStats(); // backfill xG for any teams APIF didn't cover
+      await loadUnderstatStats(); // backfill xG for any teams APIF didn't cover
       return true;
     }
     // Still building on proxy side — return false, caller can retry
