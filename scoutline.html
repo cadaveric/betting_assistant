@@ -3003,7 +3003,7 @@ async function loadFixtures(){
     // If not ready yet, show fixtures anyway and retry stats quietly after 10s
     if(Object.keys(teamStatsMap).length===0){
       const requestedLeague=lg;
-      loadUnderstatStats(); // use Understat xG immediately while APIF stats build
+      await loadUnderstatStats(); // use Understat xG immediately while APIF stats build
       setTimeout(async()=>{
         if(lg!==requestedLeague) return;
         await loadTeamStats(false);
