@@ -1052,7 +1052,7 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
 #pg-history .card-title{font-size:13px!important}
 #pg-history .card-head>div>div:last-child{font-size:11px!important;margin-top:1px!important}
 /* Scrollable fixed-height table */
-#pg-history .card-body{max-height:460px!important;overflow:auto!important;padding:0!important}
+#pg-history .card-body{height:calc(100vh - 390px)!important;min-height:320px!important;overflow:auto!important;padding:0!important}
 /* Sticky headers */
 #pg-history .stand-table thead th{
   position:sticky;top:0;z-index:2;
@@ -1860,13 +1860,25 @@ function marketChip(pct,label,help){
 // ── ELO ──────────────────────────────────────────────────────────────────────
 function _normName(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
 
+// Fuzzy lookup for external data sources (ClubElo, Understat) that use shortened
+// team names while API-Football uses full names ("AFC Bournemouth" vs "Bournemouth").
+// Falls back to substring match when exact lookup fails (min 5 chars to avoid "City" ambiguity).
+function _extMatch(name, short, data){
+  const n1=_normName(name), n2=_normName(short||'');
+  if(data[n1]) return data[n1];
+  if(n2&&data[n2]) return data[n2];
+  for(const [k,v] of Object.entries(data)){
+    if(k.length>=5&&n1.includes(k)) return v;
+    if(n1.length>=5&&k.includes(n1)) return v;
+    if(n2.length>=5&&(n2.includes(k)||k.includes(n2))) return v;
+  }
+  return null;
+}
+
 function computeElo(table){
   eloMap={};
   table.forEach(r=>{
-    // Try ClubElo (external, research-grade ratings) first
-    const norm=_normName(r.team.name);
-    const normS=_normName(r.team.shortName);
-    const ce=clubEloData[norm]||clubEloData[normS];
+    const ce=_extMatch(r.team.name,r.team.shortName,clubEloData);
     if(ce){
       eloMap[r.team.id]=ce.elo;
       return;
@@ -1914,7 +1926,7 @@ async function loadUnderstatStats(){
     const d=await fetch('/understat/'+lg).then(r=>r.ok?r.json():null);
     if(!d||Object.keys(d).length===0)return;
     standRows.forEach(r=>{
-      const us=d[_normName(r.team.name)]||d[_normName(r.team.shortName)];
+      const us=_extMatch(r.team.name,r.team.shortName,d);
       if(!us)return;
       const tid=r.team.id;
       const ex=teamStatsMap[tid]||{};
