@@ -227,21 +227,26 @@ def _fetch_understat(comp):
     if cached is not None:
         return cached
     try:
-        url = f'https://understat.com/league/{us_code}'
+        import gzip as _gzip, datetime as _datetime
+        now = _datetime.date.today()
+        season = now.year if now.month >= 8 else now.year - 1
+        url = f'https://understat.com/getLeagueData/{us_code}/{season}'
         req = urllib.request.Request(url, headers={
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
                           '(KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': f'https://understat.com/league/{us_code}',
         })
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
         with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
-            html = resp.read().decode('utf-8')
-        m = _re.search(r"var teamsData\s*=\s*JSON\.parse\('(.+?)'\)", html)
-        if not m:
-            print(f'[Understat] teamsData not found for {comp}'); return {}
-        import urllib.parse as _up
-        teams_raw = json.loads(_up.unquote(m.group(1)))
+            raw = resp.read()
+        try:
+            data = _gzip.decompress(raw)
+        except Exception:
+            data = raw
+        teams_raw = json.loads(data.decode('utf-8')).get('teams', {})
         result = {}
         for _tid, td in teams_raw.items():
             name    = td.get('title', '')
