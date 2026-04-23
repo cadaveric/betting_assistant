@@ -421,14 +421,16 @@ input[type=number]{background-image:none;padding-right:12px}
 .pred-tab-btn.on{background:var(--bg2);color:var(--tx);font-weight:600;border-bottom-color:var(--amber)}
 .pred-tab-content{display:none;padding:22px 26px}
 .pred-tab-content.on{display:block}
-.pred-narrative{background:linear-gradient(135deg,rgba(13,17,27,.95),rgba(20,26,42,.95));border:1px solid rgba(245,158,11,.18);border-radius:0 0 0 0;padding:20px 22px 18px;border-top:1px solid var(--br)}
-.pred-narrative-headline{font-size:13px;line-height:1.6;color:var(--tx);margin-bottom:14px;font-weight:500}
-.pred-narrative-bets-label{font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
-.pred-narrative-bets{display:flex;flex-direction:column;gap:8px}
-.pred-narrative-bet{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.5}
-.pred-narrative-bet-good{background:rgba(29,158,117,.08);border:1px solid rgba(29,158,117,.2)}
-.pred-narrative-bet-warn{background:rgba(186,117,23,.08);border:1px solid rgba(186,117,23,.25)}
-.pred-narrative-bet-avoid{background:rgba(163,45,45,.07);border:1px solid rgba(163,45,45,.2)}
+.pred-narrative{background:var(--bg2);border-left:1px solid var(--br);border-right:1px solid var(--br);border-bottom:1px solid var(--br);padding:18px 22px 16px;border-top:3px solid var(--amber);position:relative}
+.pred-narrative-title{font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.pred-narrative-title::after{content:'';flex:1;height:1px;background:rgba(183,109,18,.2)}
+.pred-narrative-headline{font-size:13px;line-height:1.65;color:var(--tx);margin-bottom:14px;font-weight:500;padding:10px 12px;background:rgba(183,109,18,.05);border-radius:8px;border-left:3px solid rgba(183,109,18,.35)}
+.pred-narrative-bets-label{font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.pred-narrative-bets{display:flex;flex-direction:column;gap:7px}
+.pred-narrative-bet{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.5}
+.pred-narrative-bet-good{background:rgba(16,137,108,.07);border:1px solid rgba(16,137,108,.22)}
+.pred-narrative-bet-warn{background:rgba(183,109,18,.07);border:1px solid rgba(183,109,18,.25)}
+.pred-narrative-bet-avoid{background:rgba(184,70,63,.06);border:1px solid rgba(184,70,63,.2)}
 .pred-narrative-icon{font-size:14px;flex-shrink:0;margin-top:1px}
 .pred-narrative-market{font-weight:700;color:var(--tx)}
 .pred-narrative-note{color:var(--tx2)}
@@ -2657,6 +2659,26 @@ function renderPredResult(p,hName,aName,h2hData){
         <span class="pred-conf-badge">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
       </div>
     </div>
+    ${(()=>{
+      const narr=generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS);
+      if(!narr.bets.length&&!narr.avoids.length)return '';
+      const betHTML=narr.bets.map(b=>`
+        <div class="pred-narrative-bet pred-narrative-bet-${b.type}">
+          <span class="pred-narrative-icon">${b.type==='good'?'✅':b.type==='warn'?'⚠️':'🔴'}</span>
+          <div><span class="pred-narrative-market">${b.market}</span><span class="pred-narrative-note"> — ${b.note}</span></div>
+        </div>`).join('');
+      const avoidHTML=narr.avoids.map(a=>`
+        <div class="pred-narrative-bet pred-narrative-bet-avoid">
+          <span class="pred-narrative-icon">🔴</span>
+          <div><span class="pred-narrative-market">Avoid:</span><span class="pred-narrative-note"> ${a}</span></div>
+        </div>`).join('');
+      return `<div class="pred-narrative">
+        <div class="pred-narrative-title">Match Analysis</div>
+        <div class="pred-narrative-headline">${narr.headline}</div>
+        <div class="pred-narrative-bets-label">Best bets</div>
+        <div class="pred-narrative-bets">${betHTML}${avoidHTML}</div>
+      </div>`;
+    })()}
     ${oddsHTML}
     <div class="pred-data-grid">
       ${dataCell(t('dc.label'),p.hXg??'–',p.aXg??'–',parseFloat(p.hXg)||parseFloat(p.hLam),parseFloat(p.aXg)||parseFloat(p.aLam),t('dc.label_help'))}
@@ -2678,25 +2700,6 @@ function renderPredResult(p,hName,aName,h2hData){
       ${dataCell(t('dc.home_adv'),p.ha+'×','—',1,0,t('dc.home_adv_help'))}
       ${dataCell(t('dc.h2h_tilt'),parseFloat(p.h2hFactor)>0?'+'+p.h2hFactor:p.h2hFactor,'—',parseFloat(p.h2hFactor)+0.5,0.5-parseFloat(p.h2hFactor),t('dc.h2h_tilt_help'))}
     </div>
-    ${(()=>{
-      const narr=generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS);
-      if(!narr.bets.length&&!narr.avoids.length)return '';
-      const betHTML=narr.bets.map(b=>`
-        <div class="pred-narrative-bet pred-narrative-bet-${b.type}">
-          <span class="pred-narrative-icon">${b.type==='good'?'✅':b.type==='warn'?'⚠️':'🔴'}</span>
-          <div><span class="pred-narrative-market">${b.market}</span><span class="pred-narrative-note"> — ${b.note}</span></div>
-        </div>`).join('');
-      const avoidHTML=narr.avoids.map(a=>`
-        <div class="pred-narrative-bet pred-narrative-bet-avoid">
-          <span class="pred-narrative-icon">🔴</span>
-          <div><span class="pred-narrative-market">Avoid:</span><span class="pred-narrative-note"> ${a}</span></div>
-        </div>`).join('');
-      return `<div class="pred-narrative">
-        <div class="pred-narrative-headline">${narr.headline}</div>
-        <div class="pred-narrative-bets-label">Best bets</div>
-        <div class="pred-narrative-bets">${betHTML}${avoidHTML}</div>
-      </div>`;
-    })()}
     <div class="pred-tabs">
       <div class="pred-tab-bar">
         <button class="pred-tab-btn on" onclick="switchPredTab(this,'tab-markets')">${t('pred.tab.markets')}</button>

@@ -1852,7 +1852,13 @@ class Handler(SimpleHTTPRequestHandler):
             days = max(1, min(30, int(params.get('days', [3])[0])))
         except ValueError:
             days = 3
-        min_edge = {'conservative': 12, 'balanced': 8, 'risky': 5}.get(risk, 8)
+        risk_cfg = {
+            'conservative': {'min_edge': 10, 'max_odds': 2.2,  'min_prob': 0.42},
+            'balanced':     {'min_edge': 7,  'max_odds': 3.5,  'min_prob': 0.30},
+            'risky':        {'min_edge': 5,  'max_odds': 5.5,  'min_prob': 0.20},
+        }
+        cfg      = risk_cfg.get(risk, risk_cfg['balanced'])
+        min_edge = cfg['min_edge']
         KELLY_CAP = 0.25
         now = _dt.datetime.now(_dt.timezone.utc)
         cutoff = now + _dt.timedelta(days=days)
@@ -1919,6 +1925,8 @@ class Handler(SimpleHTTPRequestHandler):
                     outcomes.append(('Over 2.5', game['best_o25'], None, po25, impl25))
                 for label, odds, bk, model_p, impl_p in outcomes:
                     if not odds or odds <= 1 or not model_p or not impl_p: continue
+                    if odds > cfg['max_odds']: continue
+                    if model_p < cfg['min_prob']: continue
                     edge = round(model_p*100 - impl_p*100, 1)
                     if edge < min_edge: continue
                     ev = model_p*(odds - 1) - (1 - model_p)
@@ -1935,7 +1943,8 @@ class Handler(SimpleHTTPRequestHandler):
         bets.sort(key=lambda x: -x['ev'])
         self.send_json({'bets': bets[:top_n], 'total': len(bets),
                         'leagues_scanned': len(league_games), 'risk': risk,
-                        'min_edge': min_edge, 'days': days})
+                        'min_edge': min_edge, 'max_odds': cfg['max_odds'],
+                        'min_prob': cfg['min_prob'], 'days': days})
 
     def send_json(self, data, code=200):
         body = json.dumps(data).encode()
