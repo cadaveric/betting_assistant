@@ -421,6 +421,17 @@ input[type=number]{background-image:none;padding-right:12px}
 .pred-tab-btn.on{background:var(--bg2);color:var(--tx);font-weight:600;border-bottom-color:var(--amber)}
 .pred-tab-content{display:none;padding:22px 26px}
 .pred-tab-content.on{display:block}
+.pred-narrative{background:linear-gradient(135deg,rgba(13,17,27,.95),rgba(20,26,42,.95));border:1px solid rgba(245,158,11,.18);border-radius:0 0 0 0;padding:20px 22px 18px;border-top:1px solid var(--br)}
+.pred-narrative-headline{font-size:13px;line-height:1.6;color:var(--tx);margin-bottom:14px;font-weight:500}
+.pred-narrative-bets-label{font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.pred-narrative-bets{display:flex;flex-direction:column;gap:8px}
+.pred-narrative-bet{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.5}
+.pred-narrative-bet-good{background:rgba(29,158,117,.08);border:1px solid rgba(29,158,117,.2)}
+.pred-narrative-bet-warn{background:rgba(186,117,23,.08);border:1px solid rgba(186,117,23,.25)}
+.pred-narrative-bet-avoid{background:rgba(163,45,45,.07);border:1px solid rgba(163,45,45,.2)}
+.pred-narrative-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.pred-narrative-market{font-weight:700;color:var(--tx)}
+.pred-narrative-note{color:var(--tx2)}
 .pred-mkt-section{margin-bottom:20px}
 .pred-mkt-section-label{font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:12px;display:flex;align-items:center;gap:10px;text-transform:capitalize}
 .pred-mkt-section-label::after{content:'';flex:1;height:1px;background:var(--br)}
@@ -2475,6 +2486,82 @@ function renderMarkets(p,hName,aName){
   </div>`;
 }
 
+function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
+  const total=standRows.length||20;
+  const hPos=hRow?.position||10, aPos=aRow?.position||10;
+  function posCtx(pos){
+    if(pos===1)return 'league leaders';
+    if(pos<=4)return 'title contenders';
+    if(pos<=Math.round(total*0.4))return 'upper-half side';
+    if(pos>=total-1)return 'rock bottom of the table';
+    if(pos>=total-4)return 'relegation-threatened';
+    return 'mid-table side';
+  }
+  const favIsHome=p.pH>=p.pA;
+  const favProb=favIsHome?p.pH:p.pA;
+  const favorite=favIsHome?hName:aName;
+  const underdog=favIsHome?aName:hName;
+  const udCtx=favIsHome?posCtx(aPos):posCtx(hPos);
+  const favOdds=favIsHome?p.bH:p.bA;
+  const isMismatch=Math.abs(hPos-aPos)>=10||Math.abs(p.pH-p.pA)>=30;
+  const totalLam=(parseFloat(p.hLam)+parseFloat(p.aLam));
+
+  let headline='';
+  if(favProb>=70&&isMismatch)
+    headline=`${favorite} are strong favourites at ${favProb}% — ${underdog} are ${udCtx} and clearly outmatched on the numbers.`;
+  else if(favProb>=60)
+    headline=`${favorite} hold a clear ${favProb}% edge, supported by a ${Math.abs(p.hElo-p.aElo)}-point Elo gap and ${favIsHome?p.hFF:p.aFF}% recent form rating.`;
+  else
+    headline=`Tight contest — ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%. Form and strength are closely matched; the draw is live.`;
+
+  const bets=[];
+
+  // Win market
+  if(favProb>=60){
+    const short=favOdds&&favOdds<1.50;
+    const oddsStr=favOdds?` at odds ${favOdds}`:'';
+    const tip=short?'Odds are short — fold into an accumulator only.':'Solid standalone bet.';
+    bets.push({type:short?'warn':'good',market:`${favorite} to win`,note:`${favProb}% model probability${oddsStr}. ${tip}`});
+  }
+
+  // Asian handicap when odds too short to bet straight
+  if(favProb>=68&&favOdds&&favOdds<1.50)
+    bets.push({type:'good',market:`${favorite} -1 Asian handicap`,note:`Better value than the straight win at ${favOdds}. Win probability supports the -1 line.`});
+
+  // Over/Under 2.5
+  if(p.pOver25>=62)
+    bets.push({type:'good',market:'Over 2.5 goals',note:`${p.pOver25}% probability. Expected total: λ${totalLam.toFixed(1)} (${hName} λ${p.hLam} / ${aName} λ${p.aLam}).`});
+  else if(p.pOver25<=38)
+    bets.push({type:'good',market:'Under 2.5 goals',note:`Only ${p.pOver25}% for over — ${100-p.pOver25}% for under. Low-scoring game expected (λ${totalLam.toFixed(1)}).`});
+
+  // BTTS
+  if(p.pBTTS>=60)
+    bets.push({type:'good',market:'Both teams to score — YES',note:`${p.pBTTS}% probability. Both sides generating chances (λ${p.hLam} / λ${p.aLam}).`});
+  else if(p.pBTTS<=35&&favProb>=65){
+    const csT=favIsHome?hName:aName, csP=favIsHome?p.pHCS:p.pACS;
+    bets.push({type:'good',market:'Both teams to score — NO',note:`${100-p.pBTTS}% chance BTTS fails. ${csT} clean sheet probability: ${csP}%.`});
+  }
+
+  // Score in both halves
+  if(favProb>=68&&p.pHT_H>=50&&favIsHome)
+    bets.push({type:'good',market:`${hName} to score in both halves`,note:`${p.pHT_H}% HT lead probability with λ${p.hLam} attacking output.`});
+
+  // Corners
+  if(p.pCorn105>=55)
+    bets.push({type:'good',market:'Corners over 10.5',note:`${p.pCorn105}% probability. Expected ${p.totalCornLam} total (${hName} λ${p.hCornLam} / ${aName} λ${p.aCornLam}).`});
+  else if(p.pCorn85>=65)
+    bets.push({type:'good',market:'Corners over 8.5',note:`${p.pCorn85}% probability. Expected ${p.totalCornLam} corners total.`});
+
+  // Avoids
+  const avoids=[];
+  if(favProb>=75&&favOdds&&favOdds<1.25)
+    avoids.push(`${favorite} to win at odds below 1.25 — near-zero return for the risk involved`);
+  if(p.pBTTS>=60&&p.pOver25<48)
+    avoids.push('BTTS YES with low over 2.5 probability — contradictory market signals, skip both');
+
+  return{headline,bets,avoids};
+}
+
 function renderPredResult(p,hName,aName,h2hData){
   const winner=p.pH>p.pA+5?hName:p.pA>p.pH+5?aName:'Draw';
   const wColor=p.pH>p.pA+5?'#1D9E75':p.pA>p.pH+5?'#A32D2D':'#BA7517';
@@ -2591,6 +2678,25 @@ function renderPredResult(p,hName,aName,h2hData){
       ${dataCell(t('dc.home_adv'),p.ha+'×','—',1,0,t('dc.home_adv_help'))}
       ${dataCell(t('dc.h2h_tilt'),parseFloat(p.h2hFactor)>0?'+'+p.h2hFactor:p.h2hFactor,'—',parseFloat(p.h2hFactor)+0.5,0.5-parseFloat(p.h2hFactor),t('dc.h2h_tilt_help'))}
     </div>
+    ${(()=>{
+      const narr=generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS);
+      if(!narr.bets.length&&!narr.avoids.length)return '';
+      const betHTML=narr.bets.map(b=>`
+        <div class="pred-narrative-bet pred-narrative-bet-${b.type}">
+          <span class="pred-narrative-icon">${b.type==='good'?'✅':b.type==='warn'?'⚠️':'🔴'}</span>
+          <div><span class="pred-narrative-market">${b.market}</span><span class="pred-narrative-note"> — ${b.note}</span></div>
+        </div>`).join('');
+      const avoidHTML=narr.avoids.map(a=>`
+        <div class="pred-narrative-bet pred-narrative-bet-avoid">
+          <span class="pred-narrative-icon">🔴</span>
+          <div><span class="pred-narrative-market">Avoid:</span><span class="pred-narrative-note"> ${a}</span></div>
+        </div>`).join('');
+      return `<div class="pred-narrative">
+        <div class="pred-narrative-headline">${narr.headline}</div>
+        <div class="pred-narrative-bets-label">Best bets</div>
+        <div class="pred-narrative-bets">${betHTML}${avoidHTML}</div>
+      </div>`;
+    })()}
     <div class="pred-tabs">
       <div class="pred-tab-bar">
         <button class="pred-tab-btn on" onclick="switchPredTab(this,'tab-markets')">${t('pred.tab.markets')}</button>
