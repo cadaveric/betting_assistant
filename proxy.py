@@ -411,7 +411,7 @@ _ml_lock  = threading.Lock()
 
 def _load_ml_model():
     global _ml_model, _ml_meta
-    path = _data_path('prediction_model.pkl')
+    path = _data_path('data/prediction_model.pkl')
     meta_path = path.replace('.pkl', '_meta.json')
     if not os.path.exists(path):
         return
@@ -2152,7 +2152,7 @@ if __name__ == '__main__':
     def startup():
         time.sleep(2)
         # Load ML model if available, otherwise trigger background training
-        if os.path.exists(_data_path('prediction_model.pkl')):
+        if os.path.exists(_data_path('data/prediction_model.pkl')):
             _load_ml_model()
         else:
             print('  [ML] Model not found — training in background (takes ~2 min)')
