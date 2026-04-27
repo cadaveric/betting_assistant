@@ -167,7 +167,7 @@ def build_dataset():
 
 def train():
     try:
-        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.ensemble import RandomForestClassifier
         from sklearn.model_selection import StratifiedKFold, cross_val_score
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
@@ -189,12 +189,11 @@ def train():
     print(f'  [ML] Training on {len(X)} samples × {len(FEATURE_NAMES)} features...')
     model = Pipeline([
         ('scaler', StandardScaler()),
-        ('clf', GradientBoostingClassifier(
-            n_estimators=120,
-            learning_rate=0.05,
-            max_depth=4,
-            subsample=0.75,
-            min_samples_leaf=20,
+        ('clf', RandomForestClassifier(
+            n_estimators=200,
+            max_depth=8,
+            min_samples_leaf=15,
+            n_jobs=-1,
             random_state=42,
         )),
     ])
