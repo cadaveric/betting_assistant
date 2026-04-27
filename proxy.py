@@ -4,10 +4,10 @@ Scoutline — API-Football Pro backend
 Run: python3 proxy.py
 """
 
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 import urllib.request, urllib.error, ssl as _ssl
 import json, os, time, threading, hashlib, atexit, math, concurrent.futures, urllib.parse, re as _re
-import datetime as _dt
+import datetime as _dt, sqlite3, secrets
 
 # Load .env
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
@@ -20,9 +20,148 @@ if os.path.exists(_env_path):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 PORT            = int(os.environ.get('PORT', 8081))
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+AUTH_DB   = os.path.join('data', 'users.db')
+SESSIONS  = {}   # token -> {'user': str, 'expires': float}
+SESSION_TTL = 7 * 24 * 3600   # 7 days
+
+PW_ITERATIONS = 100_000
+
+def _init_auth_db():
+    os.makedirs('data', exist_ok=True)
+    con = sqlite3.connect(AUTH_DB)
+    con.execute('''CREATE TABLE IF NOT EXISTS users (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT    UNIQUE NOT NULL,
+        pw_hash    TEXT    NOT NULL,
+        salt       TEXT    NOT NULL,
+        iterations INTEGER NOT NULL DEFAULT 200000,
+        created    TEXT    NOT NULL DEFAULT (datetime('now'))
+    )''')
+    # migrate existing rows that lack the iterations column
+    try:
+        con.execute('ALTER TABLE users ADD COLUMN iterations INTEGER NOT NULL DEFAULT 200000')
+    except Exception:
+        pass
+    con.commit(); con.close()
+
+def _hash_pw(password: str, salt: str, iterations: int) -> str:
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), iterations).hex()
+
+def auth_check_user(username: str, password: str) -> bool:
+    try:
+        con = sqlite3.connect(AUTH_DB)
+        row = con.execute('SELECT pw_hash, salt, iterations FROM users WHERE username=?', (username,)).fetchone()
+        con.close()
+        if not row: return False
+        return secrets.compare_digest(row[0], _hash_pw(password, row[1], row[2]))
+    except Exception: return False
+
+def auth_create_user(username: str, password: str):
+    salt = secrets.token_hex(32)
+    pw_hash = _hash_pw(password, salt, PW_ITERATIONS)
+    con = sqlite3.connect(AUTH_DB)
+    con.execute('INSERT INTO users (username, pw_hash, salt, iterations) VALUES (?,?,?,?)',
+                (username, pw_hash, salt, PW_ITERATIONS))
+    con.commit(); con.close()
+
+def session_create(username: str) -> str:
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = {'user': username, 'expires': time.time() + SESSION_TTL}
+    return token
+
+def session_get(token: str):
+    s = SESSIONS.get(token)
+    if not s: return None
+    if time.time() > s['expires']:
+        SESSIONS.pop(token, None); return None
+    return s
+
+def _get_session_from_request(handler) -> str | None:
+    cookie_header = handler.headers.get('Cookie', '')
+    for part in cookie_header.split(';'):
+        part = part.strip()
+        if part.startswith('scoutline_session='):
+            token = part[len('scoutline_session='):]
+            if session_get(token): return token
+    return None
+
+LOGIN_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scoutline — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Manrope',sans-serif;background:#DED3BF;color:#20251F;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{background:#FFF9EE;border:1px solid rgba(55,44,28,.12);border-radius:16px;padding:44px 40px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(55,44,28,.12)}
+.logo{display:flex;align-items:center;gap:14px;margin-bottom:36px}
+.logo-mark{width:44px;height:44px;background:#10896C;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-text{font-size:21px;font-weight:800;letter-spacing:-.3px;color:#20251F}
+.logo-sub{font-size:10px;color:#8A9187;font-family:'IBM Plex Mono',monospace;margin-top:3px;letter-spacing:.5px}
+h1{font-size:18px;font-weight:700;margin-bottom:6px;color:#20251F}
+.sub{font-size:13px;color:#5A635B;margin-bottom:28px;line-height:1.5}
+label{display:block;font-size:11px;font-weight:700;color:#5A635B;margin-bottom:7px;letter-spacing:.5px;text-transform:uppercase}
+input{width:100%;height:42px;background:#DBCFBA;border:1px solid rgba(55,44,28,.18);border-radius:10px;padding:0 14px;font-size:14px;font-family:'Manrope',sans-serif;color:#20251F;outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus{border-color:#B76D12;box-shadow:0 0 0 3px rgba(183,109,18,.14)}
+.field{margin-bottom:18px}
+.btn{width:100%;height:44px;background:#B76D12;border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:'Manrope',sans-serif;color:#fff;cursor:pointer;margin-top:8px;transition:opacity .15s;letter-spacing:.1px}
+.btn:hover{opacity:.88}
+.error{background:#FBE9E6;border:1px solid rgba(184,70,63,.25);border-radius:8px;padding:11px 14px;font-size:13px;color:#B8463F;margin-bottom:20px;display:none;line-height:1.5}
+.error.show{display:block}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" width="26" height="26">
+        <path d="M12 3L20 8V16L12 21L4 16V8L12 3Z" stroke="#fff" stroke-width="1.5" fill="rgba(255,255,255,.15)"/>
+        <circle cx="12" cy="12" r="3.5" fill="#fff" opacity=".8"/>
+        <line x1="12" y1="3" x2="12" y2="8.5" stroke="#fff" stroke-width="1.5"/>
+        <line x1="20" y1="8" x2="15.2" y2="10.2" stroke="#fff" stroke-width="1.5"/>
+        <line x1="20" y1="16" x2="15.2" y2="13.8" stroke="#fff" stroke-width="1.5"/>
+        <line x1="12" y1="21" x2="12" y2="15.5" stroke="#fff" stroke-width="1.5"/>
+        <line x1="4" y1="16" x2="8.8" y2="13.8" stroke="#fff" stroke-width="1.5"/>
+        <line x1="4" y1="8" x2="8.8" y2="10.2" stroke="#fff" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Scoutline</div>
+      <div class="logo-sub">FOOTBALL INTELLIGENCE</div>
+    </div>
+  </div>
+  <h1>Sign in</h1>
+  <p class="sub">Enter your credentials to access the dashboard.</p>
+  <div class="error" id="err"></div>
+  <form method="POST" action="/login">
+    <div class="field">
+      <label>Username</label>
+      <input type="text" name="username" autocomplete="username" autofocus required>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+</div>
+<script>
+const p=new URLSearchParams(location.search);
+if(p.get('err')){const e=document.getElementById('err');e.textContent=p.get('err')==='1'?'Invalid username or password.':'Session expired. Please sign in again.';e.classList.add('show');}
+</script>
+</body>
+</html>
+'''
 DISK_CACHE_FILE = os.environ.get('CACHE_FILE', 'scoutline_cache.json')
 PREDICTION_FILE = os.environ.get('PREDICTION_FILE', os.path.join('data', 'prediction_history.json'))
-ODDS_HISTORY_FILE = os.environ.get('ODDS_HISTORY_FILE', os.path.join('data', 'odds_history.json'))
+ODDS_HISTORY_FILE  = os.environ.get('ODDS_HISTORY_FILE',  os.path.join('data', 'odds_history.json'))
+CALIBRATION_FILE   = os.environ.get('CALIBRATION_FILE',  os.path.join('data', 'league_calibration.json'))
 
 # ── API-Football Pro (api-sports.io) ─────────────────────────────────────────
 APIF_KEY  = (os.environ.get('APIFOOTBALL_KEY')
@@ -69,48 +208,133 @@ APIF_LEAGUE_MAP = {
     'WC':  {'id': 1,   'season': 2026}, 'EC':  {'id': 4,   'season': 2024},
 }
 
-# ── Odds Providers ────────────────────────────────────────────────────────────
-ODDS_API_KEY   = os.environ.get('ODDS_API_KEY', '')
-ODDS_API_BASE  = 'https://api.the-odds-api.com/v4'
-ODDS_REGION    = 'eu'
+# ── Odds (API-Football only) ──────────────────────────────────────────────────
 ODDS_CACHE_TTL = 1800  # 30 min
-ODDS_LAST_ERROR = {}
-ODDS_FALLBACK_ENABLED = os.environ.get('ODDS_FALLBACK_ENABLED', '').lower() in ('1', 'true', 'yes')
 
-ODDS_SPORT_KEYS = {
-    'PL':  'soccer_epl',             'ELC': 'soccer_efl_champ',
-    'L1':  'soccer_england_league1', 'L2':  'soccer_england_league2',
-    'PD':  'soccer_spain_la_liga',   'PD2': 'soccer_spain_segunda_division',
-    'BL1': 'soccer_germany_bundesliga', 'BL2': 'soccer_germany_bundesliga2',
-    'SA':  'soccer_italy_serie_a',   'SB':  'soccer_italy_serie_b',
-    'FL1': 'soccer_france_ligue_one','FL2': 'soccer_france_ligue_two',
-    'PPL': 'soccer_portugal_primeira_liga',
-    'DED': 'soccer_netherlands_eredivisie',
-    'TSL': 'soccer_turkey_super_league',
-    'SP':  'soccer_spl',
-    'SC1': 'soccer_scotland_championship',
-    'GL':  'soccer_greece_super_league',
-    'BPL': 'soccer_belgium_first_div',
-    'AFL': 'soccer_austria_bundesliga',
-    'PEK': 'soccer_poland_ekstraklasa',
-    'DSL': 'soccer_denmark_superliga',
-    'SSL': 'soccer_switzerland_superleague',
-    'NOR': 'soccer_norway_eliteserien',
-    'SWE': 'soccer_sweden_allsvenskan',
-    'RUS': 'soccer_russia_premier_league',
-    'CL':  'soccer_uefa_champs_league',
-    'EL':  'soccer_uefa_europa_league',
-    'ECL': 'soccer_uefa_europa_conference_league',
-    'BSA': 'soccer_brazil_campeonato',  'BSB': 'soccer_brazil_serie_b',
-    'MLS': 'soccer_usa_mls',
-    'ARG': 'soccer_argentina_primera_division',
-    'LMX': 'soccer_mexico_ligamx',
-    'SPL': 'soccer_saudi_arabia_pro_league',
-    'JPL': 'soccer_japan_j_league',
-    'KCL': 'soccer_korea_kleague1',
-    'WC':  'soccer_fifa_world_cup',
-    'EC':  'soccer_uefa_european_championship',
+# ── Understat (free, no key — top-5 EU leagues xG data) ─────────────────────
+UNDERSTAT_LEAGUE_MAP = {
+    'PL': 'EPL', 'PD': 'La_liga', 'BL1': 'Bundesliga',
+    'SA': 'Serie_A', 'FL1': 'Ligue_1',
 }
+UNDERSTAT_TTL = 21600  # 6 h
+
+def _fetch_understat(comp):
+    us_code = UNDERSTAT_LEAGUE_MAP.get(comp)
+    if not us_code:
+        return {}
+    ck = f'understat_{comp}'
+    cached = get_cache(ck)
+    if cached is not None:
+        return cached
+    try:
+        import gzip as _gzip, datetime as _datetime
+        now = _datetime.date.today()
+        season = now.year if now.month >= 8 else now.year - 1
+        url = f'https://understat.com/getLeagueData/{us_code}/{season}'
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+            'Accept-Encoding': 'gzip',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': f'https://understat.com/league/{us_code}',
+        })
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as resp:
+            raw = resp.read()
+        try:
+            data = _gzip.decompress(raw)
+        except Exception:
+            data = raw
+        teams_raw = json.loads(data.decode('utf-8')).get('teams', {})
+        result = {}
+        for _tid, td in teams_raw.items():
+            name    = td.get('title', '')
+            history = td.get('history', [])
+            if not history: continue
+            def _avg(vals): return round(sum(vals)/len(vals), 4) if vals else None
+            all_m  = history
+            home_m = [x for x in history if x.get('h_a') == 'h']
+            away_m = [x for x in history if x.get('h_a') == 'a']
+            def _xg(lst):  return [float(x.get('xG',  0)) for x in lst]
+            def _xga(lst): return [float(x.get('xGA', 0)) for x in lst]
+            norm = _re.sub(r'[^a-z0-9]', '', name.lower())
+            result[norm] = {
+                'name': name,
+                'xgPg':      _avg(_xg(all_m)),   'xgaPg':      _avg(_xga(all_m)),
+                'xgHomePg':  _avg(_xg(home_m)),  'xgaHomePg':  _avg(_xga(home_m)),
+                'xgAwayPg':  _avg(_xg(away_m)),  'xgaAwayPg':  _avg(_xga(away_m)),
+            }
+        set_cache(ck, result, UNDERSTAT_TTL)
+        print(f'[Understat] {comp}: loaded {len(result)} teams')
+        return result
+    except Exception as e:
+        print(f'[Understat] {comp} failed: {e}'); return {}
+
+# ── ClubElo (free, no key required) ──────────────────────────────────────────
+CLUBELO_BASE    = 'http://api.clubelo.com'
+CLUBELO_TTL     = 86400  # 24 h — ratings update weekly
+
+def _fetch_clubelo():
+    today = _dt.date.today().isoformat()
+    ck = f'clubelo_{today}'
+    cached = get_cache(ck)
+    if cached is not None:
+        return cached
+    try:
+        url = f'{CLUBELO_BASE}/{today}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Scoutline/1.0'})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            text = resp.read().decode('utf-8')
+        result = {}
+        for line in text.strip().split('\n')[1:]:
+            parts = line.split(',')
+            if len(parts) < 5: continue
+            club, country, level, elo_str = parts[1], parts[2], parts[3], parts[4]
+            try:
+                norm = _re.sub(r'[^a-z0-9]', '', club.lower())
+                result[norm] = {'name': club, 'elo': round(float(elo_str)),
+                                'country': country, 'level': int(level or 1)}
+            except (ValueError, IndexError):
+                continue
+        set_cache(ck, result, CLUBELO_TTL)
+        print(f'[ClubElo] loaded {len(result)} clubs')
+        return result
+    except Exception as e:
+        print(f'[ClubElo] fetch failed: {e}')
+        return {}
+
+# ── Football-Data.org (free tier — for league calibration) ────────────────────
+FD_KEY          = os.environ.get('FOOTBALL_DATA_KEY', '')
+FD_BASE         = 'https://api.football-data.org/v4'
+FD_LEAGUE_MAP   = {
+    'PL':'PL','ELC':'ELC','L1':'EL1','L2':'EL2',
+    'BL1':'BL1','PD':'PD','SA':'SA','FL1':'FL1',
+    'CL':'CL','EL':'EL','DED':'DED','PPL':'PPL','BSA':'BSA',
+}
+CALIBRATION_SEASONS = [2021, 2022, 2023, 2024]
+
+# Static historical defaults — used when league_calibration.json is absent or a league is missing.
+# Values derived from multi-season averages across major competitions.
+# homeAdvFactor values reflect post-2021 empirical decline (~20% lower than pre-COVID).
+# suggestedRho: more negative = more DC correction on low scores (more draws boosted).
+_LEAGUE_CAL_DEFAULTS = {
+    'PL':  {'homeWinPct':0.44,'drawPct':0.26,'awayWinPct':0.30,'avgHomeGoals':1.50,'avgAwayGoals':1.15,'avgTotalGoals':2.65,'homeAdvFactor':1.22,'over25Rate':0.53,'bttsRate':0.52,'suggestedRho':-0.10},
+    'ELC': {'homeWinPct':0.44,'drawPct':0.26,'awayWinPct':0.30,'avgHomeGoals':1.43,'avgAwayGoals':1.15,'avgTotalGoals':2.58,'homeAdvFactor':1.20,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.12},
+    'L1':  {'homeWinPct':0.43,'drawPct':0.27,'awayWinPct':0.30,'avgHomeGoals':1.35,'avgAwayGoals':1.10,'avgTotalGoals':2.45,'homeAdvFactor':1.18,'over25Rate':0.48,'bttsRate':0.49,'suggestedRho':-0.12},
+    'L2':  {'homeWinPct':0.42,'drawPct':0.28,'awayWinPct':0.30,'avgHomeGoals':1.30,'avgAwayGoals':1.12,'avgTotalGoals':2.42,'homeAdvFactor':1.16,'over25Rate':0.47,'bttsRate':0.48,'suggestedRho':-0.13},
+    'BL1': {'homeWinPct':0.43,'drawPct':0.25,'awayWinPct':0.32,'avgHomeGoals':1.70,'avgAwayGoals':1.28,'avgTotalGoals':2.98,'homeAdvFactor':1.24,'over25Rate':0.60,'bttsRate':0.57,'suggestedRho':-0.17},
+    'BL2': {'homeWinPct':0.42,'drawPct':0.27,'awayWinPct':0.31,'avgHomeGoals':1.56,'avgAwayGoals':1.22,'avgTotalGoals':2.78,'homeAdvFactor':1.22,'over25Rate':0.56,'bttsRate':0.54,'suggestedRho':-0.15},
+    'PD':  {'homeWinPct':0.45,'drawPct':0.27,'awayWinPct':0.28,'avgHomeGoals':1.37,'avgAwayGoals':1.13,'avgTotalGoals':2.50,'homeAdvFactor':1.20,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.13},
+    'SA':  {'homeWinPct':0.46,'drawPct':0.27,'awayWinPct':0.27,'avgHomeGoals':1.38,'avgAwayGoals':1.10,'avgTotalGoals':2.48,'homeAdvFactor':1.22,'over25Rate':0.53,'bttsRate':0.52,'suggestedRho':-0.12},
+    'FL1': {'homeWinPct':0.43,'drawPct':0.28,'awayWinPct':0.29,'avgHomeGoals':1.33,'avgAwayGoals':1.09,'avgTotalGoals':2.42,'homeAdvFactor':1.20,'over25Rate':0.51,'bttsRate':0.50,'suggestedRho':-0.12},
+    'CL':  {'homeWinPct':0.43,'drawPct':0.27,'awayWinPct':0.30,'avgHomeGoals':1.37,'avgAwayGoals':1.12,'avgTotalGoals':2.49,'homeAdvFactor':1.20,'over25Rate':0.55,'bttsRate':0.53,'suggestedRho':-0.11},
+    'EL':  {'homeWinPct':0.41,'drawPct':0.28,'awayWinPct':0.31,'avgHomeGoals':1.29,'avgAwayGoals':1.13,'avgTotalGoals':2.42,'homeAdvFactor':1.15,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.12},
+    'ECL': {'homeWinPct':0.40,'drawPct':0.29,'awayWinPct':0.31,'avgHomeGoals':1.26,'avgAwayGoals':1.11,'avgTotalGoals':2.37,'homeAdvFactor':1.13,'over25Rate':0.50,'bttsRate':0.50,'suggestedRho':-0.12},
+    'DED': {'homeWinPct':0.43,'drawPct':0.26,'awayWinPct':0.31,'avgHomeGoals':1.68,'avgAwayGoals':1.27,'avgTotalGoals':2.95,'homeAdvFactor':1.25,'over25Rate':0.59,'bttsRate':0.57,'suggestedRho':-0.16},
+    'PPL': {'homeWinPct':0.43,'drawPct':0.28,'awayWinPct':0.29,'avgHomeGoals':1.40,'avgAwayGoals':1.17,'avgTotalGoals':2.57,'homeAdvFactor':1.20,'over25Rate':0.54,'bttsRate':0.53,'suggestedRho':-0.13},
+}
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 cache = {}
@@ -180,6 +404,61 @@ teamstats_status = {}
 teamstats_lock   = threading.Lock()
 prediction_lock  = threading.Lock()
 
+# ── ML model ──────────────────────────────────────────────────────────────────
+_ml_model = None
+_ml_meta  = {}
+_ml_lock  = threading.Lock()
+
+def _load_ml_model():
+    global _ml_model, _ml_meta
+    path = _data_path('prediction_model.pkl')
+    meta_path = path.replace('.pkl', '_meta.json')
+    if not os.path.exists(path):
+        return
+    try:
+        import joblib
+        with _ml_lock:
+            _ml_model = joblib.load(path)
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                _ml_meta = json.load(f)
+        print(f'  [ML] Model loaded — accuracy={_ml_meta.get("cv_accuracy","?")}  n={_ml_meta.get("n_train","?")}')
+    except Exception as e:
+        print(f'  [ML] Model load failed: {e}')
+
+def _start_ml_training():
+    def worker():
+        try:
+            import train_model
+            ok = train_model.train()
+            if ok:
+                _load_ml_model()
+        except Exception as e:
+            print(f'  [ML] Training thread error: {e}')
+    threading.Thread(target=worker, daemon=True).start()
+
+def _season_stage():
+    m = _dt.date.today().month
+    stages = {8:0.0,9:0.10,10:0.20,11:0.30,12:0.40,1:0.50,2:0.60,3:0.70,4:0.80,5:0.90,6:1.0,7:1.0}
+    return stages.get(m, 0.5)
+
+_ML_LEAGUE_ORDER = ['PL','ELC','BL1','PD','SA','FL1','DED','PPL']
+
+def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29, has_odds=False):
+    """Build ML feature vector matching train_model.FEATURE_NAMES order."""
+    lg_idx  = _ML_LEAGUE_ORDER.index(comp) if comp in _ML_LEAGUE_ORDER else 0
+    lg_norm = lg_idx / max(1, len(_ML_LEAGUE_ORDER) - 1)
+    form_h  = hdata.get('formPct') or 0.45
+    form_a  = adata.get('formPct') or 0.45
+    sot_h   = hdata.get('sotHomePg') or hdata.get('sotPg') or 4.0
+    sot_a   = adata.get('sotAwayPg') or adata.get('sotPg') or 4.0
+    gf_h    = hdata.get('gfHomePg')  or hdata.get('goals_pg') or 1.3
+    ga_h    = hdata.get('gaHomePg')  or hdata.get('goals_ag_pg') or 1.1
+    gf_a    = adata.get('gfAwayPg')  or adata.get('goals_pg') or 1.1
+    ga_a    = adata.get('gaAwayPg')  or adata.get('goals_ag_pg') or 1.2
+    return [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
+            shin_h, shin_d, shin_a, float(has_odds), _season_stage(), lg_norm]
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _stat_num(value):
     if value in (None, '', '-'): return None
@@ -231,6 +510,36 @@ def _over25_prob(lh, la, max_g=7):
         for j in range(max_g + 1):
             if i + j > 2: p += pi * _poisson_pmf(j, la)
     return p
+
+def _dc_draw_prob(lh, la, rho, max_g=7):
+    """DC-corrected draw probability for a given rho."""
+    def _tau(i, j):
+        if i == 0 and j == 0: return 1 - lh * la * rho
+        if i == 1 and j == 0: return 1 + la * rho
+        if i == 0 and j == 1: return 1 + lh * rho
+        if i == 1 and j == 1: return 1 - rho
+        return 1.0
+    return sum(_poisson_pmf(k, lh) * _poisson_pmf(k, la) * _tau(k, k)
+               for k in range(max_g + 1))
+
+def _match_probs_dc(lh, la, rho=-0.13, max_g=7):
+    """Dixon-Coles corrected 1X2 probabilities (increases draw vs plain Poisson)."""
+    def _tau(i, j):
+        if i == 0 and j == 0: return max(0.0, 1 - lh * la * rho)
+        if i == 1 and j == 0: return max(0.0, 1 + la * rho)
+        if i == 0 and j == 1: return max(0.0, 1 + lh * rho)
+        if i == 1 and j == 1: return max(0.0, 1 - rho)
+        return 1.0
+    ph = pd = pa = 0.0
+    for i in range(max_g + 1):
+        pi = _poisson_pmf(i, lh)
+        for j in range(max_g + 1):
+            p = pi * _poisson_pmf(j, la) * _tau(i, j)
+            if i > j:    ph += p
+            elif i == j: pd += p
+            else:        pa += p
+    tot = ph + pd + pa
+    return (ph/tot, pd/tot, pa/tot) if tot else (1/3, 1/3, 1/3)
 
 # Prediction ledger
 def _prediction_path():
@@ -411,12 +720,139 @@ def _avg(vals):
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
+# ── League calibration (football-data.org historical data) ───────────────────
+_calibration_lock     = threading.Lock()
+_calibration_building = False
+
+def _load_calibration():
+    cal = _load_json_file(CALIBRATION_FILE, {})
+    file_leagues = (cal or {}).get('leagues', {})
+    merged = dict(_LEAGUE_CAL_DEFAULTS)
+    merged.update(file_leagues)
+    if not cal:
+        return {'leagues': merged, 'source': 'defaults'}
+    return {**cal, 'leagues': merged}
+
+def fetch_fd_season(fd_code, season):
+    if not FD_KEY:
+        return []
+    cache_key = f'/fd_cal/{fd_code}/{season}'
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+    url = f'{FD_BASE}/competitions/{fd_code}/matches?season={season}&status=FINISHED'
+    try:
+        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'X-Auth-Token': FD_KEY, 'User-Agent': 'Scoutline/2.0'})
+        with urllib.request.urlopen(req, timeout=25, context=ctx) as r:
+            raw = json.loads(r.read())
+            results = []
+            for m in raw.get('matches', []):
+                sc = (m.get('score') or {}).get('fullTime') or {}
+                hg, ag = sc.get('home'), sc.get('away')
+                if hg is not None and ag is not None:
+                    try: results.append((int(hg), int(ag)))
+                    except (TypeError, ValueError): pass
+            set_cache(cache_key, results, ttl=7 * 24 * 3600)
+            print(f'  [FD] {fd_code}/{season}: {len(results)} matches')
+            return results
+    except Exception as e:
+        print(f'  [FD] {fd_code}/{season} failed: {e}')
+        return []
+
+def build_league_calibration():
+    global _calibration_building
+    with _calibration_lock:
+        if _calibration_building: return
+        _calibration_building = True
+    try:
+        print('  [CAL] Building league calibration from football-data.org...')
+        leagues = {}
+        for comp, fd_code in FD_LEAGUE_MAP.items():
+            all_matches = []
+            for season in CALIBRATION_SEASONS:
+                all_matches.extend(fetch_fd_season(fd_code, season))
+                time.sleep(0.25)
+            if len(all_matches) < 50:
+                print(f'  [CAL] {comp}: insufficient data ({len(all_matches)} matches)')
+                continue
+            n      = len(all_matches)
+            h_wins = sum(1 for h, a in all_matches if h > a)
+            draws  = sum(1 for h, a in all_matches if h == a)
+            a_wins = n - h_wins - draws
+            avg_hg = sum(h for h, a in all_matches) / n
+            avg_ag = sum(a for h, a in all_matches) / n
+            over25 = sum(1 for h, a in all_matches if h + a > 2)
+            btts   = sum(1 for h, a in all_matches if h > 0 and a > 0)
+            # binary-search rho so DC draw rate ≈ historical draw rate
+            target_dr = draws / n
+            best_rho, best_diff = -0.13, float('inf')
+            for rho100 in range(-25, -5):
+                rho_c = rho100 / 100.0
+                diff  = abs(_dc_draw_prob(avg_hg, avg_ag, rho_c) - target_dr)
+                if diff < best_diff:
+                    best_diff, best_rho = diff, rho_c
+            ha_factor = avg_hg / avg_ag if avg_ag > 0 else 1.1
+            leagues[comp] = {
+                'n': n,
+                'homeWinPct':   round(h_wins / n, 4),
+                'drawPct':      round(draws   / n, 4),
+                'awayWinPct':   round(a_wins  / n, 4),
+                'avgHomeGoals': round(avg_hg, 3),
+                'avgAwayGoals': round(avg_ag, 3),
+                'avgTotalGoals':round(avg_hg + avg_ag, 3),
+                'homeAdvFactor':round(ha_factor, 3),
+                'over25Rate':   round(over25 / n, 4),
+                'bttsRate':     round(btts   / n, 4),
+                'suggestedRho': round(_clamp(best_rho, -0.25, -0.06), 3),
+            }
+            print(f'  [CAL] {comp}: n={n} homeAdv={ha_factor:.3f} '
+                  f'draw={draws/n:.3f} rho={best_rho}')
+        if leagues:
+            result = {'builtAt': _dt.datetime.now(_dt.timezone.utc).isoformat(), 'leagues': leagues}
+            _save_json_file(CALIBRATION_FILE, result)
+            print(f'  [CAL] Saved calibration for {len(leagues)} leagues')
+            return result
+        return {}
+    finally:
+        with _calibration_lock:
+            _calibration_building = False
+
+def _calibration_is_stale():
+    if not os.path.exists(_data_path(CALIBRATION_FILE)):
+        return True
+    cal = _load_json_file(CALIBRATION_FILE, {})
+    if not cal or not cal.get('leagues'):
+        return True
+    try:
+        age = (_dt.datetime.now(_dt.timezone.utc) -
+               _dt.datetime.fromisoformat(cal['builtAt'])).total_seconds()
+        return age > 7 * 24 * 3600
+    except Exception:
+        return True
+
 def _prediction_tuning(rows):
     graded = [r for r in rows if r.get('status') == 'graded']
 
-    def build(sample, min_ready=20):
+    def build(sample, comp=None, min_ready=20):
+        cal_data   = _load_calibration()
+        cal_leagues = cal_data.get('leagues', {}) if cal_data else {}
+        cal        = cal_leagues.get(comp or '') or {}
+        N_PRIOR    = 80  # virtual sample weight for historical prior
+
         if not sample:
+            if cal:
+                ha_mult  = round(cal.get('homeAdvFactor', 1.1) / 1.1, 3)
+                rho_val  = round(cal.get('suggestedRho', -0.13), 3)
+                o25_adj  = round(_clamp((cal.get('over25Rate', 0.52) - 0.52) * 100, -20, 20), 1)
+                return {'graded': 0, 'ready': True, 'prior_source': 'historical',
+                        'bias': {'home': 0, 'draw': 0, 'away': 0},
+                        'homeAdvMultiplier': ha_mult, 'dcRho': rho_val,
+                        'oddsWeightScale': 1.0, 'richDataWeightScale': 1.0,
+                        'over25Adjustment': o25_adj, 'over25CalibMap': None,
+                        'outcomeCalibMap': None, 'diagnostics': {}}
             return {'graded': 0, 'ready': False}
+
         n = len(sample)
         actual_counts = {'H': 0, 'D': 0, 'A': 0}
         pred_sum = {'home': 0.0, 'draw': 0.0, 'away': 0.0}
@@ -452,19 +888,83 @@ def _prediction_tuning(rows):
         brier_est = _avg([(r.get('metrics') or {}).get('brier') for r in est_rows])
         over_delta = (_avg(over_actuals) or 0) - (_avg(over_preds) or 0) if over_preds else 0
 
+        # Calibration map: for each confidence bin, compute Bayesian-smoothed actual hit rate.
+        # This exposes bin-level over/under-confidence (e.g. model says 85% but only 29% hit).
+        N_CAL_PRIOR = 8   # virtual samples at base rate (52%) for Bayesian smoothing
+        over25_calib_map = None
+        if over_preds:
+            over25_calib_map = {}
+            for lo, hi, mid in [(0, 30, 15), (30, 50, 40), (50, 70, 60), (70, 101, 85)]:
+                pairs = [(p, a) for p, a in zip(over_preds, over_actuals) if lo <= p < hi]
+                n_bin = len(pairs)
+                n_hit = sum(1 for _, a in pairs if a >= 100)
+                smoothed = round((n_hit * 100 + N_CAL_PRIOR * 52) / (n_bin + N_CAL_PRIOR)) if n_bin > 0 else None
+                over25_calib_map[str(mid)] = {'n': n_bin, 'hit': n_hit, 'actual': smoothed}
+
+        # 1X2 outcome calibration: per-outcome confidence-bin Bayesian calibration maps.
+        # Corrects systematic over/under-confidence in each outcome bucket as graded history grows.
+        N_1X2_PRIOR = 25  # virtual samples at typical base rate (higher prior = slower to trust observations)
+        _OUTCOME_PRIOR = {'H': 44, 'D': 27, 'A': 29}
+        _PROB_KEY      = {'H': 'home', 'D': 'draw', 'A': 'away'}
+        outcome_calib_map = {}
+        graded_with_actual = [r for r in sample if (r.get('actual') or {}).get('outcome')]
+        if graded_with_actual:
+            for outcome in ('H', 'D', 'A'):
+                prob_key = _PROB_KEY[outcome]
+                pr = _OUTCOME_PRIOR[outcome]
+                pv = [
+                    ((r.get('probabilities') or {}).get(prob_key) or 0,
+                     1 if (r.get('actual') or {}).get('outcome') == outcome else 0)
+                    for r in graded_with_actual
+                ]
+                bins = {}
+                for lo, hi, mid in [(0, 25, 12), (25, 40, 32), (40, 55, 47), (55, 70, 62), (70, 101, 85)]:
+                    pairs = [(p, a) for p, a in pv if lo <= p < hi]
+                    n_bin = len(pairs); n_hit = sum(a for _, a in pairs)
+                    bins[str(mid)] = {
+                        'n': n_bin, 'hit': n_hit,
+                        'actual': round((n_hit * 100 + N_1X2_PRIOR * pr) / (n_bin + N_1X2_PRIOR)) if n_bin > 0 else None
+                    }
+                if any(v['n'] > 0 for v in bins.values()):
+                    outcome_calib_map[outcome] = bins
+
+        # Bayesian blend: prior from historical calibration, obs from predictions
+        def blend(prior_val, obs_val):
+            if prior_val is None:
+                return obs_val
+            return (N_PRIOR * prior_val + n * obs_val) / (N_PRIOR + n)
+
+        obs_ha_corr  = 1.0 + (deltas['home'] - deltas['away']) / 1000
+        obs_rho      = -0.13 - deltas['draw'] / 400
+        prior_ha_corr = cal.get('homeAdvFactor', 1.1) / 1.1 if cal else None
+        prior_rho     = cal.get('suggestedRho', -0.13) if cal else None
+        prior_o25     = (cal.get('over25Rate', 0.52) - 0.52) * 100 if cal else None
+
+        ha_mult  = round(_clamp(blend(prior_ha_corr, obs_ha_corr), 0.90, 1.15), 3)
+        rho_val  = round(_clamp(blend(prior_rho, obs_rho), -0.25, -0.06), 3)
+        if over_preds:
+            o25_adj = round(_clamp(blend(prior_o25, over_delta / 2), -20, 20), 1)
+        elif prior_o25 is not None:
+            o25_adj = round(_clamp(prior_o25, -20, 20), 1)
+        else:
+            o25_adj = 0.0
+
         return {
             'graded': n,
-            'ready': n >= min_ready,
+            'ready': bool(cal) or n >= min_ready,
+            'prior_source': 'historical+observed' if cal else 'observed',
             'bias': {
                 'home': round(_clamp(deltas['home'] / 500, -0.04, 0.04), 4),
                 'draw': round(_clamp(deltas['draw'] / 500, -0.04, 0.04), 4),
                 'away': round(_clamp(deltas['away'] / 500, -0.04, 0.04), 4),
             },
-            'homeAdvMultiplier': round(_clamp(1 + (deltas['home'] - deltas['away']) / 1000, 0.94, 1.06), 3),
-            'dcRho': round(_clamp(-0.13 - deltas['draw'] / 400, -0.22, -0.06), 3),
+            'homeAdvMultiplier': ha_mult,
+            'dcRho': rho_val,
             'oddsWeightScale': round(_clamp(1 + ((brier_no_odds or brier_all or 0) - (brier_odds or brier_all or 0)) * 0.35, 0.85, 1.25), 3),
             'richDataWeightScale': round(_clamp(1 + ((brier_est or brier_all or 0) - (brier_rich or brier_all or 0)) * 0.25, 0.9, 1.2), 3),
-            'over25Adjustment': round(_clamp(over_delta / 2, -8, 8), 1),
+            'over25Adjustment': o25_adj,
+            'over25CalibMap': over25_calib_map,
+            'outcomeCalibMap': outcome_calib_map or None,
             'diagnostics': {
                 'avgBrier': round(brier_all, 4) if brier_all is not None else None,
                 'oddsRows': len(odds_rows),
@@ -477,8 +977,8 @@ def _prediction_tuning(rows):
     leagues = {}
     for comp in sorted({r.get('competition') for r in graded if r.get('competition')}):
         sample = [r for r in graded if r.get('competition') == comp]
-        leagues[comp] = build(sample, 25)
-    return {'global': build(graded, 15), 'leagues': leagues}
+        leagues[comp] = build(sample, comp=comp, min_ready=25)
+    return {'global': build(graded, comp=None, min_ready=15), 'leagues': leagues}
 
 def _data_path(path):
     if os.path.isabs(path):
@@ -874,6 +1374,15 @@ def build_teamstats(comp):
                 'htGpg':       avg(s['ht_g'],  s['ht_n']),
                 'csRate':      round(s['clean_sheets'] / g * 100, 1),
                 'hasStats':    bool(s['xg_n'] or s['sot_n'] or s['corn_n'] or s['yc_n']),
+                'formPct': round(
+                    sum(3 if r.get('gf',0)>r.get('ga',0) else (1 if r.get('gf',0)==r.get('ga',0) else 0)
+                        for r in recent) / max(1, len(recent)*3), 3
+                ) if recent else None,
+                'lastMatchDate': recent[0].get('date') if recent else None,
+                'daysSinceLastMatch': round(
+                    (_dt.datetime.now(_dt.timezone.utc) -
+                     _dt.datetime.fromisoformat(recent[0]['date'].replace('Z', '+00:00'))).total_seconds() / 86400, 1
+                ) if recent and recent[0].get('date') else None,
             }
             summary[tid]    = entry
             name_map[tname] = entry
@@ -1006,39 +1515,27 @@ def fetch_apif_odds(comp):
     print(f'  [APIF-ODDS] {comp}: {len(games)} games')
     return games
 
-def fetch_odds(sport_key, markets='h2h,totals'):
-    ODDS_LAST_ERROR.pop(sport_key, None)
-    cache_key = f'/odds_api/{sport_key}/{markets}'
-    cached = get_cache(cache_key)
-    if cached is not None: return cached
-    url = (f'{ODDS_API_BASE}/sports/{sport_key}/odds'
-           f'?apiKey={ODDS_API_KEY}&regions={ODDS_REGION}'
-           f'&markets={markets}&oddsFormat=decimal')
-    try:
-        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Scoutline/2.0'})
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
-            remaining = r.headers.get('x-requests-remaining', '?')
-            used      = r.headers.get('x-requests-used', '?')
-            print(f'  [ODDS] {sport_key}: used={used} remaining={remaining}')
-            data = json.loads(r.read())
-            with cache_lock:
-                cache[_key(cache_key)] = {'data': data, 'ts': time.time(), 'ttl': ODDS_CACHE_TTL}
-            return data
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', 'ignore')
-        try:
-            detail = json.loads(body)
-            msg = detail.get('message') or detail.get('error_code') or body
-            code = detail.get('error_code')
-        except Exception:
-            msg, code = body or str(e), None
-        ODDS_LAST_ERROR[sport_key] = {'status': e.code, 'message': msg, 'code': code}
-        print(f'  [ODDS] {sport_key} failed: HTTP {e.code} {msg}')
-        return []
-    except Exception as e:
-        ODDS_LAST_ERROR[sport_key] = {'status': 503, 'message': str(e), 'code': None}
-        print(f'  [ODDS] {sport_key} failed: {e}'); return []
+
+def _shin_probs(odds_h, odds_d, odds_a, z=0.03):
+    """Shin (1992) method: extract true probabilities from 3-way odds.
+    Corrects longshot bias — gives higher draw probability than multiplicative normalization."""
+    w = [1.0/odds_h, 1.0/odds_d, 1.0/odds_a]
+    W = sum(w)
+    q = [wi/W for wi in w]  # multiplicative start
+    p = q[:]
+    for _ in range(50):
+        S = sum(pi*pi for pi in p)
+        A = z + (1-z)*S
+        p_new = []
+        for qi in q:
+            val = (A*qi - z/3.0) / max(1e-12, 1-z)
+            p_new.append(math.sqrt(max(0.0, val)))
+        tot = sum(p_new)
+        if tot < 1e-10:
+            break
+        p = [pi/tot for pi in p_new]
+    tot = sum(p)
+    return [pi/tot for pi in p] if tot > 0 else q
 
 def _enrich_odds_rows(game):
     bk_rows = game.get('bookmakers') or []
@@ -1052,8 +1549,8 @@ def _enrich_odds_rows(game):
     odds_a = max(as_) if as_ else None
     impl_h = impl_d = impl_a = None
     if odds_h and odds_d and odds_a:
-        rh = 1/odds_h; rd = 1/odds_d; ra = 1/odds_a; tot = rh+rd+ra
-        impl_h = round(rh/tot*100, 1); impl_d = round(rd/tot*100, 1); impl_a = round(ra/tot*100, 1)
+        sh, sd, sa = _shin_probs(odds_h, odds_d, odds_a)
+        impl_h = round(sh*100, 1); impl_d = round(sd*100, 1); impl_a = round(sa*100, 1)
     return [{
         'id': game.get('id'), 'commence_time': game.get('commence_time'),
         'home': game.get('home', ''), 'away': game.get('away', ''),
@@ -1064,52 +1561,14 @@ def _enrich_odds_rows(game):
         'best_o25': max(o25) if o25 else None, 'best_u25': max(u25) if u25 else None,
         'impl_h': impl_h, 'impl_d': impl_d, 'impl_a': impl_a,
         'bookmakers': bk_rows, 'num_bookmakers': len(bk_rows),
-        'source': game.get('source', 'the-odds-api'),
+        'source': game.get('source', 'api-football'),
     }]
-
-def _normalize_odds_games(raw_games):
-    enriched = []
-    for game in (raw_games or []):
-        home = game.get('home_team', ''); away = game.get('away_team', '')
-        bk_rows = []
-        for bk in game.get('bookmakers', []):
-            row = {'name': bk['title'], 'key': bk['key']}
-            for mkt in bk.get('markets', []):
-                if mkt['key'] == 'h2h':
-                    for o in mkt['outcomes']:
-                        if o['name'] == home:    row['h'] = o['price']
-                        elif o['name'] == 'Draw': row['d'] = o['price']
-                        else:                    row['a'] = o['price']
-                elif mkt['key'] == 'totals':
-                    for o in mkt['outcomes']:
-                        if o.get('point') == 2.5:
-                            if o['name'] == 'Over':  row['o25'] = o['price']
-                            if o['name'] == 'Under': row['u25'] = o['price']
-            bk_rows.append(row)
-        enriched.extend(_enrich_odds_rows({
-            'id': game.get('id'), 'commence_time': game.get('commence_time'),
-            'home': home, 'away': away, 'bookmakers': bk_rows, 'source': 'the-odds-api',
-        }))
-    return enriched
 
 def get_normalized_odds(comp):
     games = fetch_apif_odds(comp)
     if games:
         return _record_odds_snapshot(comp, games), 'api-football', None
-
-    sport_key = ODDS_SPORT_KEYS.get(comp)
-    if not sport_key:
-        return [], 'api-football', {'status': 404, 'message': f'No fallback odds key for {comp}', 'code': None}
-    if APIF_KEY and not ODDS_FALLBACK_ENABLED:
-        return [], 'api-football', {'status': 404, 'message': 'No API-Football odds found for this league right now. The Odds API fallback is disabled to avoid quota errors; set ODDS_FALLBACK_ENABLED=1 if you want to use it.', 'code': None}
-    if not ODDS_API_KEY:
-        return [], 'api-football', {'status': 503, 'message': 'No API-Football odds found, and ODDS_API_KEY fallback is not set in .env', 'code': None}
-
-    raw = fetch_odds(sport_key, markets='h2h,totals')
-    games = _normalize_odds_games(raw or [])
-    err = ODDS_LAST_ERROR.get(sport_key)
-    source = 'the-odds-api'
-    return _record_odds_snapshot(comp, games), source, err if not games else None
+    return [], 'api-football', {'status': 404, 'message': f'No odds available for {comp} right now — API-Football may not have published odds for upcoming fixtures yet.', 'code': None}
 
 def _advisor_standings_map(comp):
     """Lightweight fallback model data when detailed teamstats are not cached."""
@@ -1129,14 +1588,45 @@ def _advisor_standings_map(comp):
     return name_map
 
 # Leagues the advisor scans by default (all leagues with odds keys)
-ADVISOR_LEAGUES = [c for c in APIF_LEAGUE_MAP if c in ODDS_SPORT_KEYS]
+ADVISOR_LEAGUES = list(APIF_LEAGUE_MAP.keys())
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(SimpleHTTPRequestHandler):
+    def _require_auth(self) -> bool:
+        if _get_session_from_request(self): return True
+        self.send_response(302)
+        self.send_header('Location', '/login?err=2')
+        self.end_headers(); return False
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path   = parsed.path
         qs     = parsed.query
+
+        if path == '/health':
+            self.send_response(200); self.send_header('Content-Type','text/plain')
+            self.end_headers(); self.wfile.write(b'ok'); return
+
+        if path == '/login':
+            body = LOGIN_HTML.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers(); self.wfile.write(body); return
+
+        if path == '/logout':
+            cookie = self.headers.get('Cookie', '')
+            for part in cookie.split(';'):
+                part = part.strip()
+                if part.startswith('scoutline_session='):
+                    SESSIONS.pop(part[len('scoutline_session='):], None)
+            self.send_response(302)
+            self.send_header('Set-Cookie', 'scoutline_session=; Max-Age=0; Path=/')
+            self.send_header('Location', '/login')
+            self.end_headers(); return
+
+        if not self._require_auth(): return
+
         if   path.startswith('/api/'):       self.handle_api(path[4:] + ('?' + qs if qs else ''))
         elif path.startswith('/teamstats/'): self.handle_teamstats(path.split('/')[-1].upper())
         elif path.startswith('/odds/'):      self.handle_odds(path.split('/')[-1].upper())
@@ -1147,19 +1637,23 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/predictions':         self.handle_predictions(qs)
+        elif path == '/calibration':         self.handle_calibration()
+        elif path == '/ml-predict':          self.handle_ml_predict(qs)
+        elif path == '/ml-status':           self.send_json({**_ml_meta, 'available': _ml_model is not None})
+        elif path == '/retrain-model':       self.handle_retrain_model()
+        elif path == '/clubelo':             self.send_json(_fetch_clubelo())
+        elif path.startswith('/understat/'): self.send_json(_fetch_understat(path.split('/')[-1].upper()))
         elif path == '/config':
             self.send_json({'apif': bool(APIF_KEY),
-                            'odds': bool(APIF_KEY or ODDS_API_KEY),
-                            'odds_provider': 'api-football' if APIF_KEY else 'the-odds-api',
-                            'odds_fallback': ODDS_FALLBACK_ENABLED,
+                            'odds': bool(APIF_KEY),
+                            'odds_provider': 'api-football',
                             'full_data_leagues': list(APIF_LEAGUE_MAP.keys())})
         elif path == '/status':
             with teamstats_lock:
                 ts = dict(teamstats_status)
             self.send_json({'ts': ts, 'apif': bool(APIF_KEY),
-                            'odds': bool(APIF_KEY or ODDS_API_KEY),
-                            'odds_provider': 'api-football' if APIF_KEY else 'the-odds-api',
-                            'odds_fallback': ODDS_FALLBACK_ENABLED,
+                            'odds': bool(APIF_KEY),
+                            'odds_provider': 'api-football',
                             'cache_entries': len(cache),
                             'ttl': CACHE_TTL})
         else:
@@ -1167,6 +1661,27 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+
+        if parsed.path == '/login':
+            size = int(self.headers.get('Content-Length', '0'))
+            body = self.rfile.read(size).decode('utf-8')
+            params = urllib.parse.parse_qs(body)
+            username = params.get('username', [''])[0].strip()
+            password = params.get('password', [''])[0]
+            if auth_check_user(username, password):
+                token = session_create(username)
+                self.send_response(302)
+                self.send_header('Set-Cookie', f'scoutline_session={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly; SameSite=Lax')
+                self.send_header('Location', '/scoutline.html')
+                self.end_headers()
+            else:
+                self.send_response(302)
+                self.send_header('Location', '/login?err=1')
+                self.end_headers()
+            return
+
+        if not self._require_auth(): return
+
         if parsed.path != '/predictions':
             self.send_json({'error': f'Unknown route: {parsed.path}'}, 404); return
         try:
@@ -1184,7 +1699,7 @@ class Handler(SimpleHTTPRequestHandler):
         m = _re.match(r'/competitions/(\w+)/standings', api_path)
         if m:
             result = apif_standings(m.group(1))
-            if result: self.send_json(result); return
+            if result is not None: self.send_json(result); return
             self.send_json({'error': f'No standings for {m.group(1)}'}, 404); return
         m = _re.match(r'/competitions/(\w+)/matches', api_path)
         if m:
@@ -1198,7 +1713,7 @@ class Handler(SimpleHTTPRequestHandler):
                                    qs.get('homeTeam', [None])[0],
                                    qs.get('awayTeam', [None])[0],
                                    qs.get('limit',    [None])[0])
-            if result: self.send_json(result); return
+            if result is not None: self.send_json(result); return  # empty list = valid (no fixtures)
             self.send_json({'error': f'No fixtures for {comp}'}, 404); return
         self.send_json({'error': f'Unknown route: {api_path}'}, 404)
 
@@ -1354,6 +1869,13 @@ class Handler(SimpleHTTPRequestHandler):
                         'competition': comp, 'injuries': out_injuries,
                         'lineups': lineups_out, 'events': event_summary})
 
+    def handle_calibration(self):
+        cal = _load_calibration()
+        if cal and cal.get('leagues') and not _calibration_is_stale():
+            self.send_json(cal); return
+        threading.Thread(target=build_league_calibration, daemon=True).start()
+        self.send_json(cal or {'leagues': {}, 'building': True})
+
     def handle_odds(self, comp):
         if comp not in APIF_LEAGUE_MAP:
             self.send_json({'error': f'{comp} is not supported for API-Football odds',
@@ -1365,7 +1887,6 @@ class Handler(SimpleHTTPRequestHandler):
                             'games': [], 'count': 0}, err.get('status') or 503); return
         info = APIF_LEAGUE_MAP.get(comp) or {}
         self.send_json({'competition': comp, 'provider': source,
-                        'sport_key': ODDS_SPORT_KEYS.get(comp),
                         'games': games, 'count': len(games),
                         'cache': cache_meta(f'/apif_odds/{comp}/{info.get("id")}/{info.get("season")}')})
 
@@ -1448,14 +1969,19 @@ class Handler(SimpleHTTPRequestHandler):
             days = max(1, min(30, int(params.get('days', [3])[0])))
         except ValueError:
             days = 3
-        min_edge = {'conservative': 12, 'balanced': 8, 'risky': 5}.get(risk, 8)
+        risk_cfg = {
+            'conservative': {'min_edge': 10, 'max_odds': 2.2,  'min_prob': 0.42},
+            'balanced':     {'min_edge': 7,  'max_odds': 3.5,  'min_prob': 0.30},
+            'risky':        {'min_edge': 5,  'max_odds': 5.5,  'min_prob': 0.20},
+        }
+        cfg      = risk_cfg.get(risk, risk_cfg['balanced'])
+        min_edge = cfg['min_edge']
         KELLY_CAP = 0.25
         now = _dt.datetime.now(_dt.timezone.utc)
         cutoff = now + _dt.timedelta(days=days)
 
-        if not APIF_KEY and not ODDS_API_KEY:
-            self.send_json({'error': 'No odds provider configured — set APIFOOTBALL_KEY first, or ODDS_API_KEY as fallback'}); return
-        ODDS_LAST_ERROR.clear()
+        if not APIF_KEY:
+            self.send_json({'error': 'APIFOOTBALL_KEY not set — required for odds'}); return
 
         def fetch_league(comp):
             games, source, _err = get_normalized_odds(comp)
@@ -1472,12 +1998,15 @@ class Handler(SimpleHTTPRequestHandler):
                 except Exception as e:
                     print(f'  [ADV] fetch error: {e}')
 
+        cal_data = _load_calibration()
+        cal_leagues = cal_data.get('leagues', {}) if cal_data else {}
         bets = []
         for comp, games in league_games.items():
             ts_cache = get_cache(f'/teamstats/{comp}') or {}
             name_map = ts_cache.get('name_map', {})
             if games and not name_map:
                 name_map = _advisor_standings_map(comp)
+            comp_rho = cal_leagues.get(comp, {}).get('suggestedRho', -0.13)
             for game in games:
                 if not game.get('impl_h'): continue
                 raw_dt = (game.get('commence_time') or '').replace('Z', '+00:00')
@@ -1493,13 +2022,21 @@ class Handler(SimpleHTTPRequestHandler):
                 hdata = _fuzzy_match(home, name_map)
                 adata = _fuzzy_match(away, name_map)
                 if not hdata or not adata: continue
-                h_xg  = hdata.get('xg_pg')  or (hdata.get('sotPg') or 0)*0.30 or hdata.get('goals_pg')  or 1.2
-                h_xga = hdata.get('xga_pg') or hdata.get('goals_ag_pg') or 1.1
-                a_xg  = adata.get('xg_pg')  or (adata.get('sotPg') or 0)*0.30 or adata.get('goals_pg')  or 1.0
-                a_xga = adata.get('xga_pg') or adata.get('goals_ag_pg') or 1.2
-                lh    = max(0.2, ((h_xg + a_xga) / 2) * 1.10)
-                la    = max(0.2,  (a_xg + h_xga) / 2)
-                ph, pd, pa = _match_probs(lh, la)
+                # Use venue-split xG when available (home team's home xG, away team's away xG)
+                h_xg  = hdata.get('xgHomePg') or hdata.get('xg_pg')  or (hdata.get('sotPg') or 0)*0.30 or hdata.get('goals_pg')  or 1.2
+                h_xga = hdata.get('xgaHomePg') or hdata.get('xga_pg') or hdata.get('goals_ag_pg') or 1.1
+                a_xg  = adata.get('xgAwayPg') or adata.get('xg_pg')  or (adata.get('sotPg') or 0)*0.30 or adata.get('goals_pg')  or 1.0
+                a_xga = adata.get('xgaAwayPg') or adata.get('xga_pg') or adata.get('goals_ag_pg') or 1.2
+                comp_ha  = cal_leagues.get(comp, {}).get('homeAdvFactor', 1.10)
+                avg_hg   = cal_leagues.get(comp, {}).get('avgHomeGoals', 1.35)
+                avg_ag   = cal_leagues.get(comp, {}).get('avgAwayGoals', 1.10)
+                if avg_hg > 0 and avg_ag > 0:
+                    lh = max(0.2, (h_xg / avg_hg) * (a_xga / avg_ag) * avg_hg * comp_ha)
+                    la = max(0.2, (a_xg / avg_ag) * (h_xga / avg_hg) * avg_ag)
+                else:
+                    lh = max(0.2, ((h_xg + a_xga) / 2) * comp_ha)
+                    la = max(0.2,  (a_xg + h_xga) / 2)
+                ph, pd, pa = _match_probs_dc(lh, la, rho=comp_rho)
                 po25  = _over25_prob(lh, la)
                 dt    = game.get('commence_time', '')
                 outcomes = [
@@ -1512,6 +2049,8 @@ class Handler(SimpleHTTPRequestHandler):
                     outcomes.append(('Over 2.5', game['best_o25'], None, po25, impl25))
                 for label, odds, bk, model_p, impl_p in outcomes:
                     if not odds or odds <= 1 or not model_p or not impl_p: continue
+                    if odds > cfg['max_odds']: continue
+                    if model_p < cfg['min_prob']: continue
                     edge = round(model_p*100 - impl_p*100, 1)
                     if edge < min_edge: continue
                     ev = model_p*(odds - 1) - (1 - model_p)
@@ -1526,14 +2065,51 @@ class Handler(SimpleHTTPRequestHandler):
                         'edge': edge, 'ev': round(ev, 4), 'kellyFrac': round(kf, 4),
                     })
         bets.sort(key=lambda x: -x['ev'])
-        if not bets and ODDS_LAST_ERROR:
-            first = next(iter(ODDS_LAST_ERROR.values()))
-            self.send_json({'error': first['message'], 'error_code': first.get('code'),
-                            'bets': [], 'total': 0, 'leagues_scanned': len(league_games),
-                            'risk': risk, 'min_edge': min_edge}, first.get('status') or 503); return
         self.send_json({'bets': bets[:top_n], 'total': len(bets),
                         'leagues_scanned': len(league_games), 'risk': risk,
-                        'min_edge': min_edge, 'days': days})
+                        'min_edge': min_edge, 'max_odds': cfg['max_odds'],
+                        'min_prob': cfg['min_prob'], 'days': days})
+
+    def handle_ml_predict(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        if _ml_model is None:
+            self.send_json({'available': False, 'reason': 'model not loaded'}); return
+        try:
+            comp    = params.get('comp',    ['PL']  )[0].upper()
+            home_id = params.get('homeId',  [None]  )[0]
+            away_id = params.get('awayId',  [None]  )[0]
+            shin_h  = float(params.get('shinH', [0.44])[0])
+            shin_d  = float(params.get('shinD', [0.27])[0])
+            shin_a  = float(params.get('shinA', [0.29])[0])
+            has_odds= params.get('hasOdds', ['0'])[0] in ('1','true','yes')
+        except (ValueError, TypeError) as e:
+            self.send_json({'error': f'Invalid params: {e}'}, 400); return
+
+        ts    = get_cache(f'/teamstats/{comp}') or {}
+        teams = ts.get('teams', {})
+        hdata = teams.get(str(home_id) if home_id else '') or {}
+        adata = teams.get(str(away_id) if away_id else '') or {}
+        if not hdata or not adata:
+            self.send_json({'available': False, 'reason': f'team stats not cached for {comp}'}); return
+
+        feat = _ml_features(hdata, adata, comp, shin_h, shin_d, shin_a, has_odds)
+        try:
+            import numpy as np
+            proba = _ml_model.predict_proba(np.array([feat], dtype=np.float32))[0]
+            self.send_json({
+                'available': True,
+                'home': round(float(proba[0]) * 100, 1),
+                'draw': round(float(proba[1]) * 100, 1),
+                'away': round(float(proba[2]) * 100, 1),
+                'accuracy': _ml_meta.get('cv_accuracy'),
+                'n_train':  _ml_meta.get('n_train'),
+            })
+        except Exception as e:
+            self.send_json({'available': False, 'reason': str(e)})
+
+    def handle_retrain_model(self):
+        _start_ml_training()
+        self.send_json({'status': 'training_started', 'message': 'ML model retraining in background'})
 
     def send_json(self, data, code=200):
         body = json.dumps(data).encode()
@@ -1545,44 +2121,54 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        status = args[1] if len(args) > 1 else '?'; p = self.path
-        if   p.startswith('/teamstats/'): print(f'  [TS]   {p}  {status}')
-        elif p.startswith('/players/'):   print(f'  [PLYR] {p}  {status}')
-        elif p.startswith('/fixture-intel/'): print(f'  [INTEL] {p}  {status}')
-        elif p.startswith('/odds/'):      print(f'  [ODDS] {p}  {status}')
-        elif p.startswith('/advisor'):    print(f'  [ADV]  {p}  {status}')
-        elif p.startswith('/predictions'):print(f'  [PRED] {p}  {status}')
-        elif p.startswith('/api/'):       print(f'  [API]  {p[4:]}  {status}')
-        elif not p.endswith(('.ico', '.map')): print(f'  [WEB]  {p}  {status}')
+        try:
+            status = args[1] if len(args) > 1 else '?'; p = getattr(self, 'path', None) or '?'
+            if   p.startswith('/teamstats/'): print(f'  [TS]   {p}  {status}')
+            elif p.startswith('/players/'):   print(f'  [PLYR] {p}  {status}')
+            elif p.startswith('/fixture-intel/'): print(f'  [INTEL] {p}  {status}')
+            elif p.startswith('/odds/'):      print(f'  [ODDS] {p}  {status}')
+            elif p.startswith('/advisor'):    print(f'  [ADV]  {p}  {status}')
+            elif p.startswith('/predictions'):print(f'  [PRED] {p}  {status}')
+            elif p.startswith('/api/'):       print(f'  [API]  {p[4:]}  {status}')
+            elif not p.endswith(('.ico', '.map')): print(f'  [WEB]  {p}  {status}')
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    _init_auth_db()
     load_disk_cache(); atexit.register(save_disk_cache)
     apif_status = 'configured' if APIF_KEY else 'missing - set APIFOOTBALL_KEY in .env'
-    odds_status = (
-        'API-Football primary' + (' + fallback' if ODDS_FALLBACK_ENABLED and ODDS_API_KEY else '')
-        if APIF_KEY else ('The Odds API fallback' if ODDS_API_KEY else 'missing odds provider')
-    )
     print(f'''
   ============================================================
   Scoutline - API-Football Pro
   ------------------------------------------------------------
   Open:    http://localhost:{PORT}/scoutline.html
   APIF:    {apif_status}
-  ODDS:    {odds_status}
+  ODDS:    API-Football (sole provider)
   Leagues: {len(APIF_LEAGUE_MAP)} supported
   ============================================================
 ''')
     def startup():
         time.sleep(2)
+        # Load ML model if available, otherwise trigger background training
+        if os.path.exists(_data_path('prediction_model.pkl')):
+            _load_ml_model()
+        else:
+            print('  [ML] Model not found — training in background (takes ~2 min)')
+            _start_ml_training()
         ts = get_cache('/teamstats/PL')
         if ts and ts.get('teams'):
             with teamstats_lock: teamstats_status['PL'] = 'ready'
             print(f'  [TS] PL from disk ({len(ts["teams"])} teams)')
         elif APIF_KEY:
             build_teamstats('PL')
+        if FD_KEY and _calibration_is_stale():
+            threading.Thread(target=build_league_calibration, daemon=True).start()
+        elif not FD_KEY:
+            print('  [CAL] FOOTBALL_DATA_KEY not set — skipping calibration build')
     threading.Thread(target=startup, daemon=True).start()
-    server = HTTPServer(('', PORT), Handler)
+    server = ThreadingHTTPServer(('', PORT), Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\n  Stopped.')
 
