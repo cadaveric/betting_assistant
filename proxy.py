@@ -314,6 +314,25 @@ FD_LEAGUE_MAP   = {
 }
 CALIBRATION_SEASONS = [2021, 2022, 2023, 2024]
 
+# Static historical defaults — used when league_calibration.json is absent or a league is missing.
+# Values derived from multi-season averages across major competitions.
+_LEAGUE_CAL_DEFAULTS = {
+    'PL':  {'homeWinPct':0.46,'drawPct':0.24,'awayWinPct':0.30,'avgHomeGoals':1.53,'avgAwayGoals':1.13,'avgTotalGoals':2.66,'homeAdvFactor':1.35,'over25Rate':0.53,'bttsRate':0.52,'suggestedRho':-0.10},
+    'ELC': {'homeWinPct':0.45,'drawPct':0.25,'awayWinPct':0.30,'avgHomeGoals':1.46,'avgAwayGoals':1.14,'avgTotalGoals':2.60,'homeAdvFactor':1.28,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.12},
+    'L1':  {'homeWinPct':0.44,'drawPct':0.27,'awayWinPct':0.29,'avgHomeGoals':1.38,'avgAwayGoals':1.08,'avgTotalGoals':2.46,'homeAdvFactor':1.28,'over25Rate':0.48,'bttsRate':0.49,'suggestedRho':-0.12},
+    'L2':  {'homeWinPct':0.42,'drawPct':0.28,'awayWinPct':0.30,'avgHomeGoals':1.33,'avgAwayGoals':1.12,'avgTotalGoals':2.45,'homeAdvFactor':1.19,'over25Rate':0.48,'bttsRate':0.48,'suggestedRho':-0.13},
+    'BL1': {'homeWinPct':0.44,'drawPct':0.24,'awayWinPct':0.32,'avgHomeGoals':1.72,'avgAwayGoals':1.27,'avgTotalGoals':2.99,'homeAdvFactor':1.35,'over25Rate':0.60,'bttsRate':0.57,'suggestedRho':-0.16},
+    'BL2': {'homeWinPct':0.43,'drawPct':0.26,'awayWinPct':0.31,'avgHomeGoals':1.59,'avgAwayGoals':1.20,'avgTotalGoals':2.79,'homeAdvFactor':1.33,'over25Rate':0.56,'bttsRate':0.54,'suggestedRho':-0.14},
+    'PD':  {'homeWinPct':0.46,'drawPct':0.27,'awayWinPct':0.27,'avgHomeGoals':1.38,'avgAwayGoals':1.13,'avgTotalGoals':2.51,'homeAdvFactor':1.22,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.13},
+    'SA':  {'homeWinPct':0.47,'drawPct':0.26,'awayWinPct':0.27,'avgHomeGoals':1.40,'avgAwayGoals':1.09,'avgTotalGoals':2.49,'homeAdvFactor':1.29,'over25Rate':0.54,'bttsRate':0.52,'suggestedRho':-0.12},
+    'FL1': {'homeWinPct':0.44,'drawPct':0.27,'awayWinPct':0.29,'avgHomeGoals':1.35,'avgAwayGoals':1.08,'avgTotalGoals':2.43,'homeAdvFactor':1.25,'over25Rate':0.51,'bttsRate':0.50,'suggestedRho':-0.12},
+    'CL':  {'homeWinPct':0.44,'drawPct':0.26,'awayWinPct':0.30,'avgHomeGoals':1.39,'avgAwayGoals':1.12,'avgTotalGoals':2.51,'homeAdvFactor':1.24,'over25Rate':0.55,'bttsRate':0.53,'suggestedRho':-0.11},
+    'EL':  {'homeWinPct':0.42,'drawPct':0.27,'awayWinPct':0.31,'avgHomeGoals':1.31,'avgAwayGoals':1.13,'avgTotalGoals':2.44,'homeAdvFactor':1.16,'over25Rate':0.53,'bttsRate':0.51,'suggestedRho':-0.12},
+    'ECL': {'homeWinPct':0.41,'drawPct':0.28,'awayWinPct':0.31,'avgHomeGoals':1.28,'avgAwayGoals':1.11,'avgTotalGoals':2.39,'homeAdvFactor':1.15,'over25Rate':0.51,'bttsRate':0.50,'suggestedRho':-0.12},
+    'DED': {'homeWinPct':0.43,'drawPct':0.25,'awayWinPct':0.32,'avgHomeGoals':1.70,'avgAwayGoals':1.26,'avgTotalGoals':2.96,'homeAdvFactor':1.35,'over25Rate':0.59,'bttsRate':0.57,'suggestedRho':-0.15},
+    'PPL': {'homeWinPct':0.44,'drawPct':0.28,'awayWinPct':0.28,'avgHomeGoals':1.42,'avgAwayGoals':1.16,'avgTotalGoals':2.58,'homeAdvFactor':1.22,'over25Rate':0.55,'bttsRate':0.53,'suggestedRho':-0.13},
+}
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 cache = {}
@@ -649,7 +668,13 @@ _calibration_lock     = threading.Lock()
 _calibration_building = False
 
 def _load_calibration():
-    return _load_json_file(CALIBRATION_FILE, {})
+    cal = _load_json_file(CALIBRATION_FILE, {})
+    file_leagues = (cal or {}).get('leagues', {})
+    merged = dict(_LEAGUE_CAL_DEFAULTS)
+    merged.update(file_leagues)
+    if not cal:
+        return {'leagues': merged, 'source': 'defaults'}
+    return {**cal, 'leagues': merged}
 
 def fetch_fd_season(fd_code, season):
     if not FD_KEY:
@@ -737,7 +762,9 @@ def build_league_calibration():
             _calibration_building = False
 
 def _calibration_is_stale():
-    cal = _load_calibration()
+    if not os.path.exists(_data_path(CALIBRATION_FILE)):
+        return True
+    cal = _load_json_file(CALIBRATION_FILE, {})
     if not cal or not cal.get('leagues'):
         return True
     try:
@@ -1910,8 +1937,15 @@ class Handler(SimpleHTTPRequestHandler):
                 h_xga = hdata.get('xgaHomePg') or hdata.get('xga_pg') or hdata.get('goals_ag_pg') or 1.1
                 a_xg  = adata.get('xgAwayPg') or adata.get('xg_pg')  or (adata.get('sotPg') or 0)*0.30 or adata.get('goals_pg')  or 1.0
                 a_xga = adata.get('xgaAwayPg') or adata.get('xga_pg') or adata.get('goals_ag_pg') or 1.2
-                lh    = max(0.2, ((h_xg + a_xga) / 2) * 1.10)
-                la    = max(0.2,  (a_xg + h_xga) / 2)
+                comp_ha  = cal_leagues.get(comp, {}).get('homeAdvFactor', 1.10)
+                avg_hg   = cal_leagues.get(comp, {}).get('avgHomeGoals', 1.35)
+                avg_ag   = cal_leagues.get(comp, {}).get('avgAwayGoals', 1.10)
+                if avg_hg > 0 and avg_ag > 0:
+                    lh = max(0.2, (h_xg / avg_hg) * (a_xga / avg_ag) * avg_hg * comp_ha)
+                    la = max(0.2, (a_xg / avg_ag) * (h_xga / avg_hg) * avg_ag)
+                else:
+                    lh = max(0.2, ((h_xg + a_xga) / 2) * comp_ha)
+                    la = max(0.2,  (a_xg + h_xga) / 2)
                 ph, pd, pa = _match_probs_dc(lh, la, rho=comp_rho)
                 po25  = _over25_prob(lh, la)
                 dt    = game.get('commence_time', '')
