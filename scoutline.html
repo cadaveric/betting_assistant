@@ -1823,6 +1823,27 @@ async function refreshLeague(){
 function factorial(n){if(n<=1)return 1;let r=1;for(let i=2;i<=n;i++)r*=i;return r}
 function poissonPMF(k,lam){k=Math.min(k,20);return Math.pow(lam,k)*Math.exp(-lam)/factorial(k)}
 
+// Season stage helper (0=Aug, 1=May) — used as an ML feature.
+function _seasonStage(){
+  const stages={8:0.0,9:0.10,10:0.20,11:0.30,12:0.40,1:0.50,2:0.60,3:0.70,4:0.80,5:0.90,6:1.0,7:1.0};
+  return stages[new Date().getMonth()+1]??0.5;
+}
+
+// Call /ml-predict with features; returns {home, draw, away, accuracy} or null.
+async function fetchMLPredict(homeId, awayId, comp, shinH, shinD, shinA, hasOdds){
+  try{
+    const p=new URLSearchParams({
+      homeId,awayId,comp,
+      shinH:(shinH||0).toFixed(3),shinD:(shinD||0).toFixed(3),shinA:(shinA||0).toFixed(3),
+      hasOdds:hasOdds?'1':'0',
+    });
+    const r=await fetch('/ml-predict?'+p,{signal:AbortSignal.timeout(3000)});
+    if(!r.ok)return null;
+    const d=await r.json();
+    return d.available?d:null;
+  }catch(e){return null;}
+}
+
 // Shin (1992) implied probability extraction — corrects longshot bias, gives
 // more accurate draw probability than simple multiplicative normalization.
 function shinProbs(oH,oD,oA){
@@ -2666,6 +2687,7 @@ function renderPredResult(p,hName,aName,h2hData){
           <span class="pred-lam-tag ${p.aDataBadge==='xG'?'xg':p.aDataBadge==='SoT'?'sot':''}">λ ${p.aLam} ${p.aDataBadge}</span>
           ${p.hasOdds?`<span class="pred-lam-tag xg">${t('pred.odds_loaded')}</span>`:''}
           ${p.tuningApplied?`<span class="pred-lam-tag xg">${t('pred.learned')} ${p.tuningGraded}</span>`:''}
+          ${p.mlUsed?`<span class="pred-lam-tag xg" title="ML model trained on ${p.mlN||'?'} matches (CV acc: ${p.mlAccuracy!=null?(p.mlAccuracy*100).toFixed(1)+'%':'?'})">ML blend ${p.mlAccuracy!=null?Math.round(p.mlAccuracy*100)+'%':''}</span>`:''}
         </div>
       </div>
       <div class="pred-hero-team away">
@@ -3602,7 +3624,25 @@ async function runDeepPred(){
     }
   }
 
-  const p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel,fxOdds?.num_bookmakers||0);
+  let p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel,fxOdds?.num_bookmakers||0);
+
+  // ML blend: fetch calibrated probabilities and blend 55% ML + 45% Poisson
+  try{
+    const ml=await fetchMLPredict(
+      hRow.team.id, aRow.team.id, lg,
+      p.implH/100, p.implD/100, p.implA/100, p.hasOdds
+    );
+    if(ml?.home!=null){
+      const wML=0.55,wP=0.45;
+      const bH=Math.round(ml.home*wML+p.pH*wP);
+      const bD=Math.round(ml.draw*wML+p.pD*wP);
+      const bA=100-bH-bD;
+      const newConf=Math.max(bH,bD,bA);
+      p={...p,pH:bH,pD:bD,pA:Math.max(0,bA),conf:newConf,
+          mlUsed:true,mlAccuracy:ml.accuracy,mlN:ml.n_train};
+    }
+  }catch(e){}
+
   window._lastPred={p,hName,aName};
   document.getElementById('predOut').innerHTML=renderPredResult(p,hName,aName,h2hData);
   rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,mw,ha,fixtureIntel).catch(e=>console.warn('Prediction history save failed',e));

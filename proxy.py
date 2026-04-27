@@ -404,6 +404,61 @@ teamstats_status = {}
 teamstats_lock   = threading.Lock()
 prediction_lock  = threading.Lock()
 
+# ── ML model ──────────────────────────────────────────────────────────────────
+_ml_model = None
+_ml_meta  = {}
+_ml_lock  = threading.Lock()
+
+def _load_ml_model():
+    global _ml_model, _ml_meta
+    path = _data_path('prediction_model.pkl')
+    meta_path = path.replace('.pkl', '_meta.json')
+    if not os.path.exists(path):
+        return
+    try:
+        import joblib
+        with _ml_lock:
+            _ml_model = joblib.load(path)
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                _ml_meta = json.load(f)
+        print(f'  [ML] Model loaded — accuracy={_ml_meta.get("cv_accuracy","?")}  n={_ml_meta.get("n_train","?")}')
+    except Exception as e:
+        print(f'  [ML] Model load failed: {e}')
+
+def _start_ml_training():
+    def worker():
+        try:
+            import train_model
+            ok = train_model.train()
+            if ok:
+                _load_ml_model()
+        except Exception as e:
+            print(f'  [ML] Training thread error: {e}')
+    threading.Thread(target=worker, daemon=True).start()
+
+def _season_stage():
+    m = _dt.date.today().month
+    stages = {8:0.0,9:0.10,10:0.20,11:0.30,12:0.40,1:0.50,2:0.60,3:0.70,4:0.80,5:0.90,6:1.0,7:1.0}
+    return stages.get(m, 0.5)
+
+_ML_LEAGUE_ORDER = ['PL','ELC','BL1','PD','SA','FL1','DED','PPL']
+
+def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29, has_odds=False):
+    """Build ML feature vector matching train_model.FEATURE_NAMES order."""
+    lg_idx  = _ML_LEAGUE_ORDER.index(comp) if comp in _ML_LEAGUE_ORDER else 0
+    lg_norm = lg_idx / max(1, len(_ML_LEAGUE_ORDER) - 1)
+    form_h  = hdata.get('formPct') or 0.45
+    form_a  = adata.get('formPct') or 0.45
+    sot_h   = hdata.get('sotHomePg') or hdata.get('sotPg') or 4.0
+    sot_a   = adata.get('sotAwayPg') or adata.get('sotPg') or 4.0
+    gf_h    = hdata.get('gfHomePg')  or hdata.get('goals_pg') or 1.3
+    ga_h    = hdata.get('gaHomePg')  or hdata.get('goals_ag_pg') or 1.1
+    gf_a    = adata.get('gfAwayPg')  or adata.get('goals_pg') or 1.1
+    ga_a    = adata.get('gaAwayPg')  or adata.get('goals_ag_pg') or 1.2
+    return [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
+            shin_h, shin_d, shin_a, float(has_odds), _season_stage(), lg_norm]
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _stat_num(value):
     if value in (None, '', '-'): return None
@@ -1319,6 +1374,10 @@ def build_teamstats(comp):
                 'htGpg':       avg(s['ht_g'],  s['ht_n']),
                 'csRate':      round(s['clean_sheets'] / g * 100, 1),
                 'hasStats':    bool(s['xg_n'] or s['sot_n'] or s['corn_n'] or s['yc_n']),
+                'formPct': round(
+                    sum(3 if r.get('gf',0)>r.get('ga',0) else (1 if r.get('gf',0)==r.get('ga',0) else 0)
+                        for r in recent) / max(1, len(recent)*3), 3
+                ) if recent else None,
                 'lastMatchDate': recent[0].get('date') if recent else None,
                 'daysSinceLastMatch': round(
                     (_dt.datetime.now(_dt.timezone.utc) -
@@ -1579,6 +1638,9 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/calibration':         self.handle_calibration()
+        elif path == '/ml-predict':          self.handle_ml_predict(qs)
+        elif path == '/ml-status':           self.send_json({**_ml_meta, 'available': _ml_model is not None})
+        elif path == '/retrain-model':       self.handle_retrain_model()
         elif path == '/clubelo':             self.send_json(_fetch_clubelo())
         elif path.startswith('/understat/'): self.send_json(_fetch_understat(path.split('/')[-1].upper()))
         elif path == '/config':
@@ -2008,6 +2070,47 @@ class Handler(SimpleHTTPRequestHandler):
                         'min_edge': min_edge, 'max_odds': cfg['max_odds'],
                         'min_prob': cfg['min_prob'], 'days': days})
 
+    def handle_ml_predict(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        if _ml_model is None:
+            self.send_json({'available': False, 'reason': 'model not loaded'}); return
+        try:
+            comp    = params.get('comp',    ['PL']  )[0].upper()
+            home_id = params.get('homeId',  [None]  )[0]
+            away_id = params.get('awayId',  [None]  )[0]
+            shin_h  = float(params.get('shinH', [0.44])[0])
+            shin_d  = float(params.get('shinD', [0.27])[0])
+            shin_a  = float(params.get('shinA', [0.29])[0])
+            has_odds= params.get('hasOdds', ['0'])[0] in ('1','true','yes')
+        except (ValueError, TypeError) as e:
+            self.send_json({'error': f'Invalid params: {e}'}, 400); return
+
+        ts    = get_cache(f'/teamstats/{comp}') or {}
+        teams = ts.get('teams', {})
+        hdata = teams.get(str(home_id) if home_id else '') or {}
+        adata = teams.get(str(away_id) if away_id else '') or {}
+        if not hdata or not adata:
+            self.send_json({'available': False, 'reason': f'team stats not cached for {comp}'}); return
+
+        feat = _ml_features(hdata, adata, comp, shin_h, shin_d, shin_a, has_odds)
+        try:
+            import numpy as np
+            proba = _ml_model.predict_proba(np.array([feat], dtype=np.float32))[0]
+            self.send_json({
+                'available': True,
+                'home': round(float(proba[0]) * 100, 1),
+                'draw': round(float(proba[1]) * 100, 1),
+                'away': round(float(proba[2]) * 100, 1),
+                'accuracy': _ml_meta.get('cv_accuracy'),
+                'n_train':  _ml_meta.get('n_train'),
+            })
+        except Exception as e:
+            self.send_json({'available': False, 'reason': str(e)})
+
+    def handle_retrain_model(self):
+        _start_ml_training()
+        self.send_json({'status': 'training_started', 'message': 'ML model retraining in background'})
+
     def send_json(self, data, code=200):
         body = json.dumps(data).encode()
         self.send_response(code)
@@ -2048,6 +2151,12 @@ if __name__ == '__main__':
 ''')
     def startup():
         time.sleep(2)
+        # Load ML model if available, otherwise trigger background training
+        if os.path.exists(_data_path('prediction_model.pkl')):
+            _load_ml_model()
+        else:
+            print('  [ML] Model not found — training in background (takes ~2 min)')
+            _start_ml_training()
         ts = get_cache('/teamstats/PL')
         if ts and ts.get('teams'):
             with teamstats_lock: teamstats_status['PL'] = 'ready'

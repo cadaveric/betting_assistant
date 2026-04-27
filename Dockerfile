@@ -2,7 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY proxy.py scoutline.html manage_users.py ./
+RUN pip install --no-cache-dir scikit-learn numpy joblib
+
+COPY proxy.py scoutline.html manage_users.py train_model.py ./
 
 EXPOSE 8081
 
