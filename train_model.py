@@ -190,8 +190,8 @@ def train():
     model = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', GradientBoostingClassifier(
-            n_estimators=300,
-            learning_rate=0.04,
+            n_estimators=120,
+            learning_rate=0.05,
             max_depth=4,
             subsample=0.75,
             min_samples_leaf=20,
@@ -199,7 +199,7 @@ def train():
         )),
     ])
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
     scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy', n_jobs=-1)
     print(f'  [ML] CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}')
 
