@@ -1822,6 +1822,26 @@ async function refreshLeague(){
 // ── MATH ─────────────────────────────────────────────────────────────────────
 function factorial(n){if(n<=1)return 1;let r=1;for(let i=2;i<=n;i++)r*=i;return r}
 function poissonPMF(k,lam){k=Math.min(k,20);return Math.pow(lam,k)*Math.exp(-lam)/factorial(k)}
+
+// Shin (1992) implied probability extraction — corrects longshot bias, gives
+// more accurate draw probability than simple multiplicative normalization.
+function shinProbs(oH,oD,oA){
+  const z=0.03,n=3;
+  const w=[1/oH,1/oD,1/oA];
+  const W=w[0]+w[1]+w[2];
+  const q=w.map(wi=>wi/W);
+  let p=[...q];
+  for(let iter=0;iter<50;iter++){
+    const S=p[0]*p[0]+p[1]*p[1]+p[2]*p[2];
+    const A=z+(1-z)*S;
+    const pn=q.map(qi=>Math.sqrt(Math.max(0,(A*qi-z/n)/(1-z))));
+    const tot=pn[0]+pn[1]+pn[2];
+    if(tot<1e-10)break;
+    p=pn.map(pi=>pi/tot);
+  }
+  const tot=p[0]+p[1]+p[2];
+  return tot>0?p.map(pi=>pi/tot):q;
+}
 function dcTau(i,j,lH,lA,rho){
   if(i===0&&j===0)return 1-lH*lA*rho;
   if(i===1&&j===0)return 1+lA*rho;
@@ -1994,6 +2014,7 @@ async function loadTeamStats(showProgress){
           htGpg:s.htGpg, pensPg:s.pensPg,
           hasRealData:s.hasStats,
           avgOddsHW:s.avgOddsHW, avgOddsAW:s.avgOddsAW, avgOddsDr:s.avgOddsDr,
+          daysSinceLastMatch:s.daysSinceLastMatch??null,
         };
       });
       console.log('[Stats] Loaded '+Object.keys(teamStatsMap).length+' teams from proxy');
@@ -2107,6 +2128,13 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     aDataBadge=aMissing?aDataBadge+' +inj':aDataBadge;
   }
 
+  // Rest days penalty: <4 days since last match reduces scoring output.
+  // Captures Thursday-Sunday Europa congestion and tight fixture schedules.
+  const hRest=hS?.daysSinceLastMatch??7;
+  const aRest=aS?.daysSinceLastMatch??7;
+  if(hRest>0&&hRest<4){const f=Math.max(0.92,0.94+hRest*0.015);hLam=Math.max(0.20,hLam*f);hDataBadge=hDataBadge+' +fatigue';}
+  if(aRest>0&&aRest<4){const f=Math.max(0.92,0.94+aRest*0.015);aLam=Math.max(0.20,aLam*f);aDataBadge=aDataBadge+' +fatigue';}
+
   let h2hFactor=0,h2hLamAdjH=1.0,h2hLamAdjA=1.0;
   if(h2hData?.aggregates&&(h2hData.aggregates.numberOfMatches||0)>=3){
     const agg=h2hData.aggregates;
@@ -2132,8 +2160,8 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const bD=oddsD||hS?.avgOddsDr||0;
   const bA=oddsA||hS?.avgOddsAW||0;
   if(bH>1&&bD>1&&bA>1){
-    const raw=1/bH+1/bD+1/bA;
-    implH=(1/bH)/raw; implD=(1/bD)/raw; implA=(1/bA)/raw; hasOdds=true;
+    const[sH,sD,sA]=shinProbs(bH,bD,bA);
+    implH=sH; implD=sD; implA=sA; hasOdds=true;
   }
   const moveH=oddsMove?.home?Math.max(-0.03,Math.min(0.03,-oddsMove.home*0.015)):0;
   const moveD=oddsMove?.draw?Math.max(-0.02,Math.min(0.02,-oddsMove.draw*0.010)):0;
@@ -2143,8 +2171,9 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   // quality-aware odds weight: more bookmakers → higher confidence in market signal
   const numBooks=oddsNumBooks||0;
   const oddsQual=numBooks>=5?'high':numBooks>=2?'medium':(hasOdds?'low':'none');
-  const baseOddsW={high:0.40,medium:0.28,low:0.18,none:0}[oddsQual];
-  const oddsW=hasOdds?Math.max(0.15,Math.min(0.45,baseOddsW*(tune.oddsWeightScale||1))):0;
+  const baseOddsW={high:0.45,medium:0.30,low:0.18,none:0}[oddsQual];
+  const oddsWMax=numBooks>=5?0.52:0.45;
+  const oddsW=hasOdds?Math.max(0.15,Math.min(oddsWMax,baseOddsW*(tune.oddsWeightScale||1))):0;
   const poisW=hasOdds?Math.max(0.25,0.55-oddsW):0.48;
   const eloW=hasOdds?Math.max(0.08,0.20-oddsW*0.25):0.20;
   const formWgt=hasOdds?Math.max(0.06,0.15-oddsW*0.18):0.15;

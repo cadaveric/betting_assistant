@@ -316,21 +316,23 @@ CALIBRATION_SEASONS = [2021, 2022, 2023, 2024]
 
 # Static historical defaults — used when league_calibration.json is absent or a league is missing.
 # Values derived from multi-season averages across major competitions.
+# homeAdvFactor values reflect post-2021 empirical decline (~20% lower than pre-COVID).
+# suggestedRho: more negative = more DC correction on low scores (more draws boosted).
 _LEAGUE_CAL_DEFAULTS = {
-    'PL':  {'homeWinPct':0.46,'drawPct':0.24,'awayWinPct':0.30,'avgHomeGoals':1.53,'avgAwayGoals':1.13,'avgTotalGoals':2.66,'homeAdvFactor':1.35,'over25Rate':0.53,'bttsRate':0.52,'suggestedRho':-0.10},
-    'ELC': {'homeWinPct':0.45,'drawPct':0.25,'awayWinPct':0.30,'avgHomeGoals':1.46,'avgAwayGoals':1.14,'avgTotalGoals':2.60,'homeAdvFactor':1.28,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.12},
-    'L1':  {'homeWinPct':0.44,'drawPct':0.27,'awayWinPct':0.29,'avgHomeGoals':1.38,'avgAwayGoals':1.08,'avgTotalGoals':2.46,'homeAdvFactor':1.28,'over25Rate':0.48,'bttsRate':0.49,'suggestedRho':-0.12},
-    'L2':  {'homeWinPct':0.42,'drawPct':0.28,'awayWinPct':0.30,'avgHomeGoals':1.33,'avgAwayGoals':1.12,'avgTotalGoals':2.45,'homeAdvFactor':1.19,'over25Rate':0.48,'bttsRate':0.48,'suggestedRho':-0.13},
-    'BL1': {'homeWinPct':0.44,'drawPct':0.24,'awayWinPct':0.32,'avgHomeGoals':1.72,'avgAwayGoals':1.27,'avgTotalGoals':2.99,'homeAdvFactor':1.35,'over25Rate':0.60,'bttsRate':0.57,'suggestedRho':-0.16},
-    'BL2': {'homeWinPct':0.43,'drawPct':0.26,'awayWinPct':0.31,'avgHomeGoals':1.59,'avgAwayGoals':1.20,'avgTotalGoals':2.79,'homeAdvFactor':1.33,'over25Rate':0.56,'bttsRate':0.54,'suggestedRho':-0.14},
-    'PD':  {'homeWinPct':0.46,'drawPct':0.27,'awayWinPct':0.27,'avgHomeGoals':1.38,'avgAwayGoals':1.13,'avgTotalGoals':2.51,'homeAdvFactor':1.22,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.13},
-    'SA':  {'homeWinPct':0.47,'drawPct':0.26,'awayWinPct':0.27,'avgHomeGoals':1.40,'avgAwayGoals':1.09,'avgTotalGoals':2.49,'homeAdvFactor':1.29,'over25Rate':0.54,'bttsRate':0.52,'suggestedRho':-0.12},
-    'FL1': {'homeWinPct':0.44,'drawPct':0.27,'awayWinPct':0.29,'avgHomeGoals':1.35,'avgAwayGoals':1.08,'avgTotalGoals':2.43,'homeAdvFactor':1.25,'over25Rate':0.51,'bttsRate':0.50,'suggestedRho':-0.12},
-    'CL':  {'homeWinPct':0.44,'drawPct':0.26,'awayWinPct':0.30,'avgHomeGoals':1.39,'avgAwayGoals':1.12,'avgTotalGoals':2.51,'homeAdvFactor':1.24,'over25Rate':0.55,'bttsRate':0.53,'suggestedRho':-0.11},
-    'EL':  {'homeWinPct':0.42,'drawPct':0.27,'awayWinPct':0.31,'avgHomeGoals':1.31,'avgAwayGoals':1.13,'avgTotalGoals':2.44,'homeAdvFactor':1.16,'over25Rate':0.53,'bttsRate':0.51,'suggestedRho':-0.12},
-    'ECL': {'homeWinPct':0.41,'drawPct':0.28,'awayWinPct':0.31,'avgHomeGoals':1.28,'avgAwayGoals':1.11,'avgTotalGoals':2.39,'homeAdvFactor':1.15,'over25Rate':0.51,'bttsRate':0.50,'suggestedRho':-0.12},
-    'DED': {'homeWinPct':0.43,'drawPct':0.25,'awayWinPct':0.32,'avgHomeGoals':1.70,'avgAwayGoals':1.26,'avgTotalGoals':2.96,'homeAdvFactor':1.35,'over25Rate':0.59,'bttsRate':0.57,'suggestedRho':-0.15},
-    'PPL': {'homeWinPct':0.44,'drawPct':0.28,'awayWinPct':0.28,'avgHomeGoals':1.42,'avgAwayGoals':1.16,'avgTotalGoals':2.58,'homeAdvFactor':1.22,'over25Rate':0.55,'bttsRate':0.53,'suggestedRho':-0.13},
+    'PL':  {'homeWinPct':0.44,'drawPct':0.26,'awayWinPct':0.30,'avgHomeGoals':1.50,'avgAwayGoals':1.15,'avgTotalGoals':2.65,'homeAdvFactor':1.22,'over25Rate':0.53,'bttsRate':0.52,'suggestedRho':-0.10},
+    'ELC': {'homeWinPct':0.44,'drawPct':0.26,'awayWinPct':0.30,'avgHomeGoals':1.43,'avgAwayGoals':1.15,'avgTotalGoals':2.58,'homeAdvFactor':1.20,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.12},
+    'L1':  {'homeWinPct':0.43,'drawPct':0.27,'awayWinPct':0.30,'avgHomeGoals':1.35,'avgAwayGoals':1.10,'avgTotalGoals':2.45,'homeAdvFactor':1.18,'over25Rate':0.48,'bttsRate':0.49,'suggestedRho':-0.12},
+    'L2':  {'homeWinPct':0.42,'drawPct':0.28,'awayWinPct':0.30,'avgHomeGoals':1.30,'avgAwayGoals':1.12,'avgTotalGoals':2.42,'homeAdvFactor':1.16,'over25Rate':0.47,'bttsRate':0.48,'suggestedRho':-0.13},
+    'BL1': {'homeWinPct':0.43,'drawPct':0.25,'awayWinPct':0.32,'avgHomeGoals':1.70,'avgAwayGoals':1.28,'avgTotalGoals':2.98,'homeAdvFactor':1.24,'over25Rate':0.60,'bttsRate':0.57,'suggestedRho':-0.17},
+    'BL2': {'homeWinPct':0.42,'drawPct':0.27,'awayWinPct':0.31,'avgHomeGoals':1.56,'avgAwayGoals':1.22,'avgTotalGoals':2.78,'homeAdvFactor':1.22,'over25Rate':0.56,'bttsRate':0.54,'suggestedRho':-0.15},
+    'PD':  {'homeWinPct':0.45,'drawPct':0.27,'awayWinPct':0.28,'avgHomeGoals':1.37,'avgAwayGoals':1.13,'avgTotalGoals':2.50,'homeAdvFactor':1.20,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.13},
+    'SA':  {'homeWinPct':0.46,'drawPct':0.27,'awayWinPct':0.27,'avgHomeGoals':1.38,'avgAwayGoals':1.10,'avgTotalGoals':2.48,'homeAdvFactor':1.22,'over25Rate':0.53,'bttsRate':0.52,'suggestedRho':-0.12},
+    'FL1': {'homeWinPct':0.43,'drawPct':0.28,'awayWinPct':0.29,'avgHomeGoals':1.33,'avgAwayGoals':1.09,'avgTotalGoals':2.42,'homeAdvFactor':1.20,'over25Rate':0.51,'bttsRate':0.50,'suggestedRho':-0.12},
+    'CL':  {'homeWinPct':0.43,'drawPct':0.27,'awayWinPct':0.30,'avgHomeGoals':1.37,'avgAwayGoals':1.12,'avgTotalGoals':2.49,'homeAdvFactor':1.20,'over25Rate':0.55,'bttsRate':0.53,'suggestedRho':-0.11},
+    'EL':  {'homeWinPct':0.41,'drawPct':0.28,'awayWinPct':0.31,'avgHomeGoals':1.29,'avgAwayGoals':1.13,'avgTotalGoals':2.42,'homeAdvFactor':1.15,'over25Rate':0.52,'bttsRate':0.51,'suggestedRho':-0.12},
+    'ECL': {'homeWinPct':0.40,'drawPct':0.29,'awayWinPct':0.31,'avgHomeGoals':1.26,'avgAwayGoals':1.11,'avgTotalGoals':2.37,'homeAdvFactor':1.13,'over25Rate':0.50,'bttsRate':0.50,'suggestedRho':-0.12},
+    'DED': {'homeWinPct':0.43,'drawPct':0.26,'awayWinPct':0.31,'avgHomeGoals':1.68,'avgAwayGoals':1.27,'avgTotalGoals':2.95,'homeAdvFactor':1.25,'over25Rate':0.59,'bttsRate':0.57,'suggestedRho':-0.16},
+    'PPL': {'homeWinPct':0.43,'drawPct':0.28,'awayWinPct':0.29,'avgHomeGoals':1.40,'avgAwayGoals':1.17,'avgTotalGoals':2.57,'homeAdvFactor':1.20,'over25Rate':0.54,'bttsRate':0.53,'suggestedRho':-0.13},
 }
 
 
@@ -1317,6 +1319,11 @@ def build_teamstats(comp):
                 'htGpg':       avg(s['ht_g'],  s['ht_n']),
                 'csRate':      round(s['clean_sheets'] / g * 100, 1),
                 'hasStats':    bool(s['xg_n'] or s['sot_n'] or s['corn_n'] or s['yc_n']),
+                'lastMatchDate': recent[0].get('date') if recent else None,
+                'daysSinceLastMatch': round(
+                    (_dt.datetime.now(_dt.timezone.utc) -
+                     _dt.datetime.fromisoformat(recent[0]['date'].replace('Z', '+00:00'))).total_seconds() / 86400, 1
+                ) if recent and recent[0].get('date') else None,
             }
             summary[tid]    = entry
             name_map[tname] = entry
@@ -1450,6 +1457,27 @@ def fetch_apif_odds(comp):
     return games
 
 
+def _shin_probs(odds_h, odds_d, odds_a, z=0.03):
+    """Shin (1992) method: extract true probabilities from 3-way odds.
+    Corrects longshot bias — gives higher draw probability than multiplicative normalization."""
+    w = [1.0/odds_h, 1.0/odds_d, 1.0/odds_a]
+    W = sum(w)
+    q = [wi/W for wi in w]  # multiplicative start
+    p = q[:]
+    for _ in range(50):
+        S = sum(pi*pi for pi in p)
+        A = z + (1-z)*S
+        p_new = []
+        for qi in q:
+            val = (A*qi - z/3.0) / max(1e-12, 1-z)
+            p_new.append(math.sqrt(max(0.0, val)))
+        tot = sum(p_new)
+        if tot < 1e-10:
+            break
+        p = [pi/tot for pi in p_new]
+    tot = sum(p)
+    return [pi/tot for pi in p] if tot > 0 else q
+
 def _enrich_odds_rows(game):
     bk_rows = game.get('bookmakers') or []
     hs  = [r['h']   for r in bk_rows if r.get('h')]
@@ -1462,8 +1490,8 @@ def _enrich_odds_rows(game):
     odds_a = max(as_) if as_ else None
     impl_h = impl_d = impl_a = None
     if odds_h and odds_d and odds_a:
-        rh = 1/odds_h; rd = 1/odds_d; ra = 1/odds_a; tot = rh+rd+ra
-        impl_h = round(rh/tot*100, 1); impl_d = round(rd/tot*100, 1); impl_a = round(ra/tot*100, 1)
+        sh, sd, sa = _shin_probs(odds_h, odds_d, odds_a)
+        impl_h = round(sh*100, 1); impl_d = round(sd*100, 1); impl_a = round(sa*100, 1)
     return [{
         'id': game.get('id'), 'commence_time': game.get('commence_time'),
         'home': game.get('home', ''), 'away': game.get('away', ''),
