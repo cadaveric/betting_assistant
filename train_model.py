@@ -190,16 +190,16 @@ def train():
     model = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', RandomForestClassifier(
-            n_estimators=200,
-            max_depth=8,
+            n_estimators=100,
+            max_depth=7,
             min_samples_leaf=15,
-            n_jobs=-1,
+            n_jobs=1,
             random_state=42,
         )),
     ])
 
     cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-    scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy', n_jobs=-1)
+    scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy', n_jobs=1)
     print(f'  [ML] CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}')
 
     model.fit(X, y)
