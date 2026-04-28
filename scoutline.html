@@ -1830,12 +1830,13 @@ function _seasonStage(){
 }
 
 // Call /ml-predict with features; returns {home, draw, away, accuracy} or null.
-async function fetchMLPredict(homeId, awayId, comp, shinH, shinD, shinA, hasOdds, eloH, eloA){
+async function fetchMLPredict(homeId, awayId, comp, shinH, shinD, shinA, hasOdds, eloH, eloA, overround){
   try{
     const p=new URLSearchParams({
       homeId,awayId,comp,
       shinH:(shinH||0).toFixed(3),shinD:(shinD||0).toFixed(3),shinA:(shinA||0).toFixed(3),
       hasOdds:hasOdds?'1':'0',
+      overround:((overround||0)).toFixed(4),
       eloH:Math.round(eloH||1500),eloA:Math.round(eloA||1500),
     });
     const r=await fetch('/ml-predict?'+p,{signal:AbortSignal.timeout(3000)});
@@ -3629,10 +3630,11 @@ async function runDeepPred(){
 
   // ML blend: higher weight when odds are present (Shin probs add strong signal)
   try{
+    const overround=(oddsH>1&&oddsD>1&&oddsA>1)?(1/oddsH+1/oddsD+1/oddsA):0;
     const ml=await fetchMLPredict(
       hRow.team.id, aRow.team.id, lg,
       p.implH/100, p.implD/100, p.implA/100, p.hasOdds,
-      p.hElo, p.aElo
+      p.hElo, p.aElo, overround
     );
     if(ml?.home!=null){
       const wML=p.hasOdds?0.65:0.42;

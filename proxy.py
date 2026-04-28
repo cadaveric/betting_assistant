@@ -452,10 +452,10 @@ def _season_stage():
 _ML_LEAGUE_ORDER = ['PL','ELC','BL1','PD','SA','FL1','DED','PPL']
 
 # Must match len(train_model.FEATURE_NAMES); stale pkl triggers auto-retrain.
-_ML_FEATURE_COUNT = 17
+_ML_FEATURE_COUNT = 18
 
 def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
-                 has_odds=False, elo_diff=0.0):
+                 has_odds=False, overround=0.0, elo_diff=0.0):
     """Build ML feature vector matching train_model.FEATURE_NAMES order."""
     lg_idx  = _ML_LEAGUE_ORDER.index(comp) if comp in _ML_LEAGUE_ORDER else 0
     lg_norm = lg_idx / max(1, len(_ML_LEAGUE_ORDER) - 1)
@@ -470,7 +470,7 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
     xg_h    = hdata.get('xgHomePg')  or gf_h
     xg_a    = adata.get('xgAwayPg')  or gf_a
     return [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
-            xg_h, xg_a, shin_h, shin_d, shin_a, float(has_odds),
+            xg_h, xg_a, shin_h, shin_d, shin_a, float(has_odds), float(overround),
             _season_stage(), lg_norm, float(elo_diff)]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2095,10 +2095,11 @@ class Handler(SimpleHTTPRequestHandler):
             shin_h  = float(params.get('shinH', [0.44])[0])
             shin_d  = float(params.get('shinD', [0.27])[0])
             shin_a  = float(params.get('shinA', [0.29])[0])
-            has_odds= params.get('hasOdds', ['0'])[0] in ('1','true','yes')
-            elo_h   = float(params.get('eloH',  [1500])[0])
-            elo_a   = float(params.get('eloA',  [1500])[0])
-            elo_diff = elo_h - elo_a
+            has_odds  = params.get('hasOdds',    ['0']  )[0] in ('1','true','yes')
+            overround = float(params.get('overround', ['0.0'])[0])
+            elo_h     = float(params.get('eloH',      [1500] )[0])
+            elo_a     = float(params.get('eloA',      [1500] )[0])
+            elo_diff  = elo_h - elo_a
         except (ValueError, TypeError) as e:
             self.send_json({'error': f'Invalid params: {e}'}, 400); return
 
@@ -2109,7 +2110,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not hdata or not adata:
             self.send_json({'available': False, 'reason': f'team stats not cached for {comp}'}); return
 
-        feat = _ml_features(hdata, adata, comp, shin_h, shin_d, shin_a, has_odds, elo_diff)
+        feat = _ml_features(hdata, adata, comp, shin_h, shin_d, shin_a, has_odds, overround, elo_diff)
         try:
             import numpy as np
             proba = _ml_model.predict_proba(np.array([feat], dtype=np.float32))[0]

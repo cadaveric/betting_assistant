@@ -23,7 +23,8 @@ FEATURE_NAMES = [
     'gf_a',   'ga_a',             # away team goals for/against per away game
     'xg_h',   'xg_a',            # expected goals per game (venue-split; fallback=goals)
     'shin_h', 'shin_d', 'shin_a', # Shin-corrected market probs (0.44/0.27/0.29 default)
-    'has_odds',                    # 1 if B365 odds available, else 0
+    'has_odds',                    # 1 if odds available, else 0
+    'overround',                   # bookmaker margin (sum 1/odds); 0 if no odds; lower=sharper market
     'season_stage',                # fraction of season elapsed (0–1)
     'league_id',                   # encoded league (0–1 normalized)
     'elo_diff',                    # rolling Elo home−away (raw points; scaler normalises)
@@ -61,6 +62,19 @@ def _shin(oh, od, oa, z=0.03):
         p = [pi/tot for pi in pn]
     tot = sum(p)
     return tuple(pi/tot for pi in p) if tot > 0 else tuple(q)
+
+def _best_odds(row):
+    """Return (oh, od, oa, overround) from sharpest available book.
+    Priority: Pinnacle (sharpest) → Bet365 → William Hill → market average."""
+    def _try(hk, dk, ak):
+        h = _safe_float(row.get(hk)); d = _safe_float(row.get(dk)); a = _safe_float(row.get(ak))
+        return (h, d, a) if (h and d and a and h > 1 and d > 1 and a > 1) else None
+    t = (_try('PSH','PSD','PSA') or _try('B365H','B365D','B365A') or
+         _try('WHH','WHD','WHA') or _try('BbAvH','BbAvD','BbAvA'))
+    if t:
+        oh, od, oa = t
+        return oh, od, oa, round(1/oh + 1/od + 1/oa, 4)
+    return None, None, None, 0.0
 
 def _roll(lst, n=5, default=None):
     vals = [v for v in lst[-n:] if v is not None]
@@ -126,9 +140,8 @@ def build_dataset():
                 # xG available from fdco since ~2014; HSxG/ASxG columns
                 hxg = _safe_float(row.get('HSxG')) or _safe_float(row.get('xG_H'))
                 axg = _safe_float(row.get('ASxG')) or _safe_float(row.get('xG_A'))
-                b365h = _safe_float(row.get('B365H'))
-                b365d = _safe_float(row.get('B365D'))
-                b365a = _safe_float(row.get('B365A'))
+                # Pinnacle preferred (sharpest book) over B365
+                oh, od, oa, overround = _best_odds(row)
 
                 hd = get_team(ht)
                 ad = get_team(at)
@@ -158,14 +171,14 @@ def build_dataset():
                 elo_a = elo_ratings.get(at, 1500.0)
                 elo_diff = elo_h - elo_a
 
-                sh, sd, sa = _shin(b365h, b365d, b365a)
+                sh, sd, sa = _shin(oh, od, oa)
                 has_odds = 1.0 if sh is not None else 0.0
                 if sh is None:
                     sh, sd, sa = 0.44, 0.27, 0.29
 
                 if form_h is not None and form_a is not None:
                     feat = [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
-                            xg_h, xg_a, sh, sd, sa, has_odds, stage, lg_norm, elo_diff]
+                            xg_h, xg_a, sh, sd, sa, has_odds, overround, stage, lg_norm, elo_diff]
                     X.append(feat)
                     y.append({'H': 0, 'D': 1, 'A': 2}[ftr])
 
