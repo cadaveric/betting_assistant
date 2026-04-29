@@ -2147,7 +2147,7 @@ class Handler(SimpleHTTPRequestHandler):
                 except Exception:
                     pass
                 oh = g.get('best_h') or 0; od = g.get('best_d') or 0; oa = g.get('best_a') or 0
-                sh, sd, sa = _shin(oh, od, oa) if oh > 1 and od > 1 and oa > 1 else (None, None, None)
+                sh, sd, sa = _shin_probs(oh, od, oa) if oh > 1 and od > 1 and oa > 1 else (None, None, None)
                 matches.append({
                     'home':    g['home'], 'away': g['away'],
                     'kickoff': g.get('commence_time', ''),
