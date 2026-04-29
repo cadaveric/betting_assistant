@@ -3711,12 +3711,19 @@ function kellyFraction(odds,prob){
 }
 function calcEV(odds,prob){ return prob*(odds-1)-(1-prob)*1; }
 
-function buildPortfolio(bets, budget){
+// Anchor threshold by risk level: conservative wants very high confidence;
+// risky is willing to anchor on a less certain pick.
+const PORTFOLIO_ANCHOR_PCT = {conservative:65, balanced:60, risky:52};
+
+function buildPortfolio(bets, budget, risk){
   if(!bets.length) return null;
-  // Best single — highest model confidence with any positive edge
-  const anchor = bets.find(b=>b.modelPct>=55) || bets[0];
-  // Combo legs from different matches (up to 2 additional legs)
-  const comboLegs = bets.filter(b=>b.match!==anchor.match).slice(0,2);
+  const anchorPct = PORTFOLIO_ANCHOR_PCT[risk] || 60;
+  // Best single — highest model confidence at or above risk threshold
+  const anchor = bets.find(b=>b.modelPct>=anchorPct) || bets[0];
+  // Combo legs: different match, meaningful odds (≥1.5 — avoids near-certainty filler)
+  const comboLegs = bets
+    .filter(b=>b.match!==anchor.match && b.odds>=1.5)
+    .slice(0,2);
 
   // Anchor stake: Kelly capped at 25% budget, minimum €0.50
   const anchorStake = Math.min(budget*0.25,
@@ -3724,9 +3731,13 @@ function buildPortfolio(bets, budget){
   const anchorProfit = Math.round(anchorStake*(anchor.odds-1)*100)/100;
   const anchorReturn = Math.round(anchorStake*anchor.odds*100)/100;
 
-  if(!comboLegs.length){
+  // Need at least 2 legs for a meaningful combo
+  if(comboLegs.length<2){
     return {anchor,anchorStake,anchorProfit,anchorReturn,
-            comboLegs:[],comboStake:0,totalStake:anchorStake,scenarios:null};
+            comboLegs:[],comboStake:0,totalStake:anchorStake,scenarios:null,
+            noComboReason: comboLegs.length===0
+              ? 'no other qualifying matches in this time window'
+              : 'only 1 other qualifying match — need at least 2 for a combo'};
   }
 
   const comboOdds   = Math.round(comboLegs.reduce((p,b)=>p*b.odds,1)*100)/100;
@@ -3757,12 +3768,13 @@ function buildPortfolio(bets, budget){
 }
 
 function renderPortfolio(el, bets, budget, risk, leaguesScanned){
-  const pf = buildPortfolio(bets, budget);
+  const pf = buildPortfolio(bets, budget, risk);
   if(!pf||!pf.anchor){el.innerHTML=`<div class="error-state">${t('adv.portfolio.no_anchor')}</div>`;return;}
   const {anchor,anchorStake,anchorProfit,anchorReturn,
          comboLegs,comboOdds,comboStake,comboReturn,comboProfit,
-         totalStake,scenarios,safetyNet} = pf;
+         totalStake,scenarios,safetyNet,noComboReason} = pf;
 
+  const anchorPct = PORTFOLIO_ANCHOR_PCT[risk]||60;
   const pctBudget = Math.round(totalStake/budget*100);
   const sc = v => v>=0 ? 'color:#16a34a' : 'color:#dc2626';
   const fmt = v => (v>=0?'+':'')+'€'+Math.abs(v).toFixed(2);
@@ -3770,13 +3782,13 @@ function renderPortfolio(el, bets, budget, risk, leaguesScanned){
   let html = `
   <div style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.22);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div>
-      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--tx3);margin-bottom:4px">PORTFOLIO SUMMARY</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--tx3);margin-bottom:4px">PORTFOLIO SUMMARY · anchor threshold: ${anchorPct}% confidence</div>
       <span style="font-size:22px;font-weight:700;font-family:var(--mono)">€${totalStake.toFixed(2)}</span>
       <span style="font-size:12px;color:var(--tx3);margin-left:6px">total stake · ${pctBudget}% of your €${budget.toFixed(0)} budget</span>
     </div>
     <div style="font-size:13px;line-height:1.8">
       <div>Safe bet: <strong>€${anchorStake.toFixed(2)}</strong></div>
-      <div>Boost combo: <strong>${comboLegs.length?'€'+comboStake.toFixed(2):'—'}</strong></div>
+      <div>Boost combo: <strong>${comboLegs.length>=2?'€'+comboStake.toFixed(2):'—'}</strong></div>
     </div>
   </div>
 
@@ -3802,7 +3814,7 @@ function renderPortfolio(el, bets, budget, risk, leaguesScanned){
     <div class="bet-right"><div class="bet-ev">EV +${(anchor.ev*100).toFixed(1)}%</div><div class="bet-stake">€${anchorStake.toFixed(2)}</div><div class="bet-stake-sub">suggested stake</div></div>
   </div>`;
 
-  if(comboLegs.length){
+  if(comboLegs.length>=2){
     html += `
   <div style="border-left:4px solid #9333ea;padding-left:12px;margin:18px 0 8px">
     <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#9333ea">BOOST COMBO — optional, place alongside the safe bet</div>
@@ -3860,6 +3872,12 @@ function renderPortfolio(el, bets, budget, risk, leaguesScanned){
       <div style="font-size:10px;color:var(--tx3);margin-top:3px">Worst case · total at risk</div>
     </div>
   </div>`;
+  }
+  if(comboLegs.length<2){
+    html+=`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:12px 14px;margin:12px 0;font-size:13px">
+      <strong style="color:#d97706">No boost combo available</strong> — ${noComboReason||'not enough qualifying matches'}.
+      <br><span style="color:var(--tx3)">Try a longer time window (3 or 7 days) or switch to All leagues to find combo legs.</span>
+    </div>`;
   }
   html+=`<div class="adv-disclaimer">⚠ Combo stake sized so safe bet profit covers combo downside. Results <strong>do not guarantee profit</strong>. Bet responsibly. 18+.</div>`;
   el.innerHTML=html;
