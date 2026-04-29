@@ -451,31 +451,31 @@ input[type=number]{background-image:none;padding-right:12px}
 
 /* ─── WARM DARK THEME ──────────────────────────────────────────── */
 :root{
-  --green:#2DC27A;--gl:rgba(45,194,122,.13);--gd:#7AE8A8;
-  --amber:#E89C28;--al:rgba(232,156,40,.13);
-  --red:#D45C4E;--rl:rgba(212,92,78,.10);
-  --blue:#5BA0D8;--bl:rgba(91,160,216,.12);
-  --purple:#A07CD8;--pl:rgba(160,124,216,.12);
-  --teal:#38C4A0;
-  --bg:#141210;--bg2:#1D1914;--bg3:#26201A;--bg4:#332B21;
-  --tx:#E8DCCB;--tx2:#9C8570;--tx3:#6A5440;
-  --br:rgba(180,130,60,.13);--br2:rgba(180,130,60,.27);
-  --accent:#E89C28;--accent2:#F5B440;
+  --green:#0F7A52;--gl:rgba(15,122,82,.10);--gd:#0A5E3C;
+  --amber:#B06010;--al:rgba(176,96,16,.10);
+  --red:#B83C30;--rl:rgba(184,60,48,.08);
+  --blue:#2868A0;--bl:rgba(40,104,160,.10);
+  --purple:#6848B8;--pl:rgba(104,72,184,.10);
+  --teal:#0A7A68;
+  --bg:#EDE5D4;--bg2:#FAF5EC;--bg3:#E4DBCB;--bg4:#D8CFBE;
+  --tx:#2A1E10;--tx2:#6A5640;--tx3:#9A8570;
+  --br:rgba(120,80,20,.12);--br2:rgba(120,80,20,.22);
+  --accent:#B06010;--accent2:#C87020;
   --r:10px;--rl2:12px;
   --mono:'IBM Plex Mono',monospace;
   --sans:'Manrope',sans-serif;
   --cond:'Manrope',sans-serif;
   --brand:'Manrope',sans-serif;
-  --shadow:0 4px 20px rgba(0,0,0,.55);
-  --shadow-lg:0 8px 32px rgba(0,0,0,.65);
-  --glow-green:0 0 20px rgba(45,194,122,.16);
-  --glow-amber:0 0 20px rgba(232,156,40,.16);
+  --shadow:0 4px 16px rgba(80,50,10,.10);
+  --shadow-lg:0 8px 28px rgba(80,50,10,.14);
+  --glow-green:0 0 16px rgba(15,122,82,.12);
+  --glow-amber:0 0 16px rgba(176,96,16,.12);
 }
 body{
   background:
-    radial-gradient(circle at 6% 0%,rgba(232,156,40,.07),transparent 28%),
-    radial-gradient(circle at 94% 6%,rgba(45,194,122,.04),transparent 22%),
-    linear-gradient(180deg,#161412 0%,#121010 100%);
+    radial-gradient(circle at 6% 0%,rgba(176,96,16,.09),transparent 28%),
+    radial-gradient(circle at 94% 6%,rgba(15,122,82,.05),transparent 22%),
+    linear-gradient(180deg,#F0E8D7 0%,#E9E1D0 100%);
   color:var(--tx);
   font-size:15px;
   letter-spacing:.005em;
@@ -498,14 +498,14 @@ select:focus,input:focus,.pred-team-sel:focus,.pred-opt-sel:focus{
   box-shadow:0 0 0 3px rgba(232,156,40,.13);
 }
 .nav{
-  background:rgba(20,17,14,.92);
+  background:rgba(245,238,224,.88);
   border-color:var(--br);
-  box-shadow:0 4px 18px rgba(0,0,0,.5);
+  box-shadow:var(--shadow);
   backdrop-filter:blur(14px);
 }
 .nav-btn{height:38px;color:var(--tx2);font-weight:600}
-.nav-btn.on{background:var(--bg3);color:var(--tx);border-color:var(--br2);box-shadow:0 2px 10px rgba(0,0,0,.45)}
-.nav-btn:not(.on):hover{background:rgba(232,156,40,.08);color:var(--amber)}
+.nav-btn.on{background:#FDFAF5;color:var(--tx);border-color:var(--br2);box-shadow:0 2px 8px rgba(80,50,10,.12)}
+.nav-btn:not(.on):hover{background:rgba(176,96,16,.07);color:var(--amber)}
 .kpi,.card,.match,.result-card,.res-row,.adv-controls,.bet-card,.pred-control-strip,.odds-item,.market-card,.pred-mkt,.pred-tabs{
   background:var(--bg2);
   border-color:var(--br);
@@ -850,14 +850,14 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 @media(max-width:600px){.tname{max-width:110px}}
 
 /* 8. Center column */
-.center-col{background:rgba(232,156,40,.05);border-radius:12px;padding:10px 8px}
+.center-col{background:rgba(120,80,20,.05);border-radius:12px;padding:10px 8px}
 
 /* 9. Market chips */
 .mchip{transition:transform .15s,box-shadow .15s}
 .mchip:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.35)}
 
 /* 10. Standings — zebra rows */
-.stand-table tbody tr:nth-child(even) td{background:rgba(232,156,40,.025)}
+.stand-table tbody tr:nth-child(even) td{background:rgba(120,80,20,.03)}
 
 /* 11. Nav active — amber underline */
 .nav-btn{position:relative}
@@ -892,7 +892,7 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 
 /* 19. Acca leg hover */
 .acca-leg{transition:background .12s;padding-left:4px;padding-right:4px;border-radius:4px}
-.acca-leg:hover{background:rgba(232,156,40,.05)}
+.acca-leg:hover{background:rgba(120,80,20,.04)}
 
 /* 20. Form dots — cleaner corner radius */
 .fd{border-radius:5px}
