@@ -3979,7 +3979,7 @@ function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesS
   const singlesCount=strategy==='acca'?0:singles.length;
 
   const modelNote=multiLeague
-    ?'Poisson xG model · Kelly criterion · live EU odds · API-Football Pro'
+    ?'Server-side Poisson+Elo estimate · probabilities may differ from Predictor tab (which blends ML+Elo+form). Verify key bets in the Predictor.'
     :'Dixon-Coles Poisson · Elo · form decay · live EU odds';
 
   let html=`${advisorHelpHtml()}<div class="kpi-row" style="margin-bottom:16px">

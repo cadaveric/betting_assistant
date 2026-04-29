@@ -2045,13 +2045,34 @@ class Handler(SimpleHTTPRequestHandler):
                 avg_hg   = cal_leagues.get(comp, {}).get('avgHomeGoals', 1.35)
                 avg_ag   = cal_leagues.get(comp, {}).get('avgAwayGoals', 1.10)
                 if avg_hg > 0 and avg_ag > 0:
-                    lh = max(0.2, (h_xg / avg_hg) * (a_xga / avg_ag) * avg_hg * comp_ha)
-                    la = max(0.2, (a_xg / avg_ag) * (h_xga / avg_hg) * avg_ag)
+                    lh_raw = max(0.2, (h_xg / avg_hg) * (a_xga / avg_ag) * avg_hg * comp_ha)
+                    la_raw = max(0.2, (a_xg / avg_ag) * (h_xga / avg_hg) * avg_ag)
                 else:
-                    lh = max(0.2, ((h_xg + a_xga) / 2) * comp_ha)
-                    la = max(0.2,  (a_xg + h_xga) / 2)
+                    lh_raw = max(0.2, ((h_xg + a_xga) / 2) * comp_ha)
+                    la_raw = max(0.2,  (a_xg + h_xga) / 2)
+                # Elo-based shrinkage: blend raw Poisson with Elo-implied strength.
+                # Small CL samples inflate xG per game → raw Poisson overestimates.
+                elo_all = _fetch_clubelo()
+                h_elo_e = _fuzzy_match(home, elo_all) if elo_all else None
+                a_elo_e = _fuzzy_match(away, elo_all) if elo_all else None
+                if h_elo_e and a_elo_e:
+                    ed = (h_elo_e['elo'] - a_elo_e['elo']) / 400.0
+                    elo_h_exp = 1.0 / (1.0 + 10.0 ** (-ed))
+                    elo_lh = avg_hg * (1 + (elo_h_exp - 0.5) * 0.7) * comp_ha
+                    elo_la = avg_ag * (1 + (0.5 - elo_h_exp) * 0.7)
+                    # 55% Poisson + 30% Elo + 15% league avg (mirrors deepPredict blend)
+                    lh = lh_raw*0.55 + elo_lh*0.30 + avg_hg*comp_ha*0.15
+                    la = la_raw*0.55 + elo_la*0.30 + avg_ag*0.15
+                else:
+                    lh, la = lh_raw, la_raw
+                # Cap at 2.2 — prevents tiny CL samples from extreme lambdas
+                lh = max(0.2, min(2.2, lh))
+                la = max(0.2, min(2.2, la))
                 ph, pd, pa = _match_probs_dc(lh, la, rho=comp_rho)
-                po25  = _over25_prob(lh, la)
+                # Blend raw Poisson over2.5 with league prior (same calibration
+                # direction as frontend applyOver25Calib)
+                league_o25 = cal_leagues.get(comp, _LEAGUE_CAL_DEFAULTS.get(comp, {})).get('over25Rate', 0.52)
+                po25 = _over25_prob(lh, la) * 0.65 + league_o25 * 0.35
                 dt    = game.get('commence_time', '')
                 outcomes = [
                     ('Home win', game['best_h'], game.get('best_bk_h'), ph, (game['impl_h'] or 0)/100),
