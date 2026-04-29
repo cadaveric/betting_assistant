@@ -163,6 +163,89 @@ PREDICTION_FILE = os.environ.get('PREDICTION_FILE', os.path.join('data', 'predic
 ODDS_HISTORY_FILE  = os.environ.get('ODDS_HISTORY_FILE',  os.path.join('data', 'odds_history.json'))
 CALIBRATION_FILE   = os.environ.get('CALIBRATION_FILE',  os.path.join('data', 'league_calibration.json'))
 
+# ── Push notifications (ntfy.sh) ──────────────────────────────────────────────
+NTFY_TOPIC = os.environ.get('NTFY_TOPIC', '')   # set in .env: NTFY_TOPIC=scoutline-abc123
+_apif_remaining   = None   # last known remaining requests
+_apif_limit_total = None   # daily limit
+_notified_low     = False  # guard: don't spam low-limit alerts
+_notified_reset   = False  # guard: don't spam reset alerts
+
+def _ntfy(title, message, priority='default', tags=''):
+    """Send push notification via ntfy.sh. No-op if NTFY_TOPIC not set."""
+    if not NTFY_TOPIC:
+        return
+    try:
+        body = message.encode()
+        headers = {
+            'Title': title,
+            'Priority': priority,
+            'Content-Type': 'text/plain',
+        }
+        if tags:
+            headers['Tags'] = tags
+        req = urllib.request.Request(
+            f'https://ntfy.sh/{NTFY_TOPIC}',
+            data=body, headers=headers, method='POST'
+        )
+        urllib.request.urlopen(req, timeout=6)
+    except Exception as e:
+        print(f'  [NTFY] send failed: {e}')
+
+def _check_rate_limit(remaining_str, limit_str=None):
+    """Update rate-limit state and fire push notifications when needed."""
+    global _apif_remaining, _apif_limit_total, _notified_low, _notified_reset
+    try:
+        rem = int(remaining_str)
+    except (TypeError, ValueError):
+        return
+    prev = _apif_remaining
+    _apif_remaining = rem
+    if limit_str:
+        try:
+            _apif_limit_total = int(limit_str)
+        except (TypeError, ValueError):
+            pass
+
+    limit = _apif_limit_total or 100
+    low_threshold = max(10, int(limit * 0.05))   # alert at 5% remaining
+
+    # Reset notification: was 0, now has requests again (midnight UTC reset)
+    if prev == 0 and rem > 0 and _notified_reset:
+        _notified_reset = False
+        _notified_low   = False
+        _ntfy(
+            'Scoutline — API limit reset',
+            f'API-Football daily limit has reset. {rem}/{limit} requests available.',
+            priority='high', tags='white_check_mark,football'
+        )
+        print(f'  [NTFY] Limit reset notification sent ({rem} remaining)')
+
+    # Low-limit warning (first time crossing the threshold)
+    if rem <= low_threshold and rem > 0 and not _notified_low:
+        _notified_low = True
+        _ntfy(
+            'Scoutline — API limit running low',
+            f'Only {rem} API-Football requests left today (limit {limit}). Resets at midnight UTC.',
+            priority='high', tags='warning,football'
+        )
+        print(f'  [NTFY] Low-limit notification sent ({rem} remaining)')
+
+    # Exhausted
+    if rem == 0 and not _notified_reset:
+        _notified_reset = True
+        # Schedule reset check — midnight UTC
+        now_utc = _dt.datetime.now(_dt.timezone.utc)
+        midnight = (now_utc + _dt.timedelta(days=1)).replace(
+            hour=0, minute=1, second=0, microsecond=0)
+        secs = (midnight - now_utc).total_seconds()
+        _ntfy(
+            'Scoutline — API limit exhausted',
+            f'All {limit} daily API-Football requests used. Limit resets at midnight UTC '
+            f'(~{int(secs//3600)}h {int((secs%3600)//60)}m from now).',
+            priority='urgent', tags='x,football'
+        )
+        print(f'  [NTFY] Exhausted notification sent, reset in ~{secs/3600:.1f}h')
+
 # ── API-Football Pro (api-sports.io) ─────────────────────────────────────────
 APIF_KEY  = (os.environ.get('APIFOOTBALL_KEY')
              or os.environ.get('API_FOOTBALL_KEY')
@@ -1076,8 +1159,10 @@ def apif_get(endpoint, params=None):
                 return stale
             resp = raw.get('response', [])
             set_cache(cache_key, resp)
-            rem = r.headers.get('x-ratelimit-requests-remaining', '?')
+            rem  = r.headers.get('x-ratelimit-requests-remaining', '?')
+            lim  = r.headers.get('x-ratelimit-requests-limit', None)
             print(f'  [APIF] {endpoint}({qs[:60]}): {len(resp)} results, rem={rem}')
+            _check_rate_limit(rem, lim)
             return resp
     except Exception as e:
         stale = get_stale_cache(cache_key)
@@ -1667,6 +1752,9 @@ class Handler(SimpleHTTPRequestHandler):
             with teamstats_lock:
                 ts = dict(teamstats_status)
             self.send_json({'ts': ts, 'apif': bool(APIF_KEY),
+                            'apif_remaining': _apif_remaining,
+                            'apif_limit': _apif_limit_total,
+                            'ntfy_topic': bool(NTFY_TOPIC),
                             'odds': bool(APIF_KEY),
                             'odds_provider': 'api-football',
                             'cache_entries': len(cache),
