@@ -3712,107 +3712,156 @@ function kellyFraction(odds,prob){
 function calcEV(odds,prob){ return prob*(odds-1)-(1-prob)*1; }
 
 function buildPortfolio(bets, budget){
-  // Tier by model probability and odds
-  const anchor = bets.find(b=>b.modelPct>=60) || null;
-  const anchorMatch = anchor?.match;
-  const remaining = bets.filter(b=>b.match!==anchorMatch);
-  const value = remaining.filter(b=>b.modelPct>=45&&b.modelPct<60).slice(0,3);
-  const valueMat = new Set(value.map(b=>b.match));
-  const spec = remaining.filter(b=>!valueMat.has(b.match)&&b.odds>=2.0).slice(0,2);
+  if(!bets.length) return null;
+  // Best single — highest model confidence with any positive edge
+  const anchor = bets.find(b=>b.modelPct>=55) || bets[0];
+  // Combo legs from different matches (up to 2 additional legs)
+  const comboLegs = bets.filter(b=>b.match!==anchor.match).slice(0,2);
 
-  // Anchor Kelly stake, capped at 20% of budget
-  const anchorStake = anchor
-    ? Math.min(budget*0.20, Math.max(0.01, Math.round(budget*(anchor.kellyFrac||0)*100)/100))
-    : 0;
-  const anchorEV = anchor ? anchorStake * anchor.ev : 0; // expected euros profit
+  // Anchor stake: Kelly capped at 25% budget, minimum €0.50
+  const anchorStake = Math.min(budget*0.25,
+    Math.max(0.50, Math.round(budget*(anchor.kellyFrac||0.05)*100)/100));
+  const anchorProfit = Math.round(anchorStake*(anchor.odds-1)*100)/100;
+  const anchorReturn = Math.round(anchorStake*anchor.odds*100)/100;
 
-  // Value stakes: standard Kelly, capped 10% each
-  const valueStaked = value.map(b=>{
-    const s = Math.min(budget*0.10, Math.max(0.01, Math.round(budget*(b.kellyFrac||0)*100)/100));
-    return {...b, stake:s};
-  });
+  if(!comboLegs.length){
+    return {anchor,anchorStake,anchorProfit,anchorReturn,
+            comboLegs:[],comboStake:0,totalStake:anchorStake,scenarios:null};
+  }
 
-  // Spec stakes: capped so total spec stake ≤ anchorEV (self-hedging)
-  const specRaw = spec.map(b=>{
-    const s = Math.min(budget*0.07, Math.max(0.01, Math.round(budget*(b.kellyFrac||0)*100)/100));
-    return {...b, stake:s};
-  });
-  const totalSpecRaw = specRaw.reduce((s,b)=>s+b.stake,0);
-  const specCap = anchorEV>0 ? Math.min(1, anchorEV/Math.max(totalSpecRaw,0.01)) : 1;
-  const specStaked = specRaw.map(b=>({...b, stake:Math.round(b.stake*specCap*100)/100}));
+  const comboOdds   = Math.round(comboLegs.reduce((p,b)=>p*b.odds,1)*100)/100;
+  const comboModelP = comboLegs.reduce((p,b)=>p*(b.modelPct/100),1);
+  const comboKF     = kellyFraction(comboOdds, comboModelP);
+  // Cap combo stake so anchor profit covers combo loss (safety net)
+  const comboStake = Math.min(
+    anchorProfit*0.90,
+    budget*0.08,
+    Math.max(0.50, Math.round(budget*comboKF*100)/100)
+  );
+  const comboReturn = Math.round(comboStake*comboOdds*100)/100;
+  const comboProfit = Math.round((comboReturn-comboStake)*100)/100;
+  const totalStake  = Math.round((anchorStake+comboStake)*100)/100;
 
-  const totalSpec = specStaked.reduce((s,b)=>s+b.stake,0);
-  const safetyPct = anchorEV>0&&totalSpec>0 ? Math.round(anchorEV/totalSpec*100) : null;
-  const totalStake = anchorStake + valueStaked.reduce((s,b)=>s+b.stake,0) + totalSpec;
-  const totalEV = (anchor?anchorStake*anchor.ev:0)
-    + valueStaked.reduce((s,b)=>s+b.stake*b.ev,0)
-    + specStaked.reduce((s,b)=>s+b.stake*b.ev,0);
-
-  return {anchor:anchor?{...anchor,stake:anchorStake}:null, value:valueStaked, spec:specStaked,
-          safetyPct, totalStake, totalEV, anchorEV};
-}
-
-function renderBetTier(bets, rankOffset){
-  return bets.map((b,i)=>{
-    const ret=Math.round(b.stake*b.odds*100)/100;
-    const profit=Math.max(0,ret-b.stake);
-    return `<div class="bet-card${i+rankOffset===0?' top1':''}">
-      <div class="bet-rank">${i+rankOffset+1}</div>
-      <div class="bet-info">
-        <div class="bet-match" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span>${b.match}</span>${b.comp?`<span class="league-badge">${b.comp}</span>`:''}
-        </div>
-        <div class="bet-meta"><strong>${b.label}</strong> @ <strong style="color:var(--green)">${b.odds}</strong>${b.bk?` <span style="color:var(--tx3)"> · ${b.bk}</span>`:''}</div>
-        <div class="bet-meta">${b.date}</div>
-        <div class="bet-reason">
-          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.model_chance')}</div><div class="bet-reason-val">${b.modelPct}%</div></div>
-          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.market_chance')}</div><div class="bet-reason-val">${b.implPct}%</div></div>
-          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.edge')}</div><div class="bet-reason-val" style="color:var(--green)">+${b.edge.toFixed(1)}pp</div></div>
-          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.if_wins')}</div><div class="bet-reason-val" style="color:var(--green)">€${ret}</div><div class="bet-reason-help">${t('adv.return_profit',{profit:profit.toFixed(2)})}</div></div>
-        </div>
-      </div>
-      <div class="bet-right">
-        <div class="bet-ev">${t('adv.ev')} +${(b.ev*100).toFixed(1)}%</div>
-        <div class="bet-stake">€${b.stake>0?b.stake.toFixed(2):'<1'}</div>
-        <div class="bet-stake-sub">${t('adv.suggested_stake')}</div>
-      </div>
-    </div>`;
-  }).join('');
+  return {
+    anchor, anchorStake, anchorProfit, anchorReturn,
+    comboLegs, comboOdds, comboModelP, comboStake, comboReturn, comboProfit, totalStake,
+    scenarios:{
+      // Playing BOTH simultaneously (anchor single + combo)
+      anchorWins_comboLoses: Math.round((anchorProfit-comboStake)*100)/100,
+      bothWin:               Math.round((anchorProfit+comboProfit)*100)/100,
+      anchorLoses_comboWins: Math.round((-anchorStake+comboProfit)*100)/100,
+      bothLose:              -totalStake,
+    },
+    safetyNet: anchorProfit >= comboStake,
+  };
 }
 
 function renderPortfolio(el, bets, budget, risk, leaguesScanned){
   const pf = buildPortfolio(bets, budget);
-  if(!pf.anchor&&!pf.value.length&&!pf.spec.length){
-    el.innerHTML=`<div class="error-state">${t('adv.portfolio.no_anchor')}</div>`; return;
-  }
-  const safeColor = pf.safetyPct==null?'var(--tx3)':pf.safetyPct>=100?'var(--green)':'var(--amber)';
-  let html=`${advisorHelpHtml()}
-  <div class="kpi-row" style="margin-bottom:16px">
-    <div class="kpi"><div class="kpi-val" style="color:var(--green)">€${budget.toFixed(0)}</div><div class="kpi-lbl">${t('kpi.your_budget')}</div></div>
-    <div class="kpi"><div class="kpi-val">€${pf.totalStake.toFixed(2)}</div><div class="kpi-lbl">total stake</div></div>
-    <div class="kpi"><div class="kpi-val" style="color:var(--green)">+${(pf.totalEV*100).toFixed(1)}%</div><div class="kpi-lbl">${t('adv.portfolio.total_ev')}</div></div>
-    <div class="kpi"><div class="kpi-val" style="color:${safeColor}">${pf.safetyPct!=null?pf.safetyPct+'%':'—'}</div><div class="kpi-lbl" title="${t('adv.portfolio.safety_help')}">${t('adv.portfolio.safety')} ⓘ</div></div>
+  if(!pf||!pf.anchor){el.innerHTML=`<div class="error-state">${t('adv.portfolio.no_anchor')}</div>`;return;}
+  const {anchor,anchorStake,anchorProfit,anchorReturn,
+         comboLegs,comboOdds,comboStake,comboReturn,comboProfit,
+         totalStake,scenarios,safetyNet} = pf;
+
+  const pctBudget = Math.round(totalStake/budget*100);
+  const sc = v => v>=0 ? 'color:#16a34a' : 'color:#dc2626';
+  const fmt = v => (v>=0?'+':'')+'€'+Math.abs(v).toFixed(2);
+
+  let html = `
+  <div style="background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.22);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--tx3);margin-bottom:4px">PORTFOLIO SUMMARY</div>
+      <span style="font-size:22px;font-weight:700;font-family:var(--mono)">€${totalStake.toFixed(2)}</span>
+      <span style="font-size:12px;color:var(--tx3);margin-left:6px">total stake · ${pctBudget}% of your €${budget.toFixed(0)} budget</span>
+    </div>
+    <div style="font-size:13px;line-height:1.8">
+      <div>Safe bet: <strong>€${anchorStake.toFixed(2)}</strong></div>
+      <div>Boost combo: <strong>${comboLegs.length?'€'+comboStake.toFixed(2):'—'}</strong></div>
+    </div>
+  </div>
+
+  <div style="border-left:4px solid #16a34a;padding-left:12px;margin-bottom:8px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#16a34a">SAFE BET — place this regardless</div>
+    <div style="font-size:11px;color:var(--tx3)">High-certainty single. Win this and any combo loss is covered.</div>
+  </div>
+  <div class="bet-card top1" style="border-left:4px solid #16a34a;margin-bottom:4px">
+    <div class="bet-rank" style="background:rgba(22,163,74,.15);color:#16a34a;font-weight:900">S</div>
+    <div class="bet-info">
+      <div class="bet-match" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>${anchor.match}</span>${anchor.comp?`<span class="league-badge">${anchor.comp}</span>`:''}
+      </div>
+      <div class="bet-meta"><strong>${anchor.label}</strong> @ <strong style="color:#16a34a">${anchor.odds}</strong>${anchor.bk?` · <span style="color:var(--tx3)">${anchor.bk}</span>`:''}</div>
+      <div class="bet-meta">${anchor.date}</div>
+      <div class="bet-reason">
+        <div class="bet-reason-cell"><div class="bet-reason-label">Model</div><div class="bet-reason-val">${anchor.modelPct}%</div></div>
+        <div class="bet-reason-cell"><div class="bet-reason-label">Market</div><div class="bet-reason-val">${anchor.implPct}%</div></div>
+        <div class="bet-reason-cell"><div class="bet-reason-label">Edge</div><div class="bet-reason-val" style="color:#16a34a">+${anchor.edge.toFixed(1)}pp</div></div>
+        <div class="bet-reason-cell"><div class="bet-reason-label">If wins</div><div class="bet-reason-val" style="color:#16a34a">€${anchorReturn}</div><div class="bet-reason-help">profit €${anchorProfit.toFixed(2)}</div></div>
+      </div>
+    </div>
+    <div class="bet-right"><div class="bet-ev">EV +${(anchor.ev*100).toFixed(1)}%</div><div class="bet-stake">€${anchorStake.toFixed(2)}</div><div class="bet-stake-sub">suggested stake</div></div>
   </div>`;
 
-  if(pf.anchor){
-    html+=`<div class="section-label" style="border-left:3px solid var(--green);padding-left:8px">
-      ${t('adv.portfolio.anchor')} <span style="color:var(--tx3);font-weight:400;font-size:11px">— ${t('adv.portfolio.anchor_sub')}</span>
-    </div>${renderBetTier([pf.anchor],0)}`;
+  if(comboLegs.length){
+    html += `
+  <div style="border-left:4px solid #9333ea;padding-left:12px;margin:18px 0 8px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#9333ea">BOOST COMBO — optional, place alongside the safe bet</div>
+    <div style="font-size:11px;color:var(--tx3)">Stake is sized so if this loses but the safe bet wins, you still net positive.</div>
+  </div>
+  <div class="acca-card" style="border:1px solid rgba(147,51,234,.25)">
+    <div class="acca-head" style="background:linear-gradient(135deg,#2d1b4e,#3b1f6b)">
+      <div>
+        <div class="acca-head-title">${comboLegs.length}-Leg Combo · ${comboOdds}× odds</div>
+        <div class="acca-head-meta">Model probability: ${(pf.comboModelP*100).toFixed(1)}%</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:#fff">€${comboStake.toFixed(2)}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,.5)">suggested stake</div>
+      </div>
+    </div>
+    <div class="acca-body">`;
+    comboLegs.forEach((l,i)=>{
+      html+=`<div class="acca-leg">
+        <span class="acca-leg-num">${i+1}</span>
+        <div class="acca-leg-match">${l.match}${l.comp?` <span class="league-badge" style="font-size:8px">${l.comp}</span>`:''}<br><span class="acca-leg-outcome">${l.label}</span></div>
+        <span class="acca-leg-odds">${l.odds}</span>
+      </div>`;
+    });
+    html+=`</div>
+    <div class="acca-totals">
+      <div class="acca-tot-cell"><div class="acca-tot-label">Stake</div><div class="acca-tot-val">€${comboStake.toFixed(2)}</div></div>
+      <div class="acca-tot-cell"><div class="acca-tot-label">If all win</div><div class="acca-tot-val" style="color:#22c55e">€${comboReturn.toFixed(2)}</div></div>
+      <div class="acca-tot-cell"><div class="acca-tot-label">Profit</div><div class="acca-tot-val" style="color:#22c55e">+€${comboProfit.toFixed(2)}</div></div>
+    </div>
+  </div>
+
+  <div style="border-left:4px solid #d97706;padding-left:12px;margin:18px 0 8px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#d97706">OUTCOME SCENARIOS — playing both simultaneously</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+    <div style="background:${safetyNet?'rgba(22,163,74,.08)':'rgba(220,38,38,.06)'};border:1px solid ${safetyNet?'rgba(22,163,74,.25)':'rgba(220,38,38,.2)'};border-radius:8px;padding:12px">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">✓ Safe wins &nbsp;·&nbsp; ✗ Combo loses</div>
+      <div style="font-size:20px;font-weight:700;font-family:var(--mono);${sc(scenarios.anchorWins_comboLoses)}">${fmt(scenarios.anchorWins_comboLoses)}</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px">${safetyNet?'✓ Your floor — still ahead':'⚠ Small loss if combo fails'}</div>
+    </div>
+    <div style="background:rgba(22,163,74,.13);border:1px solid rgba(22,163,74,.3);border-radius:8px;padding:12px">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">✓ Safe wins &nbsp;·&nbsp; ✓ Combo wins</div>
+      <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:#16a34a">${fmt(scenarios.bothWin)}</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px">Best outcome</div>
+    </div>
+    <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">✗ Safe loses &nbsp;·&nbsp; ✓ Combo wins</div>
+      <div style="font-size:20px;font-weight:700;font-family:var(--mono);${sc(scenarios.anchorLoses_comboWins)}">${fmt(scenarios.anchorLoses_comboWins)}</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px">Unlikely reversal</div>
+    </div>
+    <div style="background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);border-radius:8px;padding:12px">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">✗ Safe loses &nbsp;·&nbsp; ✗ Combo loses</div>
+      <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:#dc2626">${fmt(scenarios.bothLose)}</div>
+      <div style="font-size:10px;color:var(--tx3);margin-top:3px">Worst case · total at risk</div>
+    </div>
+  </div>`;
   }
-  if(pf.value.length){
-    html+=`<div class="section-label" style="margin-top:14px;border-left:3px solid var(--amber);padding-left:8px">
-      ${t('adv.portfolio.value')} <span style="color:var(--tx3);font-weight:400;font-size:11px">— ${t('adv.portfolio.value_sub')}</span>
-    </div>${renderBetTier(pf.value,1)}`;
-  }
-  if(pf.spec.length){
-    const specNote = pf.safetyPct!=null
-      ? `stakes capped so anchor EV (€${pf.anchorEV.toFixed(2)}) covers this tier`
-      : '';
-    html+=`<div class="section-label" style="margin-top:14px;border-left:3px solid var(--purple);padding-left:8px">
-      ${t('adv.portfolio.spec')} <span style="color:var(--tx3);font-weight:400;font-size:11px">— ${t('adv.portfolio.spec_sub')}${specNote?' · '+specNote:''}</span>
-    </div>${renderBetTier(pf.spec, 1+pf.value.length)}`;
-  }
-  html+=`<div class="adv-disclaimer" style="margin-top:16px">⚠ Portfolio mode sizes speculative stakes so anchor long-run expected profit covers them. Results <strong>do not guarantee profit</strong>. Bet responsibly. 18+.</div>`;
+  html+=`<div class="adv-disclaimer">⚠ Combo stake sized so safe bet profit covers combo downside. Results <strong>do not guarantee profit</strong>. Bet responsibly. 18+.</div>`;
   el.innerHTML=html;
 }
 function advisorHelpHtml(){
