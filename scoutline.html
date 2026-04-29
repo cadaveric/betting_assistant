@@ -3181,12 +3181,15 @@ async function loadFixtures(){
     // If not ready yet, show fixtures anyway and retry stats quietly after 10s
     if(Object.keys(teamStatsMap).length===0){
       const requestedLeague=lg;
-      await loadUnderstatStats(); // use Understat xG immediately while APIF stats build
-      setTimeout(async()=>{
-        if(lg!==requestedLeague) return;
-        await loadTeamStats(false);
-        await loadFixtures();
-      },10000);
+      await loadUnderstatStats();
+      // Retry at 10s and 25s until stats are ready — prevents stale "Estimated" predictions
+      for(const delay of [10000,25000]){
+        setTimeout(async()=>{
+          if(lg!==requestedLeague||Object.keys(teamStatsMap).length>0) return;
+          await loadTeamStats(false);
+          if(Object.keys(teamStatsMap).length>0) await loadFixtures();
+        }, delay);
+      }
     }
     const cutoff=new Date(today.getTime()+7*86400000);
     const foreignMatch=(mData.matches||[]).find(m=>m.competition?.code&&m.competition.code!==reqLeague);
@@ -3224,6 +3227,7 @@ async function loadFixtures(){
         pred=deepPredict(hI.idx,aI.idx,'balanced','1.1',null,fxH,fxD,fxA,fxO?.odds_movement);
       }
       const quality=dataQuality(m.homeTeam.id,m.awayTeam.id,!!fxO);
+      const isEstimated = quality.cls==='weak';
       // Value badge — show if model has ≥8% edge on any outcome and odds are cached
       let valueBadge='';
       if(fxO && pred.hasOdds){
@@ -3261,8 +3265,11 @@ async function loadFixtures(){
           <div class="center-col">
             <div class="vs-txt">VS</div><!-- keep VS as-is, universal -->
             <div class="match-dt">${ds}</div>
-            <div class="pred-score">${pred.scoreH}–${pred.scoreA}</div>
-            <div class="score-note">${t('fix.most_likely_score')}</div>
+            ${isEstimated
+              ? `<div class="pred-score" style="color:var(--tx3);font-size:16px">–</div>
+                 <div class="score-note" style="color:var(--tx3)">loading…</div>`
+              : `<div class="pred-score">${pred.scoreH}–${pred.scoreA}</div>
+                 <div class="score-note">${t('fix.most_likely_score')}</div>`}
           </div>
           <div class="team-side away">
             <div class="badge">${ini(m.awayTeam.name)}</div>
@@ -3274,6 +3281,13 @@ async function loadFixtures(){
           </div>
         </div>
         <div class="prob-section">
+          ${isEstimated ? `
+          <div style="padding:18px 16px;text-align:center">
+            <span class="quality-badge warn" style="margin-bottom:8px;display:inline-block">${quality.label}</span>
+            <div style="color:var(--tx3);font-size:13px">Team stats loading — predictions will appear in ~10s</div>
+            <div style="color:var(--tx3);font-size:11px;margin-top:4px">Elo gap: ${eloGap}</div>
+          </div>
+          ` : `
           <div class="prob-labels">
             <span>${m.homeTeam.shortName||m.homeTeam.name} ${pred.pH}%</span>
             <span>${t('fix.draw')} ${pred.pD}%</span>
@@ -3305,6 +3319,7 @@ async function loadFixtures(){
             ${marketChip(pred.pHCS,t('mkt.home_cs',{team:m.homeTeam.shortName||m.homeTeam.name}),`${m.awayTeam.shortName||m.awayTeam.name} scores 0`)}
             ${marketChip(pred.pACS,t('mkt.away_cs',{team:m.awayTeam.shortName||m.awayTeam.name}),`${m.homeTeam.shortName||m.homeTeam.name} scores 0`)}
           </div>
+          `}
         </div>
       </div>`;
     });
