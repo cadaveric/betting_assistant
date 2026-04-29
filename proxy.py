@@ -1650,6 +1650,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/injuries/'):  self.handle_injuries(path.split('/')[-1])
         elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
+        elif path == '/today':               self.handle_today(qs)
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/calibration':         self.handle_calibration()
         elif path == '/ml-predict':          self.handle_ml_predict(qs)
@@ -2104,6 +2105,68 @@ class Handler(SimpleHTTPRequestHandler):
                         'leagues_scanned': len(league_games), 'risk': risk,
                         'min_edge': min_edge, 'max_odds': cfg['max_odds'],
                         'min_prob': cfg['min_prob'], 'days': days})
+
+    def handle_today(self, qs):
+        """Return all matches across all leagues in the next 36 hours with odds."""
+        params = urllib.parse.parse_qs(qs or '')
+        hours = min(48, max(1, int(params.get('hours', ['36'])[0])))
+        if not APIF_KEY:
+            self.send_json({'error': 'APIFOOTBALL_KEY not set'}); return
+        now    = _dt.datetime.now(_dt.timezone.utc)
+        cutoff = now + _dt.timedelta(hours=hours)
+
+        def fetch_lg(comp):
+            try:
+                games, _, _ = get_normalized_odds(comp)
+                return comp, games or []
+            except Exception:
+                return comp, []
+
+        all_results = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            futs = {pool.submit(fetch_lg, c): c for c in ADVISOR_LEAGUES}
+            for fut in concurrent.futures.as_completed(futs):
+                try:
+                    comp, games = fut.result()
+                    all_results[comp] = games
+                except Exception:
+                    pass
+
+        leagues_out = []
+        for comp in ADVISOR_LEAGUES:
+            games = all_results.get(comp) or []
+            matches = []
+            for g in games:
+                raw_dt = (g.get('commence_time') or '').replace('Z', '+00:00')
+                try:
+                    starts = _dt.datetime.fromisoformat(raw_dt)
+                    if starts.tzinfo is None:
+                        starts = starts.replace(tzinfo=_dt.timezone.utc)
+                    if starts < now or starts > cutoff:
+                        continue
+                except Exception:
+                    pass
+                oh = g.get('best_h') or 0; od = g.get('best_d') or 0; oa = g.get('best_a') or 0
+                sh, sd, sa = _shin(oh, od, oa) if oh > 1 and od > 1 and oa > 1 else (None, None, None)
+                matches.append({
+                    'home':    g['home'], 'away': g['away'],
+                    'kickoff': g.get('commence_time', ''),
+                    'odds_h':  g.get('best_h'), 'odds_d': g.get('best_d'), 'odds_a': g.get('best_a'),
+                    'bk_h':    g.get('best_bk_h'), 'odds_o25': g.get('best_o25'),
+                    'impl_h':  round(sh*100) if sh is not None else g.get('impl_h'),
+                    'impl_d':  round(sd*100) if sd is not None else g.get('impl_d'),
+                    'impl_a':  round(sa*100) if sa is not None else g.get('impl_a'),
+                    'num_books': g.get('num_bookmakers', 0),
+                })
+            if matches:
+                leagues_out.append({
+                    'comp': comp,
+                    'matches': sorted(matches, key=lambda m: m.get('kickoff', '')),
+                    'count': len(matches),
+                })
+        total = sum(lg['count'] for lg in leagues_out)
+        self.send_json({'leagues': leagues_out, 'total': total,
+                        'hours': hours, 'generated': now.isoformat()})
 
     def handle_ml_predict(self, qs):
         params = urllib.parse.parse_qs(qs or '')

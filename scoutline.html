@@ -1156,6 +1156,7 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 <div class="nav">
   <button id="mob-nav-close-btn" onclick="closeMobMenu()">✕ Close</button>
   <button class="nav-btn on" onclick="nav('fixtures')" data-i18n="nav.fixtures">Fixtures</button>
+  <button class="nav-btn" onclick="nav('today')" data-i18n="nav.today">Today</button>
   <button class="nav-btn" onclick="nav('schedule')" data-i18n="nav.schedule">Schedule</button>
   <button class="nav-btn" onclick="nav('predictor')" data-i18n="nav.predictor">Predictor</button>
   <button class="nav-btn" onclick="nav('standings')" data-i18n="nav.standings">Standings</button>
@@ -1175,6 +1176,11 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 <div id="pg-fixtures" class="page on">
   <div id="fix-kpis" class="kpi-row"></div>
   <div id="fix-body"><div class="loading-state" data-i18n="loading.fixtures">Loading fixtures…</div></div>
+</div>
+
+<div id="pg-today" class="page">
+  <div id="today-kpis" class="kpi-row"></div>
+  <div id="today-body"><div class="loading-state">Click Today to load all matches.</div></div>
 </div>
 
 <div id="pg-schedule" class="page">
@@ -1301,7 +1307,8 @@ let _lang=localStorage.getItem('scoutline_lang')||'en';
 const TRANSLATIONS={
   en:{
     'brand.sub':'FOOTBALL INTELLIGENCE · DIXON-COLES · KELLY · API-FOOTBALL PRO',
-    'nav.fixtures':'Fixtures','nav.schedule':'Schedule','nav.predictor':'Predictor',
+    'nav.fixtures':'Fixtures','nav.today':'Today','nav.schedule':'Schedule','nav.predictor':'Predictor',
+    'today.title':'All matches today','today.loading':'Scanning all leagues…','today.no_odds':'No matches with odds found for this window.',
     'nav.standings':'Standings','nav.results':'Results','nav.teamstats':'Team Stats',
     'nav.odds':'Odds','nav.advisor':'★ Advisor','nav.history':'History',
     'pred.home':'HOME','pred.away':'AWAY','pred.model':'MODEL','pred.homeadv':'HOME ADV',
@@ -1492,7 +1499,8 @@ const TRANSLATIONS={
   },
   bg:{
     'brand.sub':'ФУТБОЛЕН АНАЛИЗ · ДИКСОН-КОУЛС · КЕЛИ · API-FOOTBALL PRO',
-    'nav.fixtures':'Мачове','nav.schedule':'Програма','nav.predictor':'Предиктор',
+    'nav.fixtures':'Мачове','nav.today':'Днес','nav.schedule':'Програма','nav.predictor':'Предиктор',
+    'today.title':'Всички мачове днес','today.loading':'Сканиране на всички лиги…','today.no_odds':'Не са намерени мачове.',
     'nav.standings':'Класиране','nav.results':'Резултати','nav.teamstats':'Статистики',
     'nav.odds':'Коефициенти','nav.advisor':'★ Съветник','nav.history':'История',
     'pred.home':'ДОМАКИН','pred.away':'ГОСТ','pred.model':'МОДЕЛ','pred.homeadv':'ДОМ. ПРЕДИМСТВО',
@@ -3019,7 +3027,7 @@ function closeMobMenu(){document.querySelector('.nav').classList.remove('mob-ope
 
 async function nav(pg){
   closeMobMenu();
-  const navPages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
+  const navPages=['fixtures','today','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
   document.querySelectorAll('.nav-btn').forEach((b,i)=>
     b.classList.toggle('on',navPages[i]===pg));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
@@ -3028,6 +3036,7 @@ async function nav(pg){
   const lbl=document.getElementById('mob-active-pg');
   if(lbl&&activeBtn)lbl.textContent=activeBtn.textContent.trim();
   if(pg==='fixtures') await loadFixtures();
+  else if(pg==='today') await loadToday();
   else if(pg==='schedule') await loadSchedule();
   else if(pg==='standings') await loadStandings();
   else if(pg==='results') await loadResults();
@@ -3106,6 +3115,77 @@ async function loadCoreData(){
   const allMatches=mData.matches||[];
   computeForm(table,allMatches);
   return{table,allMatches};
+}
+
+async function loadToday(){
+  const el=document.getElementById('today-body');
+  const kEl=document.getElementById('today-kpis');
+  el.innerHTML=`<div class="loading-state">${t('today.loading')}</div>`;
+  try{
+    const r=await fetch('/today?hours=36');
+    const d=await r.json();
+    if(d.error){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    if(!d.leagues||!d.total){el.innerHTML=`<div class="loading-state">${t('today.no_odds')}</div>`;return;}
+    const now=new Date();
+    kEl.innerHTML=`
+      <div class="kpi"><div class="kpi-val">${d.total}</div><div class="kpi-lbl">matches</div></div>
+      <div class="kpi"><div class="kpi-val">${d.leagues.length}</div><div class="kpi-lbl">leagues</div></div>
+      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>
+      <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">odds only</div><div class="kpi-lbl">model source</div></div>`;
+    let html='';
+    for(const lg of d.leagues){
+      html+=`<div style="margin-bottom:24px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="league-badge" style="font-size:12px;padding:4px 10px">${lg.comp}</span>
+          <span style="font-size:12px;color:var(--tx3)">${lg.count} match${lg.count!==1?'es':''}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px">`;
+      for(const m of lg.matches){
+        const dt=m.kickoff?new Date(m.kickoff):null;
+        const timeStr=dt?dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'–';
+        const dateStr=dt?dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}):'';
+        const hasOdds=m.odds_h&&m.odds_d&&m.odds_a;
+        const favH=m.impl_h&&m.impl_a&&m.impl_h>m.impl_a+5;
+        const favA=m.impl_h&&m.impl_a&&m.impl_a>m.impl_h+5;
+        const favCls=favH?'tag-green':favA?'tag-red':'tag-amber';
+        const pWin=favH?m.impl_h:favA?m.impl_a:(m.impl_h||'–');
+        const favName=favH?m.home:favA?m.away:'Draw';
+        html+=`<div class="match" style="padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--tx)">${m.home} <span style="color:var(--tx3);font-weight:400">vs</span> ${m.away}</div>
+              <div style="font-size:11px;color:var(--tx3);margin-top:2px">${dateStr} · <strong style="color:var(--amber)">${timeStr}</strong>${m.bk_h?` · ${m.bk_h}`:''}</div>
+            </div>
+            ${hasOdds?`<span class="tag ${favCls}" style="white-space:nowrap;flex-shrink:0">${favName} ${pWin?pWin+'%':''}</span>`:''}
+          </div>
+          ${hasOdds?`
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+            <div style="background:var(--bg3);border-radius:8px;padding:8px;text-align:center">
+              <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">HOME</div>
+              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx)">${m.odds_h}</div>
+              <div style="font-size:10px;color:var(--tx2)">${m.impl_h||'–'}%</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:8px;text-align:center">
+              <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">DRAW</div>
+              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx)">${m.odds_d}</div>
+              <div style="font-size:10px;color:var(--tx2)">${m.impl_d||'–'}%</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:8px;text-align:center">
+              <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">AWAY</div>
+              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx)">${m.odds_a}</div>
+              <div style="font-size:10px;color:var(--tx2)">${m.impl_a||'–'}%</div>
+            </div>
+          </div>
+          ${m.odds_o25?`<div style="font-size:11px;color:var(--tx2)">Over 2.5: <strong>${m.odds_o25}</strong> (${Math.round(100/m.odds_o25)}% implied)</div>`:''}
+          `:'<div style="font-size:12px;color:var(--tx3)">No odds available</div>'}
+        </div>`;
+      }
+      html+='</div></div>';
+    }
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;
+  }
 }
 
 async function loadFixtures(){
