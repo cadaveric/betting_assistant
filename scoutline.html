@@ -1309,6 +1309,7 @@ a[href="/logout"]:hover{background:rgba(184,70,63,.18)!important;opacity:1!impor
           <option value="both" selected data-i18n="adv.bettype.both">Individual + combined</option>
           <option value="singles" data-i18n="adv.bettype.singles">Individual bets only</option>
           <option value="acca" data-i18n="adv.bettype.acca">Combined bet only</option>
+          <option value="portfolio" data-i18n="adv.bettype.portfolio">Portfolio (anchor + value + speculative)</option>
         </select>
       </div>
       <div class="adv-group">
@@ -1371,7 +1372,13 @@ const TRANSLATIONS={
     'adv.risk.conservative':'Conservative (edge ≥12%)','adv.risk.balanced':'Balanced (edge ≥8%)',
     'adv.risk.risky':'Risky (edge ≥5%)','adv.bettype':'Bet type',
     'adv.bettype.both':'Individual + combined','adv.bettype.singles':'Individual bets only',
-    'adv.bettype.acca':'Combined bet only','adv.scanmode':'Scan mode',
+    'adv.bettype.acca':'Combined bet only','adv.bettype.portfolio':'Portfolio (anchor + value + speculative)',
+    'adv.portfolio.anchor':'Anchor bet','adv.portfolio.anchor_sub':'High-certainty — the safety net',
+    'adv.portfolio.value':'Value picks','adv.portfolio.value_sub':'Good edge, moderate risk',
+    'adv.portfolio.spec':'Speculative','adv.portfolio.spec_sub':'High upside — capped by anchor coverage',
+    'adv.portfolio.safety':'Safety net','adv.portfolio.safety_help':'Anchor expected profit as % of speculative stake. ≥100% means the anchor covers all speculative downside long-run.',
+    'adv.portfolio.total_ev':'Portfolio EV','adv.portfolio.no_anchor':'No high-certainty bet found. Try Balanced or Risky mode, or switch to All leagues.',
+    'adv.scanmode':'Scan mode',
     'adv.scanmode.current':'Current league only','adv.scanmode.all':'All leagues (ignore selected league)',
     'adv.timewindow':'Time window','adv.days.1':'Next 24h','adv.days.3':'Next 3 days',
     'adv.days.7':'Next 7 days','adv.days.14':'Next 14 days',
@@ -1556,7 +1563,13 @@ const TRANSLATIONS={
     'adv.risk.conservative':'Консервативен (предимство ≥12%)','adv.risk.balanced':'Балансиран (предимство ≥8%)',
     'adv.risk.risky':'Рисков (предимство ≥5%)','adv.bettype':'Тип залог',
     'adv.bettype.both':'Единичен + комбиниран','adv.bettype.singles':'Само единични залози',
-    'adv.bettype.acca':'Само комбиниран залог','adv.scanmode':'Режим сканиране',
+    'adv.bettype.acca':'Само комбиниран залог','adv.bettype.portfolio':'Портфолио (котва + стойност + спекулативни)',
+    'adv.portfolio.anchor':'Котва залог','adv.portfolio.anchor_sub':'Висока сигурност — предпазна мрежа',
+    'adv.portfolio.value':'Стойностни залози','adv.portfolio.value_sub':'Добро предимство, умерен риск',
+    'adv.portfolio.spec':'Спекулативни','adv.portfolio.spec_sub':'Висок потенциал — ограничен от котвата',
+    'adv.portfolio.safety':'Предпазна мрежа','adv.portfolio.safety_help':'Очакваната печалба на котвата като % от спекулативния залог.',
+    'adv.portfolio.total_ev':'Портфолио ОС','adv.portfolio.no_anchor':'Не е намерен залог с висока сигурност.',
+    'adv.scanmode':'Режим сканиране',
     'adv.scanmode.current':'Само текущата лига','adv.scanmode.all':'Всички лиги (игнорира избраната)',
     'adv.timewindow':'Времеви прозорец','adv.days.1':'Следващите 24ч','adv.days.3':'Следващите 3 дни',
     'adv.days.7':'Следващите 7 дни','adv.days.14':'Следващите 14 дни',
@@ -3697,6 +3710,111 @@ function kellyFraction(odds,prob){
   return Math.max(0,Math.min(0.25,(b*prob-q)/b));
 }
 function calcEV(odds,prob){ return prob*(odds-1)-(1-prob)*1; }
+
+function buildPortfolio(bets, budget){
+  // Tier by model probability and odds
+  const anchor = bets.find(b=>b.modelPct>=60) || null;
+  const anchorMatch = anchor?.match;
+  const remaining = bets.filter(b=>b.match!==anchorMatch);
+  const value = remaining.filter(b=>b.modelPct>=45&&b.modelPct<60).slice(0,3);
+  const valueMat = new Set(value.map(b=>b.match));
+  const spec = remaining.filter(b=>!valueMat.has(b.match)&&b.odds>=2.0).slice(0,2);
+
+  // Anchor Kelly stake, capped at 20% of budget
+  const anchorStake = anchor
+    ? Math.min(budget*0.20, Math.max(0.01, Math.round(budget*(anchor.kellyFrac||0)*100)/100))
+    : 0;
+  const anchorEV = anchor ? anchorStake * anchor.ev : 0; // expected euros profit
+
+  // Value stakes: standard Kelly, capped 10% each
+  const valueStaked = value.map(b=>{
+    const s = Math.min(budget*0.10, Math.max(0.01, Math.round(budget*(b.kellyFrac||0)*100)/100));
+    return {...b, stake:s};
+  });
+
+  // Spec stakes: capped so total spec stake ≤ anchorEV (self-hedging)
+  const specRaw = spec.map(b=>{
+    const s = Math.min(budget*0.07, Math.max(0.01, Math.round(budget*(b.kellyFrac||0)*100)/100));
+    return {...b, stake:s};
+  });
+  const totalSpecRaw = specRaw.reduce((s,b)=>s+b.stake,0);
+  const specCap = anchorEV>0 ? Math.min(1, anchorEV/Math.max(totalSpecRaw,0.01)) : 1;
+  const specStaked = specRaw.map(b=>({...b, stake:Math.round(b.stake*specCap*100)/100}));
+
+  const totalSpec = specStaked.reduce((s,b)=>s+b.stake,0);
+  const safetyPct = anchorEV>0&&totalSpec>0 ? Math.round(anchorEV/totalSpec*100) : null;
+  const totalStake = anchorStake + valueStaked.reduce((s,b)=>s+b.stake,0) + totalSpec;
+  const totalEV = (anchor?anchorStake*anchor.ev:0)
+    + valueStaked.reduce((s,b)=>s+b.stake*b.ev,0)
+    + specStaked.reduce((s,b)=>s+b.stake*b.ev,0);
+
+  return {anchor:anchor?{...anchor,stake:anchorStake}:null, value:valueStaked, spec:specStaked,
+          safetyPct, totalStake, totalEV, anchorEV};
+}
+
+function renderBetTier(bets, rankOffset){
+  return bets.map((b,i)=>{
+    const ret=Math.round(b.stake*b.odds*100)/100;
+    const profit=Math.max(0,ret-b.stake);
+    return `<div class="bet-card${i+rankOffset===0?' top1':''}">
+      <div class="bet-rank">${i+rankOffset+1}</div>
+      <div class="bet-info">
+        <div class="bet-match" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${b.match}</span>${b.comp?`<span class="league-badge">${b.comp}</span>`:''}
+        </div>
+        <div class="bet-meta"><strong>${b.label}</strong> @ <strong style="color:var(--green)">${b.odds}</strong>${b.bk?` <span style="color:var(--tx3)"> · ${b.bk}</span>`:''}</div>
+        <div class="bet-meta">${b.date}</div>
+        <div class="bet-reason">
+          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.model_chance')}</div><div class="bet-reason-val">${b.modelPct}%</div></div>
+          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.market_chance')}</div><div class="bet-reason-val">${b.implPct}%</div></div>
+          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.edge')}</div><div class="bet-reason-val" style="color:var(--green)">+${b.edge.toFixed(1)}pp</div></div>
+          <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.if_wins')}</div><div class="bet-reason-val" style="color:var(--green)">€${ret}</div><div class="bet-reason-help">${t('adv.return_profit',{profit:profit.toFixed(2)})}</div></div>
+        </div>
+      </div>
+      <div class="bet-right">
+        <div class="bet-ev">${t('adv.ev')} +${(b.ev*100).toFixed(1)}%</div>
+        <div class="bet-stake">€${b.stake>0?b.stake.toFixed(2):'<1'}</div>
+        <div class="bet-stake-sub">${t('adv.suggested_stake')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPortfolio(el, bets, budget, risk, leaguesScanned){
+  const pf = buildPortfolio(bets, budget);
+  if(!pf.anchor&&!pf.value.length&&!pf.spec.length){
+    el.innerHTML=`<div class="error-state">${t('adv.portfolio.no_anchor')}</div>`; return;
+  }
+  const safeColor = pf.safetyPct==null?'var(--tx3)':pf.safetyPct>=100?'var(--green)':'var(--amber)';
+  let html=`${advisorHelpHtml()}
+  <div class="kpi-row" style="margin-bottom:16px">
+    <div class="kpi"><div class="kpi-val" style="color:var(--green)">€${budget.toFixed(0)}</div><div class="kpi-lbl">${t('kpi.your_budget')}</div></div>
+    <div class="kpi"><div class="kpi-val">€${pf.totalStake.toFixed(2)}</div><div class="kpi-lbl">total stake</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--green)">+${(pf.totalEV*100).toFixed(1)}%</div><div class="kpi-lbl">${t('adv.portfolio.total_ev')}</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:${safeColor}">${pf.safetyPct!=null?pf.safetyPct+'%':'—'}</div><div class="kpi-lbl" title="${t('adv.portfolio.safety_help')}">${t('adv.portfolio.safety')} ⓘ</div></div>
+  </div>`;
+
+  if(pf.anchor){
+    html+=`<div class="section-label" style="border-left:3px solid var(--green);padding-left:8px">
+      ${t('adv.portfolio.anchor')} <span style="color:var(--tx3);font-weight:400;font-size:11px">— ${t('adv.portfolio.anchor_sub')}</span>
+    </div>${renderBetTier([pf.anchor],0)}`;
+  }
+  if(pf.value.length){
+    html+=`<div class="section-label" style="margin-top:14px;border-left:3px solid var(--amber);padding-left:8px">
+      ${t('adv.portfolio.value')} <span style="color:var(--tx3);font-weight:400;font-size:11px">— ${t('adv.portfolio.value_sub')}</span>
+    </div>${renderBetTier(pf.value,1)}`;
+  }
+  if(pf.spec.length){
+    const specNote = pf.safetyPct!=null
+      ? `stakes capped so anchor EV (€${pf.anchorEV.toFixed(2)}) covers this tier`
+      : '';
+    html+=`<div class="section-label" style="margin-top:14px;border-left:3px solid var(--purple);padding-left:8px">
+      ${t('adv.portfolio.spec')} <span style="color:var(--tx3);font-weight:400;font-size:11px">— ${t('adv.portfolio.spec_sub')}${specNote?' · '+specNote:''}</span>
+    </div>${renderBetTier(pf.spec, 1+pf.value.length)}`;
+  }
+  html+=`<div class="adv-disclaimer" style="margin-top:16px">⚠ Portfolio mode sizes speculative stakes so anchor long-run expected profit covers them. Results <strong>do not guarantee profit</strong>. Bet responsibly. 18+.</div>`;
+  el.innerHTML=html;
+}
 function advisorHelpHtml(){
   return `<div class="advisor-help">
     <div class="advisor-help-title">${t('adv.help.title')}</div>
@@ -3751,6 +3869,7 @@ async function runAdvisorAll(el,budget,risk,strategy,days){
       const kf=b.kellyFrac||0;
       return {...b, date:ds, stake:Math.round(budget*kf*100)/100, kellyFrac:kf, ev:b.ev};
     });
+    if(strategy==='portfolio'){renderPortfolio(el,bets,budget,risk,d.leagues_scanned);return;}
     const singles=bets.slice(0,strategy==='acca'?0:30);
     const seen=new Set(); const accaLegs=[];
     for(const b of bets){
@@ -3804,6 +3923,7 @@ async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
     });
   });
   bets.sort((a,b)=>b.ev-a.ev);
+  if(strategy==='portfolio'){renderPortfolio(el,bets,budget,risk,1);return;}
   const singles=bets.slice(0,strategy==='acca'?0:10);
   const seen=new Set(); const accaLegs=[];
   for(const b of bets){
