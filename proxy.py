@@ -312,6 +312,23 @@ THEODDS_SPORT_MAP = {
     'ECL': 'soccer_uefa_europa_conference_league',
 }
 
+# Pinnacle guest API — no registration, uses public key their website uses
+# Sharp odds (reference bookmaker), good coverage of top EU leagues
+PINNACLE_BASE    = 'https://guest.api.arcadia.pinnacle.com/0.1'
+PINNACLE_HEADERS = {
+    'x-api-key': 'CmX2KcMrXuFmNg6YFbmTxE0y9CIMzFZiJGaEVZLFvdM=',
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+    'Accept': 'application/json',
+    'Origin': 'https://www.pinnacle.com',
+    'Referer': 'https://www.pinnacle.com/',
+}
+PINNACLE_LEAGUE_MAP = {
+    'PL':  1980, 'ELC': 1975,
+    'BL1': 1764, 'PD':  1979, 'SA':  1978, 'FL1': 1981,
+    'DED': 1966, 'PPL': 2308,
+    'CL':  2076, 'EL':  2627, 'ECL': 3081,
+}
+
 MIN_CONFIDENCE = int(os.environ.get('MIN_CONFIDENCE', '60'))
 
 # ── Understat (free, no key — top-5 EU leagues xG data) ─────────────────────
@@ -1751,11 +1768,87 @@ def fetch_theodds_odds(comp):
         return []
 
 
+def fetch_pinnacle_odds(comp):
+    """Fetch odds from Pinnacle guest API — no key required, sharp market prices."""
+    league_id = PINNACLE_LEAGUE_MAP.get(comp)
+    if not league_id:
+        return []
+    cache_key = f'/pinnacle/{comp}'
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        def _pget(path):
+            req = urllib.request.Request(f'{PINNACLE_BASE}{path}', headers=PINNACLE_HEADERS)
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+                return json.loads(r.read())
+
+        matchups = _pget(f'/leagues/{league_id}/matchups?withSpecials=false') or []
+        markets  = _pget(f'/leagues/{league_id}/markets/straight?primaryOnly=true') or []
+
+        matchup_map = {m['id']: m for m in matchups if isinstance(m, dict) and m.get('id')}
+        moneylines, totals = {}, {}
+        for mkt in (markets if isinstance(markets, list) else []):
+            mid = mkt.get('matchupId')
+            if not mid: continue
+            prices = mkt.get('prices', [])
+            if mkt.get('type') == 'moneyline':
+                row = {}
+                for p in prices:
+                    des = (p.get('designation') or '').lower()
+                    odd = _to_odd(p.get('price'))
+                    if not odd: continue
+                    if des == 'home':   row['h'] = odd
+                    elif des == 'draw': row['d'] = odd
+                    elif des == 'away': row['a'] = odd
+                if row: moneylines[mid] = row
+            elif mkt.get('type') == 'total':
+                for p in prices:
+                    des = (p.get('designation') or '').lower()
+                    odd = _to_odd(p.get('price'))
+                    if not odd or p.get('points') != 2.5: continue
+                    totals.setdefault(mid, {})['o25' if des == 'over' else 'u25'] = odd
+
+        now = _dt.datetime.now(_dt.timezone.utc)
+        games = []
+        for mid, matchup in matchup_map.items():
+            start_str = matchup.get('startTime', '')
+            try:
+                start = _dt.datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                if start < now: continue
+            except Exception:
+                pass
+            parts = matchup.get('participants', [])
+            home = next((p['name'] for p in parts if p.get('alignment') == 'home'), '')
+            away = next((p['name'] for p in parts if p.get('alignment') == 'away'), '')
+            if not home or not away: continue
+            ml = moneylines.get(mid, {})
+            if not ml.get('h'): continue
+            bk_row = {'name': 'Pinnacle', 'key': 'pinnacle', **ml, **totals.get(mid, {})}
+            games.extend(_enrich_odds_rows({
+                'id': mid, 'commence_time': start_str,
+                'home': home, 'away': away,
+                'bookmakers': [bk_row], 'source': 'pinnacle',
+            }))
+
+        print(f'  [PINNACLE] {comp}: {len(games)} games')
+        with cache_lock:
+            cache[_key(cache_key)] = {'data': games, 'ts': time.time(), 'ttl': THEODDS_CACHE_TTL}
+        return games
+    except Exception as e:
+        print(f'  [PINNACLE] {comp} failed: {e}')
+        return []
+
+
 def get_normalized_odds(comp):
-    """Fetch odds for comp — tries API Football then The Odds API. Use for explicit requests."""
+    """Fetch odds — tries API Football → Pinnacle → The Odds API (if key set)."""
     games = fetch_apif_odds(comp)
     if games:
         return _record_odds_snapshot(comp, games), 'api-football', None
+    games = fetch_pinnacle_odds(comp)
+    if games:
+        return _record_odds_snapshot(comp, games), 'pinnacle', None
     games = fetch_theodds_odds(comp)
     if games:
         return _record_odds_snapshot(comp, games), 'the-odds-api', None
@@ -1764,8 +1857,8 @@ def get_normalized_odds(comp):
 
 def get_cached_odds(comp):
     """Return odds already in cache — never triggers a fresh fetch. Used by Today tab."""
-    for key_prefix in (f'/theodds/{comp}', ):
-        cached = get_cache(key_prefix)
+    for cache_key in (f'/pinnacle/{comp}', f'/theodds/{comp}'):
+        cached = get_cache(cache_key)
         if cached:
             return cached
     info = APIF_LEAGUE_MAP.get(comp)
@@ -2443,7 +2536,7 @@ if __name__ == '__main__':
   ------------------------------------------------------------
   Open:    http://localhost:{PORT}/scoutline.html
   APIF:    {apif_status}
-  ODDS:    API-Football (sole provider)
+  ODDS:    API-Football + The Odds API fallback{' (key set)' if THEODDS_KEY else ' (THE_ODDS_API_KEY not set)'}
   Leagues: {len(APIF_LEAGUE_MAP)} supported
   ============================================================
 ''')
