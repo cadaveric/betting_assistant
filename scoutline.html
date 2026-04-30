@@ -3189,27 +3189,50 @@ async function loadToday(){
     const fx=document.getElementById('fixtures-section');
     if(!d.leagues||!d.total){fx.innerHTML=`<div class="loading-state">No matches in the next 36 hours.</div>`;return;}
     const now=new Date();
-    kEl.innerHTML=`
-      <div class="kpi"><div class="kpi-val">${d.total}</div><div class="kpi-lbl">matches</div></div>
-      <div class="kpi"><div class="kpi-val">${d.leagues.length}</div><div class="kpi-lbl">leagues</div></div>
-      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>`;
-    let html='';
+    const todayKey=now.toLocaleDateString('en-CA');
+    const tomorrowKey=new Date(now.getTime()+86400000).toLocaleDateString('en-CA');
+
+    // Flatten all matches, tag with comp, sort by kickoff
+    const all=[];
     for(const league of d.leagues){
-      html+=`<div style="margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span class="league-badge" style="font-size:11px;padding:3px 9px">${league.comp}</span>
-          <span style="font-size:11px;color:var(--tx3)">${league.count} match${league.count!==1?'es':''}</span>
+      for(const m of league.matches) all.push({...m,comp:league.comp});
+    }
+    all.sort((a,b)=>(a.kickoff||'').localeCompare(b.kickoff||''));
+
+    // Group by local date
+    const byDate={};
+    for(const m of all){
+      const dk=m.kickoff?new Date(m.kickoff).toLocaleDateString('en-CA'):'?';
+      (byDate[dk]=byDate[dk]||[]).push(m);
+    }
+
+    const todayCount=(byDate[todayKey]||[]).length;
+    const totalLeagues=d.leagues.length;
+    kEl.innerHTML=`
+      <div class="kpi"><div class="kpi-val">${todayCount}</div><div class="kpi-lbl">today</div></div>
+      <div class="kpi"><div class="kpi-val">${d.total}</div><div class="kpi-lbl">next 36h</div></div>
+      <div class="kpi"><div class="kpi-val">${totalLeagues}</div><div class="kpi-lbl">leagues</div></div>
+      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>`;
+
+    let html='';
+    for(const [dk, matches] of Object.entries(byDate)){
+      const label=dk===todayKey?'Today':dk===tomorrowKey?'Tomorrow':new Date(dk+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
+      const isToday=dk===todayKey;
+      html+=`<div style="margin-bottom:24px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:13px;font-weight:800;color:${isToday?'var(--amber)':'var(--tx2)'}">${label}</span>
+          <span style="font-size:11px;color:var(--tx3)">${matches.length} match${matches.length!==1?'es':''}</span>
+          <div style="flex:1;height:1px;background:var(--br)"></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">`;
-      for(const m of league.matches){
+      for(const m of matches){
         const dt=m.kickoff?new Date(m.kickoff):null;
         const timeStr=dt?dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'–';
-        const dateStr=dt?dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}):'';
-        html+=`<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg2);border-radius:6px;border:1px solid var(--br)">
-          <span style="font-size:11px;color:var(--amber);font-weight:600;white-space:nowrap;min-width:80px">${dateStr}</span>
-          <span style="font-size:11px;color:var(--tx3);font-weight:500;white-space:nowrap;min-width:36px">${timeStr}</span>
+        html+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border-radius:6px;border:1px solid var(--br)">
+          <span class="league-badge" style="font-size:10px;padding:2px 6px;flex-shrink:0">${m.comp}</span>
+          <span style="font-size:12px;font-weight:600;color:var(--amber);white-space:nowrap;min-width:36px">${timeStr}</span>
           <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1">${m.home}</span>
-          <span style="font-size:11px;color:var(--tx3);padding:0 4px">vs</span>
+          <span style="font-size:11px;color:var(--tx3);padding:0 4px;flex-shrink:0">vs</span>
           <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1;text-align:right">${m.away}</span>
         </div>`;
       }
