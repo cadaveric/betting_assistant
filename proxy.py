@@ -1289,16 +1289,11 @@ def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, 
         if data is None: return None
         matches = [m for m in _apif_to_matches(data) if m['status'] == 'SCHEDULED']
     elif status == 'FINISHED':
-        params['status'] = 'FT'
-        try:
-            params['last'] = max(1, min(100, int(limit or 100)))
-        except (TypeError, ValueError):
-            params['last'] = 100
-        data = apif_get('fixtures', params)
-        if not data and params.get('last') != 50:
-            fallback_params = dict(params)
-            fallback_params['last'] = 50
-            data = apif_get('fixtures', fallback_params)
+        # API Football: 'last' and 'season' are mutually exclusive — use last only
+        n = max(1, min(100, int(limit or 100)))
+        data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': n})
+        if not data and n != 50:
+            data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': 50})
         if data is None: return None
         matches = _apif_to_matches(data)
     else:
