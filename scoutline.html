@@ -3125,59 +3125,30 @@ async function loadToday(){
     const r=await fetch('/today?hours=36');
     const d=await r.json();
     if(d.error){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
-    if(!d.leagues||!d.total){el.innerHTML=`<div class="loading-state">${t('today.no_odds')}</div>`;return;}
+    if(!d.leagues||!d.total){el.innerHTML=`<div class="loading-state">No matches in the next 36 hours.</div>`;return;}
     const now=new Date();
     kEl.innerHTML=`
       <div class="kpi"><div class="kpi-val">${d.total}</div><div class="kpi-lbl">matches</div></div>
       <div class="kpi"><div class="kpi-val">${d.leagues.length}</div><div class="kpi-lbl">leagues</div></div>
-      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>
-      <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">odds only</div><div class="kpi-lbl">model source</div></div>`;
+      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>`;
     let html='';
-    for(const lg of d.leagues){
-      html+=`<div style="margin-bottom:24px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <span class="league-badge" style="font-size:12px;padding:4px 10px">${lg.comp}</span>
-          <span style="font-size:12px;color:var(--tx3)">${lg.count} match${lg.count!==1?'es':''}</span>
+    for(const league of d.leagues){
+      html+=`<div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span class="league-badge" style="font-size:11px;padding:3px 9px">${league.comp}</span>
+          <span style="font-size:11px;color:var(--tx3)">${league.count} match${league.count!==1?'es':''}</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px">`;
-      for(const m of lg.matches){
+        <div style="display:flex;flex-direction:column;gap:4px">`;
+      for(const m of league.matches){
         const dt=m.kickoff?new Date(m.kickoff):null;
         const timeStr=dt?dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'–';
         const dateStr=dt?dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}):'';
-        const hasOdds=m.odds_h&&m.odds_d&&m.odds_a;
-        const favH=m.impl_h&&m.impl_a&&m.impl_h>m.impl_a+5;
-        const favA=m.impl_h&&m.impl_a&&m.impl_a>m.impl_h+5;
-        const favCls=favH?'tag-green':favA?'tag-red':'tag-amber';
-        const pWin=favH?m.impl_h:favA?m.impl_a:(m.impl_h||'–');
-        const favName=favH?m.home:favA?m.away:'Draw';
-        html+=`<div class="match" style="padding:14px 16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px">
-            <div>
-              <div style="font-size:14px;font-weight:700;color:var(--tx)">${m.home} <span style="color:var(--tx3);font-weight:400">vs</span> ${m.away}</div>
-              <div style="font-size:11px;color:var(--tx3);margin-top:2px">${dateStr} · <strong style="color:var(--amber)">${timeStr}</strong>${m.bk_h?` · ${m.bk_h}`:''}</div>
-            </div>
-            ${hasOdds?`<span class="tag ${favCls}" style="white-space:nowrap;flex-shrink:0">${favName} ${pWin?pWin+'%':''}</span>`:''}
-          </div>
-          ${hasOdds?`
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
-            <div style="background:var(--bg3);border-radius:8px;padding:8px;text-align:center">
-              <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">HOME</div>
-              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx)">${m.odds_h}</div>
-              <div style="font-size:10px;color:var(--tx2)">${m.impl_h||'–'}%</div>
-            </div>
-            <div style="background:var(--bg3);border-radius:8px;padding:8px;text-align:center">
-              <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">DRAW</div>
-              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx)">${m.odds_d}</div>
-              <div style="font-size:10px;color:var(--tx2)">${m.impl_d||'–'}%</div>
-            </div>
-            <div style="background:var(--bg3);border-radius:8px;padding:8px;text-align:center">
-              <div style="font-size:10px;color:var(--tx3);margin-bottom:3px">AWAY</div>
-              <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx)">${m.odds_a}</div>
-              <div style="font-size:10px;color:var(--tx2)">${m.impl_a||'–'}%</div>
-            </div>
-          </div>
-          ${m.odds_o25?`<div style="font-size:11px;color:var(--tx2)">Over 2.5: <strong>${m.odds_o25}</strong> (${Math.round(100/m.odds_o25)}% implied)</div>`:''}
-          `:'<div style="font-size:12px;color:var(--tx3)">No odds available</div>'}
+        html+=`<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg2);border-radius:6px;border:1px solid var(--br)">
+          <span style="font-size:11px;color:var(--amber);font-weight:600;white-space:nowrap;min-width:80px">${dateStr}</span>
+          <span style="font-size:11px;color:var(--tx3);font-weight:500;white-space:nowrap;min-width:36px">${timeStr}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1">${m.home}</span>
+          <span style="font-size:11px;color:var(--tx3);padding:0 4px">vs</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1;text-align:right">${m.away}</span>
         </div>`;
       }
       html+='</div></div>';

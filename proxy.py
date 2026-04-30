@@ -460,6 +460,13 @@ _LEAGUE_CAL_DEFAULTS = {
 cache = {}
 cache_lock = threading.Lock()
 CACHE_TTL = {'standings': 1800, 'fixtures': 300, 'results': 1800, 'teamstats': 21600, 'default': 300}
+TODAY_FIXTURES_TTL = 2 * 3600   # 2h — Today tab fixture list
+TODAY_CORE_LEAGUES = [
+    'PL', 'ELC', 'L1', 'L2',
+    'BL1', 'BL2', 'PD', 'SA', 'FL1',
+    'DED', 'PPL', 'TSL', 'SC1',
+    'CL', 'EL', 'ECL',
+]
 
 def _ttl(path):
     if 'teamstats' in path: return CACHE_TTL['teamstats']
@@ -1888,6 +1895,26 @@ def _advisor_standings_map(comp):
 # Leagues the advisor scans by default (all leagues with odds keys)
 ADVISOR_LEAGUES = list(APIF_LEAGUE_MAP.keys())
 
+def fetch_today_fixtures(comp):
+    """Fetch upcoming fixtures for the Today tab. Uses a 2h cache to limit API consumption."""
+    info = APIF_LEAGUE_MAP.get(comp)
+    if not info or not APIF_KEY:
+        return []
+    cache_key = f'/today_fixtures/{comp}'
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+    data = apif_get('fixtures', {'league': info['id'], 'season': info['season'], 'next': 15}) or []
+    matches = []
+    for m in _apif_to_matches(data):
+        if m.get('status') == 'SCHEDULED':
+            matches.append({'home': m['homeTeam']['name'], 'away': m['awayTeam']['name'],
+                            'kickoff': m.get('utcDate', '')})
+    with cache_lock:
+        cache[_key(cache_key)] = {'data': matches, 'ts': time.time(), 'ttl': TODAY_FIXTURES_TTL}
+    return matches
+
+
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(SimpleHTTPRequestHandler):
     def _require_auth(self) -> bool:
@@ -2397,7 +2424,7 @@ class Handler(SimpleHTTPRequestHandler):
                         'min_prob': cfg['min_prob'], 'days': days})
 
     def handle_today(self, qs):
-        """Return all matches across all leagues in the next 36 hours with odds."""
+        """Return all upcoming fixtures across core leagues for the next N hours."""
         params = urllib.parse.parse_qs(qs or '')
         hours = min(48, max(1, int(params.get('hours', ['36'])[0])))
         if not APIF_KEY:
@@ -2407,26 +2434,25 @@ class Handler(SimpleHTTPRequestHandler):
 
         def fetch_lg(comp):
             try:
-                return comp, get_cached_odds(comp) or []
+                return comp, fetch_today_fixtures(comp)
             except Exception:
                 return comp, []
 
         all_results = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-            futs = {pool.submit(fetch_lg, c): c for c in ADVISOR_LEAGUES}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futs = {pool.submit(fetch_lg, c): c for c in TODAY_CORE_LEAGUES}
             for fut in concurrent.futures.as_completed(futs):
                 try:
-                    comp, games = fut.result()
-                    all_results[comp] = games
+                    comp, matches = fut.result()
+                    all_results[comp] = matches
                 except Exception:
                     pass
 
         leagues_out = []
-        for comp in ADVISOR_LEAGUES:
-            games = all_results.get(comp) or []
+        for comp in TODAY_CORE_LEAGUES:
             matches = []
-            for g in games:
-                raw_dt = (g.get('commence_time') or '').replace('Z', '+00:00')
+            for m in (all_results.get(comp) or []):
+                raw_dt = (m.get('kickoff') or '').replace('Z', '+00:00')
                 try:
                     starts = _dt.datetime.fromisoformat(raw_dt)
                     if starts.tzinfo is None:
@@ -2435,18 +2461,7 @@ class Handler(SimpleHTTPRequestHandler):
                         continue
                 except Exception:
                     pass
-                oh = g.get('best_h') or 0; od = g.get('best_d') or 0; oa = g.get('best_a') or 0
-                sh, sd, sa = _shin_probs(oh, od, oa) if oh > 1 and od > 1 and oa > 1 else (None, None, None)
-                matches.append({
-                    'home':    g['home'], 'away': g['away'],
-                    'kickoff': g.get('commence_time', ''),
-                    'odds_h':  g.get('best_h'), 'odds_d': g.get('best_d'), 'odds_a': g.get('best_a'),
-                    'bk_h':    g.get('best_bk_h'), 'odds_o25': g.get('best_o25'),
-                    'impl_h':  round(sh*100) if sh is not None else g.get('impl_h'),
-                    'impl_d':  round(sd*100) if sd is not None else g.get('impl_d'),
-                    'impl_a':  round(sa*100) if sa is not None else g.get('impl_a'),
-                    'num_books': g.get('num_bookmakers', 0),
-                })
+                matches.append(m)
             if matches:
                 leagues_out.append({
                     'comp': comp,
