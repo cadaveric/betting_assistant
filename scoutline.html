@@ -291,6 +291,7 @@ input[type=number]{background-image:none;padding-right:12px}
 .adv-scanning{display:flex;align-items:center;gap:12px;padding:20px 24px;background:var(--bg2);border-radius:12px;font-size:13px;color:var(--tx2);border:1px solid var(--br)}
 .adv-scanning-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 
 /* Betting cards: make stake/return unmistakable */
 .bet-card{
@@ -3117,15 +3118,50 @@ async function loadCoreData(){
   return{table,allMatches};
 }
 
+function renderLive(matches){
+  const wrap=document.getElementById('live-section');
+  if(!wrap) return;
+  if(!matches||!matches.length){wrap.innerHTML='';return;}
+  let html=`<div style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;animation:livePulse 1.2s infinite"></span>
+      <span style="font-size:12px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.05em">Live Now</span>
+      <span style="font-size:11px;color:var(--tx3)">${matches.length} match${matches.length!==1?'es':''}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">`;
+  for(const m of matches){
+    const sh=m.score_h??'–', sa=m.score_a??'–';
+    html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:6px">
+      <span style="font-size:10px;color:var(--tx3);min-width:36px;text-align:center">${m.comp||''}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1;text-align:right">${m.home}</span>
+      <span style="font-family:var(--mono);font-size:16px;font-weight:900;color:var(--tx);padding:0 8px;white-space:nowrap">${sh} – ${sa}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1">${m.away}</span>
+      <span style="font-size:11px;color:#ef4444;font-weight:600;min-width:36px;text-align:right">${m.minute||m.status||''}</span>
+    </div>`;
+  }
+  html+='</div></div>';
+  wrap.innerHTML=html;
+}
+
+let _livePollTimer=null;
+function startLivePoll(){
+  if(_livePollTimer) return;
+  const poll=()=>fetch('/live').then(r=>r.json()).then(d=>renderLive(d.matches)).catch(()=>{});
+  poll();
+  _livePollTimer=setInterval(poll, 60000);
+}
+
 async function loadToday(){
   const el=document.getElementById('today-body');
   const kEl=document.getElementById('today-kpis');
-  el.innerHTML=`<div class="loading-state">${t('today.loading')}</div>`;
+  el.innerHTML=`<div id="live-section"></div><div id="fixtures-section"><div class="loading-state">${t('today.loading')}</div></div>`;
   try{
     const r=await fetch('/today?hours=36');
     const d=await r.json();
     if(d.error){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
-    if(!d.leagues||!d.total){el.innerHTML=`<div class="loading-state">No matches in the next 36 hours.</div>`;return;}
+    startLivePoll();
+    const fx=document.getElementById('fixtures-section');
+    if(!d.leagues||!d.total){fx.innerHTML=`<div class="loading-state">No matches in the next 36 hours.</div>`;return;}
     const now=new Date();
     kEl.innerHTML=`
       <div class="kpi"><div class="kpi-val">${d.total}</div><div class="kpi-lbl">matches</div></div>
@@ -3153,7 +3189,7 @@ async function loadToday(){
       }
       html+='</div></div>';
     }
-    el.innerHTML=html;
+    fx.innerHTML=html;
   }catch(e){
     el.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;
   }

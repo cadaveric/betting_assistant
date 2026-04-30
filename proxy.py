@@ -496,6 +496,12 @@ def set_cache(path, data, ttl=None):
         entry['ttl'] = ttl
     with cache_lock: cache[_key(path)] = entry
 
+# ── Live match state ──────────────────────────────────────────────────────────
+_live_lock  = threading.Lock()
+_live_data  = []    # list of live match dicts, refreshed by background thread
+_live_ts    = 0.0   # epoch of last successful poll
+LIVE_POLL_INTERVAL = 600  # seconds between API Football calls (10 min)
+
 def cache_meta(path):
     with cache_lock:
         e = cache.get(_key(path))
@@ -1895,6 +1901,65 @@ def _advisor_standings_map(comp):
 # Leagues the advisor scans by default (all leagues with odds keys)
 ADVISOR_LEAGUES = list(APIF_LEAGUE_MAP.keys())
 
+def _fetch_live_raw():
+    """One direct API call for all live fixtures — not cached, used by poll loop only."""
+    if not APIF_KEY:
+        return []
+    url = f'{APIF_BASE}/fixtures?live=all'
+    try:
+        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'x-apisports-key': APIF_KEY, 'User-Agent': 'Scoutline/2.0'})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+            raw = json.loads(r.read())
+            _check_rate_limit(r.headers.get('x-ratelimit-requests-remaining', '?'),
+                              r.headers.get('x-ratelimit-requests-limit'))
+            return raw.get('response', [])
+    except Exception as e:
+        print(f'  [LIVE] fetch failed: {e}')
+        return []
+
+_STATUS_LABEL = {'1H': '1H', '2H': '2H', 'HT': 'HT', 'ET': 'ET', 'BT': 'ET', 'P': 'PEN'}
+
+def _live_poll_loop():
+    global _live_data, _live_ts
+    while True:
+        try:
+            raw = _fetch_live_raw()
+            matches = []
+            for fx in raw:
+                f   = fx.get('fixture', {})
+                tms = fx.get('teams', {})
+                lg  = fx.get('league', {})
+                gl  = fx.get('goals', {})
+                st  = f.get('status') or {}
+                short   = st.get('short', '')
+                elapsed = st.get('elapsed')
+                comp_code = next((k for k, v in APIF_LEAGUE_MAP.items() if v['id'] == lg.get('id')), None)
+                label = _STATUS_LABEL.get(short, short)
+                minute = f"{elapsed}'" if elapsed and short not in ('HT', 'BT', 'P') else label
+                matches.append({
+                    'fixture_id': f.get('id'),
+                    'comp':   comp_code or str(lg.get('id', '')),
+                    'league': lg.get('name', ''),
+                    'home':   tms.get('home', {}).get('name', ''),
+                    'away':   tms.get('away', {}).get('name', ''),
+                    'score_h': gl.get('home'),
+                    'score_a': gl.get('away'),
+                    'minute': minute,
+                    'status': label,
+                })
+            with _live_lock:
+                _live_data = matches
+                _live_ts = time.time()
+            print(f'  [LIVE] {len(matches)} live matches')
+        except Exception as e:
+            print(f'  [LIVE] poll error: {e}')
+        time.sleep(LIVE_POLL_INTERVAL)
+
+def _start_live_polling():
+    threading.Thread(target=_live_poll_loop, daemon=True).start()
+
+
 def fetch_today_fixtures(comp):
     """Fetch upcoming fixtures for the Today tab. Uses a 2h cache to limit API consumption."""
     info = APIF_LEAGUE_MAP.get(comp)
@@ -1962,6 +2027,9 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/today':               self.handle_today(qs)
+        elif path == '/live':
+            with _live_lock:
+                self.send_json({'matches': _live_data, 'count': len(_live_data), 'ts': _live_ts})
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/calibration':         self.handle_calibration()
         elif path == '/ml-predict':          self.handle_ml_predict(qs)
@@ -2551,7 +2619,7 @@ if __name__ == '__main__':
   ------------------------------------------------------------
   Open:    http://localhost:{PORT}/scoutline.html
   APIF:    {apif_status}
-  ODDS:    API-Football + The Odds API fallback{' (key set)' if THEODDS_KEY else ' (THE_ODDS_API_KEY not set)'}
+  ODDS:    API-Football → Pinnacle (guest) → The Odds API{' ✓' if THEODDS_KEY else ' (no key)'}
   Leagues: {len(APIF_LEAGUE_MAP)} supported
   ============================================================
 ''')
@@ -2574,6 +2642,7 @@ if __name__ == '__main__':
         elif not FD_KEY:
             print('  [CAL] FOOTBALL_DATA_KEY not set — skipping calibration build')
     threading.Thread(target=startup, daemon=True).start()
+    _start_live_polling()
     server = ThreadingHTTPServer(('', PORT), Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\n  Stopped.')
