@@ -1419,7 +1419,7 @@ def build_teamstats(comp):
         if not std or not std.get('standings'):
             with teamstats_lock: teamstats_status[comp] = 'unavailable'; return
         teams_in_league = ((std.get('standings') or [{}])[0].get('table') or [])
-        finished = apif_get('fixtures', {'league': info['id'], 'season': info['season'],
+        finished = apif_get('fixtures', {'league': info['id'],
                                          'status': 'FT', 'last': APIF_TEAMSTAT_MATCHES}) or []
         if not finished:
             with teamstats_lock: teamstats_status[comp] = 'unavailable'; return
@@ -2732,7 +2732,8 @@ if __name__ == '__main__':
                 continue
             date_str = utc[:10]
             try:
-                data = apif_get('fixtures', {'team': home_id, 'date': date_str}) or []
+                season = APIF_LEAGUE_MAP.get(row.get('competition', ''), {}).get('season', 2025)
+                data = apif_get('fixtures', {'team': home_id, 'date': date_str, 'season': season}) or []
                 for fx in data:
                     f = fx.get('fixture', {}); tms = fx.get('teams', {})
                     h_id = (tms.get('home') or {}).get('id')
