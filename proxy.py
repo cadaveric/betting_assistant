@@ -915,11 +915,25 @@ def _prediction_summary(rows):
     rec_graded = [r for r in graded if (r.get('confidence') or 0) >= RECOMMENDED_CONF]
     rec_ok = sum(1 for r in rec_graded if (r.get('metrics') or {}).get('outcomeCorrect'))
     def _mkt_acc(key):
-        vals = [(r.get('metrics') or {}).get(key) for r in graded]
-        # True/False = graded; None = no data
-        graded_vals = [v for v in vals if v is not None]
-        if not graded_vals: return None
-        return round(sum(graded_vals) / len(graded_vals) * 100, 1)
+        results = []
+        for r in graded:
+            pred_pct = (r.get('markets') or {}).get(key)
+            ac = r.get('actual') or {}
+            hg, ag = ac.get('home'), ac.get('away')
+            if pred_pct is None or hg is None or ag is None:
+                continue
+            total = hg + ag
+            if   key == 'over15': happened = total > 1
+            elif key == 'over25': happened = total > 2
+            elif key == 'over35': happened = total > 3
+            elif key == 'btts':   happened = hg > 0 and ag > 0
+            elif key == 'htOver05':
+                hth, hta = ac.get('htHome'), ac.get('htAway')
+                if hth is None or hta is None: continue
+                happened = (hth + hta) > 0
+            else: continue
+            results.append((pred_pct >= 50) == happened)
+        return round(sum(results) / len(results) * 100, 1) if results else None
     markets_acc = {k: _mkt_acc(k) for k in ('over15', 'over25', 'over35', 'btts', 'htOver05')}
     return {'total': len(rows), 'graded': len(graded), 'pending': len(pending),
             'outcomeAccuracy': round(outcome_ok / len(graded) * 100, 1),
