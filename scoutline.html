@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Scoutline — Football Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
@@ -1049,17 +1051,41 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 .tag[data-tip]{position:relative;cursor:help}
 .tag[data-tip]:hover::after{
   content:attr(data-tip);
-  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
-  background:rgba(14,10,8,.96);color:var(--tx);font-size:11px;font-weight:500;
+  position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:var(--bg2);color:var(--tx);font-size:11px;font-weight:500;
   border:1px solid var(--br2);
-  padding:6px 10px;border-radius:8px;white-space:nowrap;max-width:260px;
-  white-space:normal;text-align:center;line-height:1.4;
+  padding:8px 12px;border-radius:10px;white-space:nowrap;max-width:280px;
+  white-space:normal;text-align:center;line-height:1.5;
   pointer-events:none;z-index:999;
-  box-shadow:0 6px 20px rgba(0,0,0,.6);
+  box-shadow:0 6px 22px rgba(80,50,10,.18),0 1px 4px rgba(80,50,10,.10);
+  animation:tipFade .14s ease forwards;
 }
 .tag[data-tip]:hover::before{
-  content:'';position:absolute;bottom:calc(100% + 1px);left:50%;transform:translateX(-50%);
-  border:5px solid transparent;border-top-color:rgba(14,10,8,.96);pointer-events:none;z-index:999;
+  content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--bg2);pointer-events:none;z-index:999;
+  filter:drop-shadow(0 1px 0 var(--br2));
+}
+@keyframes tipFade{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ─── WARM THEME: replace cold black shadows with amber-tinted ones ── */
+.match:hover,.bet-card:hover{box-shadow:0 6px 24px rgba(80,50,10,.16)!important}
+.res-row:hover{box-shadow:0 4px 14px rgba(80,50,10,.14)!important}
+.schedule-row:hover{box-shadow:0 6px 18px rgba(80,50,10,.15)!important}
+.mchip:hover{box-shadow:0 4px 14px rgba(80,50,10,.16)!important}
+.csel-drop{box-shadow:0 16px 40px rgba(80,50,10,.16)!important}
+.nav-btn.on{box-shadow:0 1px 6px rgba(80,50,10,.12)!important}
+
+/* ─── WARM THEME: mobile bet-right panel ── */
+@media(max-width:760px){
+  .bet-right{background:rgba(176,96,16,.06)!important;border-radius:10px;border:1px solid rgba(176,96,16,.12)}
+}
+
+/* ─── WARM THEME: subtle card focus/active refinements ── */
+.btn-predict:focus,.adv-scan-btn:focus,.pred-run-btn:focus{
+  outline:none;box-shadow:0 0 0 3px rgba(176,96,16,.22)!important;
+}
+select:focus,input:focus{
+  box-shadow:0 0 0 3px rgba(176,96,16,.15)!important;
 }
 </style>
 </head>
