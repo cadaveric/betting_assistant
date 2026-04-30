@@ -291,8 +291,28 @@ APIF_LEAGUE_MAP = {
     'WC':  {'id': 1,   'season': 2026}, 'EC':  {'id': 4,   'season': 2024},
 }
 
-# ── Odds (API-Football only) ──────────────────────────────────────────────────
-ODDS_CACHE_TTL = 1800  # 30 min
+# ── Odds ─────────────────────────────────────────────────────────────────────
+ODDS_CACHE_TTL        = 1800       # 30 min — API Football
+THEODDS_CACHE_TTL     = 4 * 3600   # 4h — The Odds API (conserve free-tier quota)
+
+# The Odds API — free tier (500 req/month), better coverage of top EU leagues
+THEODDS_KEY  = os.environ.get('THE_ODDS_API_KEY', '')
+THEODDS_BASE = 'https://api.the-odds-api.com/v4'
+THEODDS_SPORT_MAP = {
+    'PL':  'soccer_england_premier_league',
+    'ELC': 'soccer_england_championship',
+    'BL1': 'soccer_germany_bundesliga',
+    'PD':  'soccer_spain_la_liga',
+    'SA':  'soccer_italy_serie_a',
+    'FL1': 'soccer_france_ligue_one',
+    'DED': 'soccer_netherlands_eredivisie',
+    'PPL': 'soccer_portugal_primeira_liga',
+    'CL':  'soccer_uefa_champs_league',
+    'EL':  'soccer_uefa_europa_league',
+    'ECL': 'soccer_uefa_europa_conference_league',
+}
+
+MIN_CONFIDENCE = int(os.environ.get('MIN_CONFIDENCE', '60'))
 
 # ── Understat (free, no key — top-5 EU leagues xG data) ─────────────────────
 UNDERSTAT_LEAGUE_MAP = {
@@ -1663,11 +1683,97 @@ def _enrich_odds_rows(game):
         'source': game.get('source', 'api-football'),
     }]
 
+def _normalize_theodds_games(raw_games):
+    enriched = []
+    for game in (raw_games or []):
+        home = game.get('home_team', '')
+        away = game.get('away_team', '')
+        if not home or not away:
+            continue
+        bk_rows = []
+        for bk in game.get('bookmakers', []):
+            row = {'name': bk.get('title', bk.get('key', 'Bookmaker')), 'key': bk.get('key', '')}
+            for market in bk.get('markets', []):
+                mk = market.get('key', '')
+                if mk == 'h2h':
+                    for outcome in market.get('outcomes', []):
+                        name = outcome.get('name', '')
+                        price = _to_odd(outcome.get('price'))
+                        if not price:
+                            continue
+                        if name == home:       row['h'] = price
+                        elif name == 'Draw':   row['d'] = price
+                        elif name == away:     row['a'] = price
+                elif mk == 'totals':
+                    for outcome in market.get('outcomes', []):
+                        name = outcome.get('name', '').lower()
+                        point = outcome.get('point')
+                        price = _to_odd(outcome.get('price'))
+                        if not price or point != 2.5:
+                            continue
+                        if name == 'over':    row['o25'] = price
+                        elif name == 'under': row['u25'] = price
+            if any(row.get(k) for k in ('h', 'd', 'a', 'o25', 'u25')):
+                bk_rows.append(row)
+        enriched.extend(_enrich_odds_rows({
+            'id': game.get('id'),
+            'commence_time': game.get('commence_time'),
+            'home': home, 'away': away,
+            'bookmakers': bk_rows,
+            'source': 'the-odds-api',
+        }))
+    return enriched
+
+
+def fetch_theodds_odds(comp):
+    sport = THEODDS_SPORT_MAP.get(comp)
+    if not sport or not THEODDS_KEY:
+        return []
+    cache_key = f'/theodds/{comp}'
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+    url = (f'{THEODDS_BASE}/sports/{sport}/odds'
+           f'?apiKey={THEODDS_KEY}&regions=eu,uk&markets=h2h,totals&oddsFormat=decimal')
+    try:
+        ctx = _ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = _ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Scoutline/2.0'})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+            raw = json.loads(r.read())
+            remaining = r.headers.get('x-requests-remaining', '?')
+            print(f'  [THEODDS] {comp}: {len(raw)} games, remaining={remaining}')
+            games = _normalize_theodds_games(raw)
+            with cache_lock:
+                cache[_key(cache_key)] = {'data': games, 'ts': time.time(), 'ttl': THEODDS_CACHE_TTL}
+            return games
+    except Exception as e:
+        print(f'  [THEODDS] {comp} failed: {e}')
+        return []
+
+
 def get_normalized_odds(comp):
+    """Fetch odds for comp — tries API Football then The Odds API. Use for explicit requests."""
     games = fetch_apif_odds(comp)
     if games:
         return _record_odds_snapshot(comp, games), 'api-football', None
-    return [], 'api-football', {'status': 404, 'message': f'No odds available for {comp} right now — API-Football may not have published odds for upcoming fixtures yet.', 'code': None}
+    games = fetch_theodds_odds(comp)
+    if games:
+        return _record_odds_snapshot(comp, games), 'the-odds-api', None
+    return [], 'none', {'status': 404, 'message': f'No odds available for {comp} — check API keys or try again later.', 'code': None}
+
+
+def get_cached_odds(comp):
+    """Return odds already in cache — never triggers a fresh fetch. Used by Today tab."""
+    for key_prefix in (f'/theodds/{comp}', ):
+        cached = get_cache(key_prefix)
+        if cached:
+            return cached
+    info = APIF_LEAGUE_MAP.get(comp)
+    if info:
+        cached = get_cache(f'/apif_odds/{comp}/{info["id"]}/{info["season"]}')
+        if cached:
+            return cached
+    return []
 
 def _advisor_standings_map(comp):
     """Lightweight fallback model data when detailed teamstats are not cached."""
@@ -1824,6 +1930,9 @@ class Handler(SimpleHTTPRequestHandler):
         required = ('competition', 'homeTeam', 'awayTeam', 'probabilities', 'predictedScore')
         if not isinstance(payload, dict) or any(k not in payload for k in required):
             self.send_json({'error': 'Missing prediction fields'}, 400); return
+        conf = payload.get('confidence') or 0
+        if conf < MIN_CONFIDENCE:
+            self.send_json({'skipped': True, 'reason': f'Confidence {conf}% is below the {MIN_CONFIDENCE}% threshold (set MIN_CONFIDENCE in .env to change)'}, 200); return
         now = _dt.datetime.now(_dt.timezone.utc).isoformat()
         row = {
             'createdAt': payload.get('createdAt') or now,
@@ -2205,8 +2314,7 @@ class Handler(SimpleHTTPRequestHandler):
 
         def fetch_lg(comp):
             try:
-                games, _, _ = get_normalized_odds(comp)
-                return comp, games or []
+                return comp, get_cached_odds(comp) or []
             except Exception:
                 return comp, []
 

@@ -3709,7 +3709,14 @@ async function runDeepPred(){
 
   window._lastPred={p,hName,aName};
   document.getElementById('predOut').innerHTML=renderPredResult(p,hName,aName,h2hData);
-  rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,mw,ha,fixtureIntel).catch(e=>console.warn('Prediction history save failed',e));
+  rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,mw,ha,fixtureIntel).then(r=>{
+    if(r?.skipped){
+      const note=document.createElement('div');
+      note.style.cssText='margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:var(--amber);font-size:12px;text-align:center';
+      note.textContent=`Not tracked — confidence below threshold (${r.reason.match(/\d+%/)?.[0]||''})`;
+      document.getElementById('predOut').prepend(note);
+    }
+  }).catch(e=>console.warn('Prediction history save failed',e));
   setTimeout(()=>drawXgChart(hName,aName,p.hDist,p.aDist),200);
   // Remove stale player intel panel, then re-fetch
   const oldPl=document.getElementById('player-intel');

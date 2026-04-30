@@ -4,7 +4,8 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir scikit-learn numpy joblib xgboost
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY proxy.py scoutline.html manage_users.py train_model.py ./
 
