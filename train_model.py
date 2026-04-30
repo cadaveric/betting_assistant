@@ -35,9 +35,16 @@ FDCO_LEAGUES = {
     'PL':'E0', 'ELC':'E1',
     'BL1':'D1', 'PD':'SP1', 'SA':'I1', 'FL1':'F1',
     'DED':'N1', 'PPL':'P1',
+    'B1':'B1',   # Belgian Pro League — extra diversity
+    'SC0':'SC0', # Scottish Premiership
+    'T1':'T1',   # Turkish Süper Lig
+    'G1':'G1',   # Greek Super League
 }
-# 8 seasons — doubles training data vs the previous 4-season set
-FDCO_SEASONS = ['1718', '1819', '1920', '2021', '2122', '2223', '2324', '2425']
+# 15 seasons (was 8) — ~45k samples vs ~23k
+FDCO_SEASONS = [
+    '1011', '1112', '1213', '1314', '1415', '1516', '1617',
+    '1718', '1819', '1920', '2021', '2122', '2223', '2324', '2425',
+]
 
 
 def _safe_float(v, default=None):

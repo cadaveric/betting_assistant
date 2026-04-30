@@ -391,6 +391,46 @@ def _fetch_understat(comp):
     except Exception as e:
         print(f'[Understat] {comp} failed: {e}'); return {}
 
+# ── Rolling Elo (persisted, updated on every graded match) ───────────────────
+_ROLLING_ELO_FILE = os.path.join('data', 'rolling_elo.json')
+_rolling_elo      = {}   # int(team_id) -> float(elo)
+_rolling_elo_lock = threading.Lock()
+ELO_K             = 28   # update magnitude per match
+
+def _load_rolling_elo():
+    global _rolling_elo
+    raw = _load_json_file(_ROLLING_ELO_FILE, {})
+    with _rolling_elo_lock:
+        _rolling_elo = {int(k): float(v) for k, v in raw.items()}
+    if _rolling_elo:
+        print(f'  [ELO] Loaded {len(_rolling_elo)} rolling ratings')
+
+def _save_rolling_elo():
+    with _rolling_elo_lock:
+        snap = {str(k): v for k, v in _rolling_elo.items()}
+    _save_json_file(_ROLLING_ELO_FILE, snap)
+
+def _update_rolling_elo(home_id, away_id, hg, ag, seed_h=1500, seed_a=1500):
+    """Standard Elo update after a graded match."""
+    if not home_id or not away_id:
+        return
+    home_id, away_id = int(home_id), int(away_id)
+    with _rolling_elo_lock:
+        h = _rolling_elo.get(home_id, seed_h)
+        a = _rolling_elo.get(away_id, seed_a)
+    exp_h = 1.0 / (1 + 10 ** ((a - h) / 400))
+    score_h = 1.0 if hg > ag else 0.0 if hg < ag else 0.5
+    new_h = round(h + ELO_K * (score_h - exp_h), 1)
+    new_a = round(a + ELO_K * ((1 - score_h) - (1 - exp_h)), 1)
+    with _rolling_elo_lock:
+        _rolling_elo[home_id] = new_h
+        _rolling_elo[away_id] = new_a
+    _save_rolling_elo()
+
+def _get_rolling_elo(team_id, fallback=1500):
+    with _rolling_elo_lock:
+        return _rolling_elo.get(int(team_id), fallback)
+
 # ── ClubElo (free, no key required) ──────────────────────────────────────────
 CLUBELO_BASE    = 'http://api.clubelo.com'
 CLUBELO_TTL     = 86400  # 24 h — ratings update weekly
@@ -767,6 +807,7 @@ def _grade_prediction(row, match):
         'brier': round(brier, 4),
     }
     row['gradedAt'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    _update_rolling_elo(row.get('homeTeamId'), row.get('awayTeamId'), hg, ag)
     return True
 
 def _match_prediction_to_result(row):
@@ -2025,6 +2066,9 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/live':
             with _live_lock:
                 self.send_json({'matches': _live_data, 'count': len(_live_data), 'ts': _live_ts})
+        elif path == '/rolling-elo':
+            with _rolling_elo_lock:
+                self.send_json({'elo': dict(_rolling_elo), 'count': len(_rolling_elo)})
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/calibration':         self.handle_calibration()
         elif path == '/ml-predict':          self.handle_ml_predict(qs)
@@ -2548,8 +2592,11 @@ class Handler(SimpleHTTPRequestHandler):
             shin_a  = float(params.get('shinA', [0.29])[0])
             has_odds  = params.get('hasOdds',    ['0']  )[0] in ('1','true','yes')
             overround = float(params.get('overround', ['0.0'])[0])
-            elo_h     = float(params.get('eloH',      [1500] )[0])
-            elo_a     = float(params.get('eloA',      [1500] )[0])
+            elo_h     = float(params.get('eloH', [1500])[0])
+            elo_a     = float(params.get('eloA', [1500])[0])
+            # Prefer rolling Elo if we have it (updated from graded matches)
+            if home_id: elo_h = _get_rolling_elo(home_id, elo_h)
+            if away_id: elo_a = _get_rolling_elo(away_id, elo_a)
             elo_diff  = elo_h - elo_a
         except (ValueError, TypeError) as e:
             self.send_json({'error': f'Invalid params: {e}'}, 400); return
@@ -2636,6 +2683,7 @@ if __name__ == '__main__':
             threading.Thread(target=build_league_calibration, daemon=True).start()
         elif not FD_KEY:
             print('  [CAL] FOOTBALL_DATA_KEY not set — skipping calibration build')
+    _load_rolling_elo()
     threading.Thread(target=startup, daemon=True).start()
     _start_live_polling()
     server = ThreadingHTTPServer(('', PORT), Handler)

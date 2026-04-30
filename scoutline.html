@@ -1938,11 +1938,18 @@ function computeElo(table){
       eloMap[r.team.id]=ce.elo;
       return;
     }
-    // Fallback: derive from standings when ClubElo has no match
     const ptsPct=r.points/Math.max(1,r.playedGames*3);
     const gdPct=(r.goalDifference+50)/100;
     eloMap[r.team.id]=Math.round(1500+(table.length-r.position)*18+ptsPct*120+gdPct*60);
   });
+  // Override with rolling Elo where we have graded-match data (more accurate)
+  fetch('/rolling-elo').then(r=>r.json()).then(d=>{
+    if(d.elo&&d.count>0){
+      Object.entries(d.elo).forEach(([id,elo])=>{
+        eloMap[parseInt(id)]=Math.round(elo);
+      });
+    }
+  }).catch(()=>{});
 }
 
 // ── FORM ─────────────────────────────────────────────────────────────────────
@@ -2243,7 +2250,14 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   if(hasOdds){
     const oLead=implH>implD&&implH>implA?'H':implA>implH&&implA>implD?'A':'D';
     const mLead=pH>pD&&pH>pA?'H':pA>pH&&pA>pD?'A':'D';
-    conf=oLead===mLead?Math.min(95,conf+4):Math.max(30,conf-5);
+    if(oLead===mLead){
+      conf=Math.min(95,conf+4);
+    } else {
+      // Penalty scales with how strongly the market disagrees with the model
+      const oddsMargin=Math.abs(implH-implA);
+      const penalty=oddsMargin>20?18:oddsMargin>10?12:7;
+      conf=Math.max(30,conf-penalty);
+    }
   }
   // Find most likely score from DC matrix (mode of bivariate Poisson)
   let _msBestP=-1,_msH=0,_msA=0;
