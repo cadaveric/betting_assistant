@@ -2710,6 +2710,51 @@ if __name__ == '__main__':
   Leagues: {len(APIF_LEAGUE_MAP)} supported
   ============================================================
 ''')
+    def _backfill_ht_scores():
+        """One-time: fetch half-time scores for graded predictions missing them."""
+        if not APIF_KEY:
+            return
+        with prediction_lock:
+            rows = _load_predictions()
+        need = [r for r in rows if r.get('status') == 'graded'
+                and (r.get('actual') or {}).get('htHome') is None
+                and (r.get('actual') or {}).get('home') is not None]
+        if not need:
+            return
+        print(f'  [HT-FILL] Backfilling HT scores for {len(need)} predictions...')
+        updated = 0
+        for row in need:
+            ac = row.get('actual') or {}
+            utc = ac.get('utcDate', '')
+            home_id = row.get('homeTeamId')
+            away_id = row.get('awayTeamId')
+            if not utc or not home_id:
+                continue
+            date_str = utc[:10]
+            try:
+                data = apif_get('fixtures', {'team': home_id, 'date': date_str}) or []
+                for fx in data:
+                    f = fx.get('fixture', {}); tms = fx.get('teams', {})
+                    h_id = (tms.get('home') or {}).get('id')
+                    a_id = (tms.get('away') or {}).get('id')
+                    if str(h_id) != str(home_id) or str(a_id) != str(away_id):
+                        continue
+                    ht = ((fx.get('score') or {}).get('halftime') or {})
+                    hth, hta = ht.get('home'), ht.get('away')
+                    if hth is not None and hta is not None:
+                        ac['htHome'] = hth
+                        ac['htAway'] = hta
+                        row['actual'] = ac
+                        updated += 1
+                    break
+            except Exception:
+                pass
+            time.sleep(0.3)  # avoid bursting the rate limit
+        if updated:
+            with prediction_lock:
+                _save_predictions(rows)
+            print(f'  [HT-FILL] Saved HT scores for {updated} predictions')
+
     def startup():
         time.sleep(2)
         # Load ML model if available, otherwise trigger background training
@@ -2724,6 +2769,7 @@ if __name__ == '__main__':
             print(f'  [TS] PL from disk ({len(ts["teams"])} teams)')
         elif APIF_KEY:
             build_teamstats('PL')
+        threading.Thread(target=_backfill_ht_scores, daemon=True).start()
         if FD_KEY and _calibration_is_stale():
             threading.Thread(target=build_league_calibration, daemon=True).start()
         elif not FD_KEY:
