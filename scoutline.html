@@ -3007,60 +3007,89 @@ function renderOdds(games,el,provider='api-football'){
 }
 
 // ── NAV ────────────────────────────────────────────────────────────────────────
+let _histShowRec=false;
 async function loadPredictionHistory(){
   const el=document.getElementById('hist-body');
   el.innerHTML=`<div class="loading-state">${t('loading.scoring')}</div>`;
   try{
     const d=await fetch('/predictions?refresh=1&limit=150').then(r=>r.json());
     const s=d.summary||{};
-    const rows=d.predictions||[];
-    const pct=v=>v==null?'--':v+'%';
-    const accCls=s.outcomeAccuracy==null?'':s.outcomeAccuracy>=50?'kpi-acc-good':s.outcomeAccuracy>=35?'kpi-acc-warn':'kpi-acc-bad';
-    let html=`<div class="kpi-row" style="margin-bottom:16px">
-      <div class="kpi"><div class="kpi-val">${s.total||0}</div><div class="kpi-lbl">${t('hist.kpi.remembered')}</div></div>
-      <div class="kpi"><div class="kpi-val">${s.graded||0}</div><div class="kpi-lbl">${t('hist.kpi.graded')}</div></div>
-      <div class="kpi"><div class="kpi-val ${accCls}">${pct(s.outcomeAccuracy)}</div><div class="kpi-lbl">${t('hist.kpi.acc')}</div></div>
-      <div class="kpi"><div class="kpi-val">${s.avgBrier??'--'}</div><div class="kpi-lbl">${t('hist.kpi.brier')}</div></div>
-    </div>`;
-    if(!rows.length){
-      el.innerHTML=html+`<div class="error-state">${t('hist.no_predictions')}</div>`;
-      return;
-    }
-    html+=`<div class="card"><div class="card-head"><div><div class="card-title">${t('hist.title')}</div><div style="font-size:12px;color:var(--tx2);margin-top:2px">${t('hist.pending_note')}</div></div></div><div class="card-body" style="padding:0;overflow-x:auto">
-      <table class="stand-table"><thead><tr>
-        <th>${t('hist.date')}</th><th>${t('hist.match')}</th><th>${t('hist.pick')}</th><th>${t('hist.prob')}</th><th>${t('hist.score')}</th><th>${t('hist.actual')}</th><th>${t('hist.result')}</th><th>${t('hist.brier')}</th>
-      </tr></thead><tbody>`;
-    rows.forEach(r=>{
-      const created=r.createdAt?new Date(r.createdAt):null;
-      const ds=created?created.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+created.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
-      const probs=r.probabilities||{};
-      const pick=r.pick||'';
-      const pickLbl=pick==='H'?r.homeTeam:pick==='A'?r.awayTeam:'Draw';
-      const pickProb=pick==='H'?probs.home:pick==='A'?probs.away:probs.draw;
-      const ps=r.predictedScore||{};
-      const ac=r.actual||{};
-      const mt=r.metrics||{};
-      const done=r.status==='graded';
-      const ok=done&&mt.outcomeCorrect;
-      const result=done?(ok?t('hist.hit'):t('hist.miss')):t('hist.pending');
-      const tag=done?(ok?'tag-green':'tag-red'):'tag-gray';
-      const rowCls=done?(ok?'hist-row-win':'hist-row-loss'):'';
-      html+=`<tr class="${rowCls}">
-        <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
-        <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div></td>
-        <td>${pickLbl}</td>
-        <td style="font-family:var(--mono)">${pickProb??'--'}%</td>
-        <td style="font-family:var(--mono)">${ps.home??'?'}-${ps.away??'?'}</td>
-        <td style="font-family:var(--mono)">${done?`${ac.home}-${ac.away}`:'--'}</td>
-        <td><span class="tag ${tag}">${result}</span>${done&&mt.scoreCorrect?'<span class="tag tag-blue" style="margin-left:4px">score</span>':''}</td>
-        <td style="font-family:var(--mono)">${mt.brier??'--'}</td>
-      </tr>`;
-    });
-    html+='</tbody></table></div></div>';
-    el.innerHTML=html;
+    const allRows=d.predictions||[];
+    renderHistory(el,allRows,s);
   }catch(e){
     el.innerHTML=`<div class="error-state">${t('err.hist_failed')} ${e.message}</div>`;
   }
+}
+
+function renderHistory(el,allRows,s){
+  const rows=_histShowRec?allRows.filter(r=>(r.confidence||0)>=60):allRows;
+  const pct=v=>v==null?'--':v+'%';
+
+  // Compute accuracy on visible rows
+  const graded=rows.filter(r=>r.status==='graded');
+  const correct=graded.filter(r=>(r.metrics||{}).outcomeCorrect);
+  const acc=graded.length?Math.round(correct.length/graded.length*100):null;
+  const accCls=acc==null?'':acc>=55?'kpi-acc-good':acc>=40?'kpi-acc-warn':'kpi-acc-bad';
+  const recGraded=s.recGraded??0;
+  const recAcc=s.recAccuracy;
+  const recCls=recAcc==null?'':recAcc>=55?'kpi-acc-good':recAcc>=40?'kpi-acc-warn':'kpi-acc-bad';
+
+  let html=`<div class="kpi-row" style="margin-bottom:16px">
+    <div class="kpi"><div class="kpi-val">${rows.length}</div><div class="kpi-lbl">${_histShowRec?'≥60% picks':'all stored'}</div></div>
+    <div class="kpi"><div class="kpi-val">${graded.length}</div><div class="kpi-lbl">graded</div></div>
+    <div class="kpi"><div class="kpi-val ${accCls}">${pct(acc)}</div><div class="kpi-lbl">${_histShowRec?'≥60% acc':'all acc'}</div></div>
+    <div class="kpi"><div class="kpi-val ${recCls}">${pct(recAcc)}</div><div class="kpi-lbl">≥60% acc (${recGraded})</div></div>
+  </div>`;
+
+  if(!rows.length){
+    el.innerHTML=html+`<div class="error-state">${_histShowRec?'No recommended predictions yet.':t('hist.no_predictions')}</div>`;
+    return;
+  }
+
+  const filterBtn=`<button onclick="_histShowRec=!_histShowRec;loadPredictionHistory()"
+    style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid var(--br2);
+    background:${_histShowRec?'var(--amber)':'var(--bg3)'};color:${_histShowRec?'#1A0E00':'var(--tx2)'};cursor:pointer">
+    ${_histShowRec?'★ ≥60% only':'☆ show all'}</button>`;
+
+  html+=`<div class="card"><div class="card-head">
+    <div><div class="card-title">${t('hist.title')}</div>
+    <div style="font-size:12px;color:var(--tx2);margin-top:2px">${t('hist.pending_note')}</div></div>
+    ${filterBtn}
+  </div><div class="card-body" style="padding:0;overflow-x:auto">
+    <table class="stand-table"><thead><tr>
+      <th>${t('hist.date')}</th><th>${t('hist.match')}</th><th>Tier</th><th>${t('hist.pick')}</th><th>${t('hist.prob')}</th><th>${t('hist.score')}</th><th>${t('hist.actual')}</th><th>${t('hist.result')}</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r=>{
+    const created=r.createdAt?new Date(r.createdAt):null;
+    const ds=created?created.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+created.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+    const probs=r.probabilities||{};
+    const pick=r.pick||'';
+    const pickLbl=pick==='H'?r.homeTeam:pick==='A'?r.awayTeam:'Draw';
+    const pickProb=pick==='H'?probs.home:pick==='A'?probs.away:probs.draw;
+    const ps=r.predictedScore||{};
+    const ac=r.actual||{};
+    const mt=r.metrics||{};
+    const done=r.status==='graded';
+    const ok=done&&mt.outcomeCorrect;
+    const result=done?(ok?t('hist.hit'):t('hist.miss')):t('hist.pending');
+    const tag=done?(ok?'tag-green':'tag-red'):'tag-gray';
+    const rowCls=done?(ok?'hist-row-win':'hist-row-loss'):'';
+    const isRec=(r.tier==='recommended')||(r.confidence||0)>=60;
+    const tierBadge=isRec?`<span class="tag tag-amber" style="font-size:9px;padding:2px 6px">★ rec</span>`:`<span class="tag tag-gray" style="font-size:9px;padding:2px 6px">track</span>`;
+    html+=`<tr class="${rowCls}">
+      <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
+      <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div></td>
+      <td>${tierBadge}</td>
+      <td>${pickLbl}</td>
+      <td style="font-family:var(--mono)">${pickProb??'--'}%</td>
+      <td style="font-family:var(--mono)">${ps.home??'?'}-${ps.away??'?'}</td>
+      <td style="font-family:var(--mono)">${done?`${ac.home}-${ac.away}`:'--'}</td>
+      <td><span class="tag ${tag}">${result}</span>${done&&mt.scoreCorrect?'<span class="tag tag-blue" style="margin-left:4px">score</span>':''}</td>
+    </tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  el.innerHTML=html;
 }
 
 function toggleMobMenu(){document.querySelector('.nav').classList.toggle('mob-open');}

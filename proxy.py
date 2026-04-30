@@ -329,7 +329,8 @@ PINNACLE_LEAGUE_MAP = {
     'CL':  2076, 'EL':  2627, 'ECL': 3081,
 }
 
-MIN_CONFIDENCE = int(os.environ.get('MIN_CONFIDENCE', '60'))
+MIN_CONFIDENCE      = int(os.environ.get('MIN_CONFIDENCE', '45'))   # store threshold
+RECOMMENDED_CONF    = int(os.environ.get('RECOMMENDED_CONF', '60')) # "bet-worthy" label
 
 # ── Understat (free, no key — top-5 EU leagues xG data) ─────────────────────
 UNDERSTAT_LEAGUE_MAP = {
@@ -894,10 +895,15 @@ def _prediction_summary(rows):
         actual_rate = sum(1 for r in graded if ((r.get('actual') or {}).get('outcome') == label)) / len(graded) * 100
         cal[key] = {'avgPred': round(avg_pred, 1), 'actualRate': round(actual_rate, 1),
                     'delta': round(actual_rate - avg_pred, 1)}
+    # Tier-split accuracy: recommended (≥RECOMMENDED_CONF) vs all
+    rec_graded = [r for r in graded if (r.get('confidence') or 0) >= RECOMMENDED_CONF]
+    rec_ok = sum(1 for r in rec_graded if (r.get('metrics') or {}).get('outcomeCorrect'))
     return {'total': len(rows), 'graded': len(graded), 'pending': len(pending),
             'outcomeAccuracy': round(outcome_ok / len(graded) * 100, 1),
             'scoreAccuracy': round(score_ok / len(graded) * 100, 1),
             'avgBrier': round(sum(briers) / len(briers), 4) if briers else None,
+            'recGraded': len(rec_graded),
+            'recAccuracy': round(rec_ok / len(rec_graded) * 100, 1) if rec_graded else None,
             'calibration': cal,
             'tuning': _prediction_tuning(rows)}
 
@@ -2159,7 +2165,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': 'Missing prediction fields'}, 400); return
         conf = payload.get('confidence') or 0
         if conf < MIN_CONFIDENCE:
-            self.send_json({'skipped': True, 'reason': f'Confidence {conf}% is below the {MIN_CONFIDENCE}% threshold (set MIN_CONFIDENCE in .env to change)'}, 200); return
+            self.send_json({'skipped': True, 'reason': f'Confidence {conf}% is below the {MIN_CONFIDENCE}% minimum (set MIN_CONFIDENCE in .env to change)'}, 200); return
         now = _dt.datetime.now(_dt.timezone.utc).isoformat()
         row = {
             'createdAt': payload.get('createdAt') or now,
@@ -2181,6 +2187,7 @@ class Handler(SimpleHTTPRequestHandler):
             'odds': payload.get('odds') or {},
             'fixtureIntel': payload.get('fixtureIntel'),
             'dataQuality': payload.get('dataQuality') or {},
+            'tier': 'recommended' if conf >= RECOMMENDED_CONF else 'tracked',
             'status': 'pending',
         }
         row['id'] = payload.get('id') or _prediction_id(row)
