@@ -626,7 +626,7 @@ def _season_stage():
 _ML_LEAGUE_ORDER = ['PL','ELC','BL1','PD','SA','FL1','DED','PPL']
 
 # Must match len(train_model.FEATURE_NAMES); stale pkl triggers auto-retrain.
-_ML_FEATURE_COUNT = 18
+_ML_FEATURE_COUNT = 20
 
 def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
                  has_odds=False, overround=0.0, elo_diff=0.0):
@@ -643,8 +643,11 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
     ga_a    = adata.get('gaAwayPg')  or adata.get('goals_ag_pg') or 1.2
     xg_h    = hdata.get('xgHomePg')  or gf_h
     xg_a    = adata.get('xgAwayPg')  or gf_a
+    xga_h   = hdata.get('xgaHomePg') or ga_h   # xG conceded by home team at home
+    xga_a   = adata.get('xgaAwayPg') or ga_a   # xG conceded by away team away
     return [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
-            xg_h, xg_a, shin_h, shin_d, shin_a, float(has_odds), float(overround),
+            xg_h, xg_a, xga_h, xga_a,
+            shin_h, shin_d, shin_a, float(has_odds), float(overround),
             _season_stage(), lg_norm, float(elo_diff)]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -790,6 +793,8 @@ def _grade_prediction(row, match):
     hg, ag = ft.get('home'), ft.get('away')
     if hg is None or ag is None:
         return False
+    ht_score = (match.get('score') or {}).get('halfTime') or {}
+    htg_h, htg_a = ht_score.get('home'), ht_score.get('away')
     actual = 'H' if hg > ag else 'A' if ag > hg else 'D'
     pick = row.get('pick') or _prediction_pick(row)
     probs = row.get('probabilities') or {}
@@ -800,12 +805,23 @@ def _grade_prediction(row, match):
     }
     brier = sum((p[k] - (1 if actual == k else 0)) ** 2 for k in ('H', 'D', 'A'))
     pred_score = row.get('predictedScore') or {}
+    markets = row.get('markets') or {}
+    total_goals = hg + ag
+    ht_total = (htg_h or 0) + (htg_a or 0) if htg_h is not None and htg_a is not None else None
     row['status'] = 'graded'
-    row['actual'] = {'home': hg, 'away': ag, 'outcome': actual, 'utcDate': match.get('utcDate')}
+    row['actual'] = {
+        'home': hg, 'away': ag, 'outcome': actual, 'utcDate': match.get('utcDate'),
+        'htHome': htg_h, 'htAway': htg_a,
+    }
     row['metrics'] = {
         'outcomeCorrect': pick == actual,
         'scoreCorrect': pred_score.get('home') == hg and pred_score.get('away') == ag,
         'brier': round(brier, 4),
+        'over15': total_goals > 1 if markets.get('over15') is not None else None,
+        'over25': total_goals > 2 if markets.get('over25') is not None else None,
+        'over35': total_goals > 3 if markets.get('over35') is not None else None,
+        'btts': (hg > 0 and ag > 0) if markets.get('btts') is not None else None,
+        'htOver05': (ht_total > 0) if ht_total is not None and markets.get('htOver05') is not None else None,
     }
     row['gradedAt'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
     _update_rolling_elo(row.get('homeTeamId'), row.get('awayTeamId'), hg, ag)
@@ -898,12 +914,20 @@ def _prediction_summary(rows):
     # Tier-split accuracy: recommended (≥RECOMMENDED_CONF) vs all
     rec_graded = [r for r in graded if (r.get('confidence') or 0) >= RECOMMENDED_CONF]
     rec_ok = sum(1 for r in rec_graded if (r.get('metrics') or {}).get('outcomeCorrect'))
+    def _mkt_acc(key):
+        vals = [(r.get('metrics') or {}).get(key) for r in graded]
+        # True/False = graded; None = no data
+        graded_vals = [v for v in vals if v is not None]
+        if not graded_vals: return None
+        return round(sum(graded_vals) / len(graded_vals) * 100, 1)
+    markets_acc = {k: _mkt_acc(k) for k in ('over15', 'over25', 'over35', 'btts', 'htOver05')}
     return {'total': len(rows), 'graded': len(graded), 'pending': len(pending),
             'outcomeAccuracy': round(outcome_ok / len(graded) * 100, 1),
             'scoreAccuracy': round(score_ok / len(graded) * 100, 1),
             'avgBrier': round(sum(briers) / len(briers), 4) if briers else None,
             'recGraded': len(rec_graded),
             'recAccuracy': round(rec_ok / len(rec_graded) * 100, 1) if rec_graded else None,
+            'marketsAcc': markets_acc,
             'calibration': cal,
             'tuning': _prediction_tuning(rows)}
 

@@ -21,7 +21,8 @@ FEATURE_NAMES = [
     'sot_h',  'sot_a',            # shots on target per game (venue-split)
     'gf_h',   'ga_h',             # home team goals for/against per home game
     'gf_a',   'ga_a',             # away team goals for/against per away game
-    'xg_h',   'xg_a',            # expected goals per game (venue-split; fallback=goals)
+    'xg_h',   'xg_a',            # attack xG per game (venue-split; fallback=goals)
+    'xga_h',  'xga_a',           # defensive xGA conceded per game (venue-split)
     'shin_h', 'shin_d', 'shin_a', # Shin-corrected market probs (0.44/0.27/0.29 default)
     'has_odds',                    # 1 if odds available, else 0
     'overround',                   # bookmaker margin (sum 1/odds); 0 if no odds; lower=sharper market
@@ -131,8 +132,8 @@ def build_dataset():
                 if name not in history:
                     history[name] = {
                         'res': [],
-                        'h_gf': [], 'h_ga': [], 'h_sot': [], 'h_xg': [],
-                        'a_gf': [], 'a_ga': [], 'a_sot': [], 'a_xg': [],
+                        'h_gf': [], 'h_ga': [], 'h_sot': [], 'h_xg': [], 'h_xga': [],
+                        'a_gf': [], 'a_ga': [], 'a_sot': [], 'a_xg': [], 'a_xga': [],
                     }
                 return history[name]
 
@@ -173,6 +174,8 @@ def build_dataset():
                 # xG falls back to actual goals when not in CSV
                 xg_h  = _roll(hd['h_xg'],  default=None) or gf_h
                 xg_a  = _roll(ad['a_xg'],  default=None) or gf_a
+                xga_h = _roll(hd['h_xga'], default=None) or ga_h  # xG conceded at home
+                xga_a = _roll(ad['a_xga'], default=None) or ga_a  # xG conceded away
 
                 elo_h = elo_ratings.get(ht, 1500.0)
                 elo_a = elo_ratings.get(at, 1500.0)
@@ -185,7 +188,8 @@ def build_dataset():
 
                 if form_h is not None and form_a is not None:
                     feat = [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
-                            xg_h, xg_a, sh, sd, sa, has_odds, overround, stage, lg_norm, elo_diff]
+                            xg_h, xg_a, xga_h, xga_a,
+                            sh, sd, sa, has_odds, overround, stage, lg_norm, elo_diff]
                     X.append(feat)
                     y.append({'H': 0, 'D': 1, 'A': 2}[ftr])
 
@@ -196,8 +200,10 @@ def build_dataset():
                     hd['res'].append(h_pts); ad['res'].append(a_pts)
                     hd['h_gf'].append(hg); hd['h_ga'].append(ag); hd['h_sot'].append(hst)
                     hd['h_xg'].append(hxg if hxg is not None else hg)
+                    hd['h_xga'].append(axg if axg is not None else ag)   # xG conceded at home
                     ad['a_gf'].append(ag); ad['a_ga'].append(hg); ad['a_sot'].append(ast)
                     ad['a_xg'].append(axg if axg is not None else ag)
+                    ad['a_xga'].append(hxg if hxg is not None else hg)  # xG conceded away
                     # Elo update (K=20, +50 home advantage in expected)
                     exp_h = _elo_expected(elo_h + 50, elo_a)
                     score_h = 1.0 if ftr == 'H' else (0.5 if ftr == 'D' else 0.0)
