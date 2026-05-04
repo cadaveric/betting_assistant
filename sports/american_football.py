@@ -95,13 +95,12 @@ def get_standings():
         return []
 
 def get_week_games(week=None):
-    """Return games for a specific week or the most recent week."""
+    """Return only upcoming NFL games (no fallback to past games when off-season)."""
     try:
         games = _get_schedule()
         if not games:
             return []
         today = _dt.date.today()
-        # Filter to games within the next 7 days or most recent past week
         upcoming = []
         for g in games:
             gd = g.get('gameday', '')
@@ -109,19 +108,24 @@ def get_week_games(week=None):
                 d = _dt.date.fromisoformat(gd)
             except Exception:
                 continue
-            if d >= today and d <= today + _dt.timedelta(days=7):
+            # Only return truly upcoming games (not yet played)
+            if d >= today and d <= today + _dt.timedelta(days=14) and g.get('home_score') is None:
                 upcoming.append(g)
-        if not upcoming:
-            # Fall back to most recent completed week
-            played = [g for g in games if g.get('home_score') is not None
-                      and g.get('game_type') == 'REG']
-            if played:
-                max_wk = max(g.get('week', 0) for g in played)
-                upcoming = [g for g in played if g.get('week') == max_wk]
+        # No fallback — if no upcoming games, return empty (off-season)
         return sorted(upcoming, key=lambda x: (x.get('gameday',''), x.get('gametime','')))
     except Exception as e:
         print(f'  [NFL] week_games error: {e}')
         return []
+
+def is_off_season():
+    """True when no upcoming regular season games exist in the next 60 days."""
+    today = _dt.date.today()
+    games = _get_schedule() or []
+    return not any(
+        g.get('game_type') == 'REG' and g.get('home_score') is None and
+        _dt.date.fromisoformat(g['gameday']) >= today
+        for g in games if g.get('gameday','')
+    )
 
 def get_team_stats(team):
     """Compute offensive/defensive points per game for a team."""

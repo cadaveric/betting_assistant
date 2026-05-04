@@ -2286,12 +2286,12 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/sport/nhl':           self.handle_nhl(qs)
         elif path == '/sport/nfl':           self.handle_nfl(qs)
         elif path == '/sport/mlb':           self.handle_mlb(qs)
+        elif path == '/sport/nba/fixtures':  self.handle_nba_fixtures()
+        elif path == '/sport/nhl/fixtures':  self.handle_nhl_fixtures()
         elif path.startswith('/sport/nba/'): self.handle_nba_detail(path.split('/sport/nba/')[1], qs)
         elif path.startswith('/sport/nhl/'): self.handle_nhl_detail(path.split('/sport/nhl/')[1], qs)
         elif path.startswith('/sport/nfl/'): self.handle_nfl_detail(path.split('/sport/nfl/')[1], qs)
         elif path.startswith('/sport/mlb/'): self.handle_mlb_detail(path.split('/sport/mlb/')[1], qs)
-        elif path == '/sport/nba/fixtures':  self.handle_nba_fixtures()
-        elif path == '/sport/nhl/fixtures':  self.handle_nhl_fixtures()
         elif path == '/live':
             with _live_lock:
                 self.send_json({'matches': _live_data, 'count': len(_live_data), 'ts': _live_ts})
@@ -2943,7 +2943,9 @@ class Handler(SimpleHTTPRequestHandler):
                 set_cache(ck, result, 3600); self.send_json(result)
             elif action == 'games':
                 data = _nfl.get_week_games()
-                result = {'sport': 'american_football', 'league': 'NFL', 'games': data}
+                off = len(data) == 0 and _nfl.is_off_season()
+                result = {'sport': 'american_football', 'league': 'NFL', 'games': data,
+                          'off_season': off, 'season': _nfl.NFL_SEASON}
                 set_cache(ck, result, 1800); self.send_json(result)
             else:
                 self.send_json({'error': f'Unknown action: {action}'}, 400)

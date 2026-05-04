@@ -4655,8 +4655,22 @@ async function loadNFLGames(body,kpis){
     const r=await fetch('/sport/nfl?action=games');
     const d=await r.json();
     const games=d.games||[];
-    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">games this week</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--red)">NFL 2024</div><div class="kpi-lbl">season</div></div>`;
-    if(!games.length){body.innerHTML='<div class="loading-state">No NFL games found. Season may be in off-season.</div>';return;}
+    const season=d.season||2024;
+    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length||'–'}</div><div class="kpi-lbl">upcoming games</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--red)">NFL ${season}</div><div class="kpi-lbl">season</div></div>`;
+    if(!games.length){
+      const msg = d.off_season
+        ? `<div style="text-align:center;padding:32px 16px">
+            <div style="font-size:32px;margin-bottom:12px">🏈</div>
+            <div style="font-size:16px;font-weight:700;color:var(--tx);margin-bottom:8px">NFL Off-Season</div>
+            <div style="font-size:13px;color:var(--tx2)">The ${season} NFL regular season has ended. The 2025 season begins in September.</div>
+            <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+              <button onclick="loadSportPage('nfl','standings')" class="adv-scan-btn" style="padding:0 20px;height:34px;font-size:12px">View Final Standings</button>
+              <button onclick="loadSportPage('nfl','predict')" style="padding:0 20px;height:34px;border-radius:8px;border:1px solid var(--br2);background:var(--bg3);color:var(--tx);font-size:12px;cursor:pointer">Predict Any Matchup</button>
+            </div>
+          </div>`
+        : `<div class="loading-state">No NFL games in the next 14 days.</div>`;
+      body.innerHTML=msg; return;
+    }
     // Pre-compute predictions for each game
     const cards = await Promise.all(games.map(async g=>{
       const home=g.home_team||''; const away=g.away_team||'';
