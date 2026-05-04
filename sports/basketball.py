@@ -8,13 +8,17 @@ from functools import lru_cache
 
 try:
     from nba_api.stats.endpoints import (
-        leaguestandings, teamgamelog, leaguegamefinder,
-        scoreboard, teamestimatedmetrics
+        leaguestandings, teamgamelog, leaguegamefinder, teamestimatedmetrics
     )
+    try:
+        from nba_api.stats.endpoints import scoreboardv2 as scoreboard
+    except ImportError:
+        from nba_api.stats.endpoints import scoreboard  # older versions
     from nba_api.stats.static import teams as nba_teams_static
     NBA_AVAILABLE = True
-except ImportError:
+except ImportError as _e:
     NBA_AVAILABLE = False
+    print(f'  [NBA] import failed: {_e}')
 
 def _current_nba_season():
     """NBA season runs Oct-Jun. Dynamically returns the active season string."""
@@ -122,17 +126,21 @@ def get_today_games():
     try:
         time.sleep(0.6)
         today = _dt.date.today().strftime('%m/%d/%Y')
-        sb = scoreboard.Scoreboard(game_date=today)
+        # scoreboardv2 / scoreboard both have ScoreboardV2 or Scoreboard class
+        try:
+            sb = scoreboard.ScoreboardV2(game_date=today)
+        except AttributeError:
+            sb = scoreboard.Scoreboard(game_date=today)
         games_df = sb.get_data_frames()[0]
         result = []
         for _, g in games_df.iterrows():
             result.append({
                 'game_id':    str(g.get('GAME_ID', '')),
-                'home':       g.get('HOME_TEAM_NAME', ''),
-                'away':       g.get('VISITOR_TEAM_NAME', ''),
+                'home':       str(g.get('HOME_TEAM_NAME', '') or g.get('HOME_TEAM_ABBREVIATION', '')),
+                'away':       str(g.get('VISITOR_TEAM_NAME', '') or g.get('VISITOR_TEAM_ABBREVIATION', '')),
                 'home_id':    str(g.get('HOME_TEAM_ID', '')),
                 'away_id':    str(g.get('VISITOR_TEAM_ID', '')),
-                'status':     g.get('GAME_STATUS_TEXT', ''),
+                'status':     str(g.get('GAME_STATUS_TEXT', '') or ''),
                 'home_score': g.get('HOME_TEAM_PTS'),
                 'away_score': g.get('VISITOR_TEAM_PTS'),
             })
