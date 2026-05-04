@@ -167,3 +167,55 @@ def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
         'total_pts': total,
         'spread': round((h_pts - a_pts), 1),   # positive = home favoured
     }
+
+def get_upcoming_games(days=7):
+    """Return upcoming NBA games for the next N days."""
+    if not NBA_AVAILABLE:
+        return []
+    try:
+        time.sleep(0.6)
+        from nba_api.stats.endpoints import leaguegamefinder
+        # Get recently scheduled games (current season)
+        gf = leaguegamefinder.LeagueGameFinder(
+            league_id_nullable='00',
+            season_nullable=NBA_SEASON,
+            season_type_nullable='Regular Season',
+        )
+        df = gf.get_data_frames()[0]
+        today = _dt.date.today()
+        cutoff = today + _dt.timedelta(days=days)
+        # Filter to future games (no score yet = upcoming)
+        upcoming_ids = set()
+        upcoming = []
+        for _, row in df.iterrows():
+            try:
+                gd = _dt.datetime.strptime(str(row.get('GAME_DATE','')), '%Y-%m-%dT%H:%M:%S').date()
+            except Exception:
+                try: gd = _dt.date.fromisoformat(str(row.get('GAME_DATE',''))[:10])
+                except: continue
+            if gd < today or gd > cutoff: continue
+            gid = str(row.get('GAME_ID',''))
+            if gid in upcoming_ids: continue
+            upcoming_ids.add(gid)
+            # Need to pair home and away — look for matching game
+            home_row = df[(df['GAME_ID']==row['GAME_ID']) & df['MATCHUP'].str.contains('vs\\.', na=False)]
+            away_row = df[(df['GAME_ID']==row['GAME_ID']) & df['MATCHUP'].str.contains('@', na=False)]
+            if home_row.empty or away_row.empty:
+                continue
+            hr = home_row.iloc[0]; ar = away_row.iloc[0]
+            upcoming.append({
+                'game_id':  gid,
+                'home':     str(hr.get('TEAM_NAME','')),
+                'away':     str(ar.get('TEAM_NAME','')),
+                'home_id':  str(hr.get('TEAM_ID','')),
+                'away_id':  str(ar.get('TEAM_ID','')),
+                'home_abbr':str(hr.get('TEAM_ABBREVIATION','')),
+                'away_abbr':str(ar.get('TEAM_ABBREVIATION','')),
+                'gameday':  gd.isoformat(),
+                'status':   'Scheduled',
+            })
+        return sorted(upcoming, key=lambda x: x.get('gameday',''))
+    except Exception as e:
+        print(f'  [NBA] upcoming_games error: {e}')
+        # Fall back to today's games
+        return get_today_games()

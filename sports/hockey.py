@@ -180,3 +180,26 @@ def _over_prob(lh, la, line=5.5, max_g=10):
             if i + j > line:
                 p += pi * (la**j * exp(-la)) / factorial(j)
     return p
+
+def get_upcoming_games(days=7):
+    """Return upcoming NHL games for the next N days."""
+    today = _dt.date.today()
+    games = []
+    for d in range(days + 1):
+        date = (today + _dt.timedelta(days=d)).isoformat()
+        data = _fetch(f'schedule/{date}')
+        if not data: continue
+        for gw in data.get('gameWeek', []):
+            for g in gw.get('games', []):
+                if g.get('gameType') != 2: continue  # regular season only
+                games.append({
+                    'game_id':    g.get('id'),
+                    'home':       (g.get('homeTeam') or {}).get('commonName',{}).get('default',''),
+                    'away':       (g.get('awayTeam') or {}).get('commonName',{}).get('default',''),
+                    'home_abbr':  (g.get('homeTeam') or {}).get('abbrev',''),
+                    'away_abbr':  (g.get('awayTeam') or {}).get('abbrev',''),
+                    'kickoff':    g.get('startTimeUTC',''),
+                    'gameday':    date,
+                    'status':     g.get('gameState','Scheduled'),
+                })
+    return games

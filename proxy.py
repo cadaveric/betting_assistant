@@ -989,14 +989,85 @@ def _match_prediction_to_result(row):
         return m
     return None
 
+def _grade_two_way(row, home_score, away_score, kickoff=None):
+    """Grade a home/away-only (no draw) prediction — used for NBA, NHL, NFL."""
+    if home_score is None or away_score is None:
+        return False
+    actual = 'H' if home_score > away_score else 'A'
+    pick   = row.get('pick', 'H')
+    probs  = row.get('probabilities') or {}
+    ph     = (probs.get('home') or 0) / 100
+    pa     = (probs.get('away') or 0) / 100
+    brier  = (ph - (1 if actual == 'H' else 0)) ** 2 + (pa - (1 if actual == 'A' else 0)) ** 2
+    row['status']    = 'graded'
+    row['actual']    = {'home': home_score, 'away': away_score, 'outcome': actual,
+                        'utcDate': kickoff or _dt.datetime.now(_dt.timezone.utc).isoformat()}
+    row['metrics']   = {'outcomeCorrect': pick == actual, 'scoreCorrect': False,
+                        'brier': round(brier, 4)}
+    row['gradedAt']  = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    return True
+
+def _try_grade_nba(row):
+    """Look up NBA game result and grade if finished."""
+    if not SPORTS_AVAILABLE: return False
+    try:
+        import time
+        home = row.get('homeTeam',''); away = row.get('awayTeam','')
+        kickoff_raw = row.get('kickoff','')
+        game_date = kickoff_raw[:10] if kickoff_raw else _dt.date.today().isoformat()
+        from nba_api.stats.endpoints import scoreboard as nba_sb
+        time.sleep(0.6)
+        sb = nba_sb.Scoreboard(game_date=_dt.date.fromisoformat(game_date).strftime('%m/%d/%Y'))
+        df = sb.get_data_frames()[0]
+        for _, g in df.iterrows():
+            hn = str(g.get('HOME_TEAM_NAME','')) ; an = str(g.get('VISITOR_TEAM_NAME',''))
+            if (home.lower() in hn.lower() or hn.lower() in home.lower()) and \
+               (away.lower() in an.lower() or an.lower() in away.lower()):
+                hs = g.get('HOME_TEAM_PTS'); as_ = g.get('VISITOR_TEAM_PTS')
+                if hs and as_ and str(g.get('GAME_STATUS_TEXT','')).startswith('Final'):
+                    return _grade_two_way(row, int(hs), int(as_), kickoff_raw)
+    except Exception as e:
+        print(f'  [GRADE-NBA] {e}')
+    return False
+
+def _try_grade_nhl(row):
+    """Look up NHL game result and grade if finished."""
+    try:
+        home = row.get('homeTeam',''); away = row.get('awayTeam','')
+        kickoff_raw = row.get('kickoff','')
+        game_date = kickoff_raw[:10] if kickoff_raw else _dt.date.today().isoformat()
+        data = _hockey._fetch(f'schedule/{game_date}')
+        if not data: return False
+        for gw in data.get('gameWeek', []):
+            for g in gw.get('games', []):
+                hn = (g.get('homeTeam') or {}).get('commonName',{}).get('default','')
+                an = (g.get('awayTeam') or {}).get('commonName',{}).get('default','')
+                if (home.lower() in hn.lower() or hn.lower() in home.lower()) and \
+                   (away.lower() in an.lower() or an.lower() in away.lower()):
+                    hs = (g.get('homeTeam') or {}).get('score')
+                    as_ = (g.get('awayTeam') or {}).get('score')
+                    state = g.get('gameState','')
+                    if hs is not None and as_ is not None and state in ('FINAL','OFF'):
+                        return _grade_two_way(row, hs, as_, kickoff_raw)
+    except Exception as e:
+        print(f'  [GRADE-NHL] {e}')
+    return False
+
 def _score_predictions(rows):
     changed = False
     for row in rows:
         if row.get('status') == 'graded':
             continue
-        match = _match_prediction_to_result(row)
-        if match and _grade_prediction(row, match):
-            changed = True
+        sport = row.get('sport', 'football')
+        if sport == 'basketball':
+            if _try_grade_nba(row): changed = True
+        elif sport == 'hockey':
+            if _try_grade_nhl(row): changed = True
+        else:
+            # Default: football grading via API-Football
+            match = _match_prediction_to_result(row)
+            if match and _grade_prediction(row, match):
+                changed = True
     return changed
 
 def _prediction_summary(rows):
@@ -2219,6 +2290,8 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/sport/nhl/'): self.handle_nhl_detail(path.split('/sport/nhl/')[1], qs)
         elif path.startswith('/sport/nfl/'): self.handle_nfl_detail(path.split('/sport/nfl/')[1], qs)
         elif path.startswith('/sport/mlb/'): self.handle_mlb_detail(path.split('/sport/mlb/')[1], qs)
+        elif path == '/sport/nba/fixtures':  self.handle_nba_fixtures()
+        elif path == '/sport/nhl/fixtures':  self.handle_nhl_fixtures()
         elif path == '/live':
             with _live_lock:
                 self.send_json({'matches': _live_data, 'count': len(_live_data), 'ts': _live_ts})
@@ -2688,6 +2761,73 @@ class Handler(SimpleHTTPRequestHandler):
                         'min_prob': cfg['min_prob'], 'days': days})
 
     # ── Multi-sport handlers ──────────────────────────────────────────────────
+
+    def handle_nba_fixtures(self):
+        """Upcoming NBA games with pre-computed predictions."""
+        ck = '_nba_fixtures_7d'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        if not SPORTS_AVAILABLE:
+            self.send_json({'games': [], 'error': 'nba_api not installed'}); return
+        try:
+            standings = _bball.get_standings()
+            st_map = {t['team_id']: t for t in standings}
+            games = _bball.get_upcoming_games(days=7)
+            enriched = []
+            for g in games:
+                h_id = g.get('home_id',''); a_id = g.get('away_id','')
+                h_st = st_map.get(h_id, {}); a_st = st_map.get(a_id, {})
+                h_stats = get_cache(f'_nba_ts_{h_id}') or {}
+                a_stats = get_cache(f'_nba_ts_{a_id}') or {}
+                h_elo = _bball._elo_store.get(h_id, h_st.get('elo', 1500))
+                a_elo = _bball._elo_store.get(a_id, a_st.get('elo', 1500))
+                pred = _bball.predict(h_stats or h_st, a_stats or a_st, h_elo, a_elo)
+                enriched.append({**g,
+                    'home_record': f"{h_st.get('wins',0)}-{h_st.get('losses',0)}",
+                    'away_record': f"{a_st.get('wins',0)}-{a_st.get('losses',0)}",
+                    'home_elo': round(h_elo), 'away_elo': round(a_elo),
+                    'home_form': h_st.get('streak',''), 'away_form': a_st.get('streak',''),
+                    'prediction': pred,
+                })
+            result = {'games': enriched, 'total': len(enriched), 'sport': 'basketball'}
+            set_cache(ck, result, 600)
+            self.send_json(result)
+        except Exception as e:
+            print(f'  [NBA-FIX] error: {e}')
+            self.send_json({'games': [], 'error': str(e)})
+
+    def handle_nhl_fixtures(self):
+        """Upcoming NHL games with pre-computed predictions."""
+        ck = '_nhl_fixtures_7d'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        try:
+            standings = _hockey.get_standings()
+            st_map = {t['abbr']: t for t in standings}
+            games = _hockey.get_upcoming_games(days=7)
+            enriched = []
+            for g in games:
+                h_abbr = g.get('home_abbr',''); a_abbr = g.get('away_abbr','')
+                h_st = st_map.get(h_abbr, {}); a_st = st_map.get(a_abbr, {})
+                h_form = _hockey.get_team_schedule(h_abbr) if h_abbr else []
+                a_form = _hockey.get_team_schedule(a_abbr) if a_abbr else []
+                pred = _hockey.predict(h_st, a_st, h_form, a_form)
+                enriched.append({**g,
+                    'home_record': f"{h_st.get('wins',0)}-{h_st.get('losses',0)}-{h_st.get('ot_losses',0)}",
+                    'away_record': f"{a_st.get('wins',0)}-{a_st.get('losses',0)}-{a_st.get('ot_losses',0)}",
+                    'home_pts': h_st.get('points',0), 'away_pts': a_st.get('points',0),
+                    'home_gf_pg': h_st.get('gf_pg',0), 'away_gf_pg': a_st.get('gf_pg',0),
+                    'home_ga_pg': h_st.get('ga_pg',0), 'away_ga_pg': a_st.get('ga_pg',0),
+                    'prediction': pred,
+                })
+            result = {'games': enriched, 'total': len(enriched), 'sport': 'hockey'}
+            set_cache(ck, result, 600)
+            self.send_json(result)
+        except Exception as e:
+            print(f'  [NHL-FIX] error: {e}')
+            self.send_json({'games': [], 'error': str(e)})
 
     def handle_nba(self, qs):
         if not SPORTS_AVAILABLE:
