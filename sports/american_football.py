@@ -11,7 +11,12 @@ try:
 except ImportError:
     NFL_AVAILABLE = False
 
-NFL_SEASON = 2024
+def _current_nfl_season():
+    """NFL season runs Sep-Jan. Returns the year the season started."""
+    today = _dt.date.today()
+    return today.year if today.month >= 9 else today.year - 1
+
+NFL_SEASON = _current_nfl_season()
 
 LEAGUE_MAP = {
     'NFL': {'id': 'NFL', 'name': 'NFL', 'season': NFL_SEASON},

@@ -4624,7 +4624,7 @@ async function loadNBAFixtures(body,kpis){
     const d=await r.json();
     if(d.error&&!d.games?.length){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
     const games=d.games||[];
-    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">upcoming games</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">NBA</div><div class="kpi-lbl">2024-25</div></div>`;
+    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">upcoming games</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">NBA</div><div class="kpi-lbl">${d.season||'2025-26'}</div></div>`;
     if(!games.length){body.innerHTML='<div class="loading-state">No upcoming NBA games found.</div>';return;}
     body.innerHTML=games.map(g=>{
       const hId=g.home_id||''; const aId=g.away_id||'';
@@ -4640,7 +4640,7 @@ async function loadNHLFixtures(body,kpis){
     const d=await r.json();
     if(d.error&&!d.games?.length){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
     const games=d.games||[];
-    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">upcoming games</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--blue)">NHL</div><div class="kpi-lbl">2024-25</div></div>`;
+    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">upcoming games</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--blue)">NHL</div><div class="kpi-lbl">${d.season||'2025-26'}</div></div>`;
     if(!games.length){body.innerHTML='<div class="loading-state">No upcoming NHL games found.</div>';return;}
     body.innerHTML=games.map(g=>{
       const hAb=g.home_abbr||''; const aAb=g.away_abbr||'';

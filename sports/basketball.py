@@ -16,7 +16,14 @@ try:
 except ImportError:
     NBA_AVAILABLE = False
 
-NBA_SEASON = '2024-25'
+def _current_nba_season():
+    """NBA season runs Oct-Jun. Dynamically returns the active season string."""
+    today = _dt.date.today()
+    if today.month >= 10:
+        return f"{today.year}-{str(today.year+1)[2:]}"
+    return f"{today.year-1}-{str(today.year)[2:]}"
+
+NBA_SEASON = _current_nba_season()
 
 LEAGUE_MAP = {
     'NBA': {'id': '00', 'name': 'NBA', 'season': NBA_SEASON},

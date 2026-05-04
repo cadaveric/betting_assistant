@@ -2764,7 +2764,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def handle_nba_fixtures(self):
         """Upcoming NBA games with pre-computed predictions."""
-        ck = '_nba_fixtures_7d'
+        ck = f'_nba_fixtures_7d_{_bball.NBA_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return
@@ -2790,7 +2790,7 @@ class Handler(SimpleHTTPRequestHandler):
                     'home_form': h_st.get('streak',''), 'away_form': a_st.get('streak',''),
                     'prediction': pred,
                 })
-            result = {'games': enriched, 'total': len(enriched), 'sport': 'basketball'}
+            result = {'games': enriched, 'total': len(enriched), 'sport': 'basketball', 'season': _bball.NBA_SEASON}
             set_cache(ck, result, 600)
             self.send_json(result)
         except Exception as e:
@@ -2799,7 +2799,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def handle_nhl_fixtures(self):
         """Upcoming NHL games with pre-computed predictions."""
-        ck = '_nhl_fixtures_7d'
+        ck = f'_nhl_fixtures_7d_{_hockey.NHL_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return
@@ -2822,7 +2822,7 @@ class Handler(SimpleHTTPRequestHandler):
                     'home_ga_pg': h_st.get('ga_pg',0), 'away_ga_pg': a_st.get('ga_pg',0),
                     'prediction': pred,
                 })
-            result = {'games': enriched, 'total': len(enriched), 'sport': 'hockey'}
+            result = {'games': enriched, 'total': len(enriched), 'sport': 'hockey', 'season': _hockey.NHL_SEASON}
             set_cache(ck, result, 600)
             self.send_json(result)
         except Exception as e:
@@ -2834,7 +2834,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': 'nba_api not installed on server'}); return
         params = urllib.parse.parse_qs(qs or '')
         action = params.get('action', ['standings'])[0]
-        ck = f'_sport_nba_{action}'
+        ck = f'_sport_nba_{action}_{_bball.NBA_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return
@@ -2887,7 +2887,7 @@ class Handler(SimpleHTTPRequestHandler):
     def handle_nhl(self, qs):
         params = urllib.parse.parse_qs(qs or '')
         action = params.get('action', ['standings'])[0]
-        ck = f'_sport_nhl_{action}'
+        ck = f'_sport_nhl_{action}_{_hockey.NHL_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return
@@ -2930,7 +2930,7 @@ class Handler(SimpleHTTPRequestHandler):
     def handle_nfl(self, qs):
         params = urllib.parse.parse_qs(qs or '')
         action = params.get('action', ['standings'])[0]
-        ck = f'_sport_nfl_{action}'
+        ck = f'_sport_nfl_{action}_{_nfl.NFL_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return
@@ -2979,7 +2979,7 @@ class Handler(SimpleHTTPRequestHandler):
     def handle_mlb(self, qs):
         params = urllib.parse.parse_qs(qs or '')
         action = params.get('action', ['standings'])[0]
-        ck = f'_sport_mlb_{action}'
+        ck = f'_sport_mlb_{action}_{_mlb.MLB_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return

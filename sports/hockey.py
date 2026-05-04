@@ -5,7 +5,15 @@ Uses the official NHL Stats API (api.nhle.com) — free, no key required.
 import urllib.request, json, datetime as _dt, math
 
 NHL_BASE = 'https://api-web.nhle.com/v1'
-NHL_SEASON = '20242025'
+
+def _current_nhl_season():
+    """NHL season runs Oct-Jun. Dynamically returns e.g. '20252026'."""
+    today = _dt.date.today()
+    if today.month >= 10:
+        return f"{today.year}{today.year+1}"
+    return f"{today.year-1}{today.year}"
+
+NHL_SEASON = _current_nhl_season()
 
 LEAGUE_MAP = {
     'NHL': {'id': 'NHL', 'name': 'NHL', 'season': NHL_SEASON},

@@ -12,7 +12,11 @@ try:
 except ImportError:
     MLB_AVAILABLE = False
 
-MLB_SEASON = 2025
+def _current_mlb_season():
+    """MLB season runs Apr-Oct. Returns current calendar year."""
+    return _dt.date.today().year
+
+MLB_SEASON = _current_mlb_season()
 
 LEAGUE_MAP = {
     'MLB': {'id': 'MLB', 'name': 'MLB', 'season': MLB_SEASON},

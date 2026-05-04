@@ -47,7 +47,7 @@ def build_dataset():
     except ImportError:
         print('  [NHL-ML] numpy missing'); return None, None
 
-    seasons = ['20212022','20222023','20232024','20242025']
+    seasons = ['20212022','20222023','20232024','20242025','20252026']
     team_hist = {}   # abbr -> {gf, ga, res, elo}
 
     def get_team(abbr):

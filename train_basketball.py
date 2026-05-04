@@ -37,7 +37,7 @@ def build_dataset():
     except ImportError as e:
         print(f'  [NBA-ML] Missing: {e}'); return None, None
 
-    seasons = ['2021-22','2022-23','2023-24','2024-25']
+    seasons = ['2021-22','2022-23','2023-24','2024-25','2025-26']
     all_games = []
     for s in seasons:
         try:
