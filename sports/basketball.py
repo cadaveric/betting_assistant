@@ -53,23 +53,28 @@ def get_standings():
         rows = ls.get_data_frames()[0]
         result = []
         for _, r in rows.iterrows():
-            tid = str(r.get('TeamID', ''))
+            tid = str(r.get('TeamID', '') or '')
+            slug = r.get('TeamSlug', '') or r.get('TeamAbbreviation', '') or ''
+            city = str(r.get('TeamCity', '') or '')
+            name = str(r.get('TeamName', '') or '')
             result.append({
                 'team_id':   tid,
-                'name':      r.get('TeamName', ''),
-                'city':      r.get('TeamCity', ''),
-                'full_name': f"{r.get('TeamCity','')} {r.get('TeamName','')}",
-                'abbr':      r.get('TeamSlug', '')[:3].upper(),
-                'wins':      int(r.get('WINS', 0)),
-                'losses':    int(r.get('LOSSES', 0)),
-                'pct':       float(r.get('WinPCT', 0)),
-                'conf':      r.get('Conference', ''),
-                'div':       r.get('Division', ''),
-                'streak':    r.get('strCurrentStreak', ''),
+                'name':      name,
+                'city':      city,
+                'full_name': f"{city} {name}".strip(),
+                'abbr':      str(slug)[:3].upper() if slug else name[:3].upper(),
+                'wins':      int(r.get('WINS', 0) or 0),
+                'losses':    int(r.get('LOSSES', 0) or 0),
+                'pct':       round(float(r.get('WinPCT', 0) or 0), 3),
+                'conf':      str(r.get('Conference', '') or ''),
+                'div':       str(r.get('Division', '') or ''),
+                'streak':    str(r.get('strCurrentStreak', '') or ''),
                 'elo':       round(_elo_store.get(tid, 1500.0)),
             })
+        print(f'  [NBA] Standings loaded: {len(result)} teams ({NBA_SEASON})')
         return sorted(result, key=lambda x: -x['pct'])
     except Exception as e:
+        import traceback; traceback.print_exc()
         print(f'  [NBA] standings error: {e}')
         return []
 

@@ -171,3 +171,39 @@ def _over_runs(lh, la, line):
             if h + a > line:
                 prob += ph * (la**a * exp(-la)) / factorial(a)
     return prob
+
+def get_today_games(days=3):
+    """Return upcoming MLB games via MLB Stats API (free, official, no key)."""
+    import urllib.request, json
+    import datetime as _dtl
+    games = []
+    seen = set()
+    today = _dtl.date.today()
+    for d in range(days):
+        date = (today + _dtl.timedelta(days=d)).isoformat()
+        try:
+            url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={date}&hydrate=team"
+            req = urllib.request.Request(url, headers={"User-Agent": "Scoutline/2.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+            for day in data.get("dates", []):
+                for g in day.get("games", []):
+                    gid = g.get("gamePk", "")
+                    if gid in seen: continue
+                    seen.add(gid)
+                    ht = (g.get("teams", {}).get("home", {}).get("team", {}) or {})
+                    at = (g.get("teams", {}).get("away", {}).get("team", {}) or {})
+                    status = (g.get("status", {}).get("abstractGameState", ""))
+                    games.append({
+                        "game_id": gid,
+                        "home": ht.get("name", ""),
+                        "away": at.get("name", ""),
+                        "home_abbr": ht.get("abbreviation", ""),
+                        "away_abbr": at.get("abbreviation", ""),
+                        "kickoff": g.get("gameDate", ""),
+                        "gameday": date,
+                        "status": status,
+                    })
+        except Exception as e:
+            print(f"  [MLB] schedule {date} error: {e}")
+    return sorted(games, key=lambda x: x.get("kickoff", ""))

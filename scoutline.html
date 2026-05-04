@@ -1285,7 +1285,8 @@ select:focus,input:focus{
 <div id="pg-mlb" class="page" style="display:none">
   <div id="mlb-kpis" class="kpi-row"></div>
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="sport-tab-btn on" onclick="loadSportPage('mlb','standings')">Standings</button>
+    <button class="sport-tab-btn on" onclick="loadSportPage('mlb','fixtures')">🗓 Fixtures</button>
+    <button class="sport-tab-btn" onclick="loadSportPage('mlb','standings')">Standings</button>
     <button class="sport-tab-btn" onclick="loadSportPage('mlb','predict')">Predict</button>
     <button class="sport-tab-btn" onclick="loadSportPage('mlb','history')">History</button>
   </div>
@@ -4511,7 +4512,7 @@ function switchSport(sport){
     if(sport==='basketball') loadSportPage('nba','fixtures');
     else if(sport==='hockey') loadSportPage('nhl','fixtures');
     else if(sport==='nfl')   loadSportPage('nfl','games');
-    else if(sport==='mlb')   loadSportPage('mlb','standings');
+    else if(sport==='mlb')   loadSportPage('mlb','fixtures');
   }
 }
 function _sportShowOnly(pageId){
@@ -4526,7 +4527,7 @@ const SPORT_META = {
   nba: {label:'NBA',emoji:'🏀',color:'var(--amber)',id:'pg-basketball',bodyId:'nba-body',kpisId:'nba-kpis',tabs:['fixtures','standings','predict','history']},
   nhl: {label:'NHL',emoji:'🏒',color:'var(--blue)', id:'pg-hockey',   bodyId:'nhl-body',kpisId:'nhl-kpis',tabs:['fixtures','standings','predict','history']},
   nfl: {label:'NFL',emoji:'🏈',color:'var(--red)',  id:'pg-nfl',      bodyId:'nfl-body',kpisId:'nfl-kpis',tabs:['games','standings','predict','history']},
-  mlb: {label:'MLB',emoji:'⚾',color:'var(--purple)',id:'pg-mlb',     bodyId:'mlb-body',kpisId:'mlb-kpis',tabs:['standings','predict','history']},
+  mlb: {label:'MLB',emoji:'⚾',color:'var(--purple)',id:'pg-mlb',     bodyId:'mlb-body',kpisId:'mlb-kpis',tabs:['fixtures','standings','predict','history']},
 };
 const _sportTab={};
 const _sportStandings={};
@@ -4547,6 +4548,7 @@ async function loadSportPage(sport, tab){
   if(tab==='fixtures' && sport==='nba')  return loadNBAFixtures(body,kpis);
   if(tab==='fixtures' && sport==='nhl')  return loadNHLFixtures(body,kpis);
   if(tab==='games'    && sport==='nfl')  return loadNFLGames(body,kpis);
+  if(tab==='fixtures' && sport==='mlb')  return loadMLBFixtures(body,kpis);
   if(tab==='standings') return loadSportStandings(sport,body,kpis);
   if(tab==='predict')   return loadSportPredict(sport,body,kpis);
   if(tab==='history')   return loadSportHistory(sport,body,kpis);
@@ -4832,6 +4834,22 @@ async function _runSportPredict(sport){
       <button onclick="_saveSportPredManual('${sport}','${away}','${home}',${aw},${hw},'${awayLabel}','${homeLabel}')" class="adv-scan-btn" style="width:100%;justify-content:center">Save Prediction to History</button>
     </div>`;
   }catch(e){out.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+async function loadMLBFixtures(body,kpis){
+  try{
+    const r=await fetch('/sport/mlb/fixtures');
+    const d=await r.json();
+    if(d.error&&!d.games?.length){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    const games=d.games||[];
+    if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">games today+3d</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--purple)">MLB ${d.season||''}</div><div class="kpi-lbl">season</div></div>`;
+    if(!games.length){body.innerHTML='<div class="loading-state">No MLB games scheduled in the next 3 days.</div>';return;}
+    body.innerHTML=games.map(g=>{
+      const h=g.home||''; const a=g.away||'';
+      const onP=`loadSportPage('mlb','predict');setTimeout(()=>{const hs=document.getElementById('mlb-home-sel');const as=document.getElementById('mlb-away-sel');if(hs&&as){hs.value='${h}';as.value='${a}';mlbRunPredict();}},300)`;
+      return _fixtureCard({...g,home:h,away:a,kickoff:g.kickoff||g.gameday},'baseball',onP);
+    }).join('');
+  }catch(e){body.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
 }
 
 // Alias for old-style individual predict functions (keep compatibility)

@@ -2288,6 +2288,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/sport/mlb':           self.handle_mlb(qs)
         elif path == '/sport/nba/fixtures':  self.handle_nba_fixtures()
         elif path == '/sport/nhl/fixtures':  self.handle_nhl_fixtures()
+        elif path == '/sport/mlb/fixtures':  self.handle_mlb_fixtures()
         elif path.startswith('/sport/nba/'): self.handle_nba_detail(path.split('/sport/nba/')[1], qs)
         elif path.startswith('/sport/nhl/'): self.handle_nhl_detail(path.split('/sport/nhl/')[1], qs)
         elif path.startswith('/sport/nfl/'): self.handle_nfl_detail(path.split('/sport/nfl/')[1], qs)
@@ -2829,6 +2830,31 @@ class Handler(SimpleHTTPRequestHandler):
             print(f'  [NHL-FIX] error: {e}')
             self.send_json({'games': [], 'error': str(e)})
 
+    def handle_mlb_fixtures(self):
+        """Upcoming MLB games via MLB Stats API with pre-computed predictions."""
+        ck = f'_mlb_fixtures_3d_{_mlb.MLB_SEASON}'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        try:
+            games = _mlb.get_today_games(days=3)
+            enriched = []
+            for g in games:
+                h = g.get('home',''); a = g.get('away','')
+                h_bat  = _mlb.get_team_batting(g.get('home_abbr','') or h)
+                a_bat  = _mlb.get_team_batting(g.get('away_abbr','') or a)
+                h_pit  = _mlb.get_team_pitching(g.get('home_abbr','') or h)
+                a_pit  = _mlb.get_team_pitching(g.get('away_abbr','') or a)
+                pred   = _mlb.predict(h, a, h_bat, a_bat, h_pit, a_pit) if (h_bat or a_bat) else {}
+                enriched.append({**g, 'prediction': pred})
+            result = {'games': enriched, 'total': len(enriched), 'sport': 'baseball', 'season': _mlb.MLB_SEASON}
+            if enriched:
+                set_cache(ck, result, 600)
+            self.send_json(result)
+        except Exception as e:
+            print(f'  [MLB-FIX] error: {e}')
+            self.send_json({'games': [], 'error': str(e)})
+
     def handle_nba(self, qs):
         if not SPORTS_AVAILABLE:
             self.send_json({'error': 'nba_api not installed on server'}); return
@@ -3234,6 +3260,16 @@ if __name__ == '__main__':
 
     def startup():
         time.sleep(2)
+        # Clear stale sport caches so empty results from previous runs don't persist
+        sport_prefixes = ['_sport_nba_', '_sport_nhl_', '_sport_nfl_', '_sport_mlb_',
+                          '_nba_fixtures_', '_nhl_fixtures_', '_nba_ts_', '_nhl_pred_',
+                          '_nfl_pred_', '_mlb_pred_']
+        with cache_lock:
+            stale = [k for k in cache if any(k.startswith(p) for p in sport_prefixes)]
+            for k in stale:
+                del cache[k]
+        if stale:
+            print(f'  [SPORT] Cleared {len(stale)} stale sport cache entries')
         # Load football ML model
         if os.path.exists(_data_path('data/prediction_model.pkl')):
             _load_ml_model()
