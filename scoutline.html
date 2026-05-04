@@ -1103,6 +1103,28 @@ select:focus,input:focus{
   padding:14px 16px;transition:border-color .15s,box-shadow .15s}
 .sport-game-card:hover{border-color:var(--br2);box-shadow:var(--shadow)}
 .sport-odds-cell{background:var(--bg3);border-radius:8px;padding:8px 6px;text-align:center}
+/* ── MOBILE SPORT BOTTOM BAR ─────────────────────────────────── */
+#sport-bottom-bar{display:none}
+@media(max-width:600px){
+  #sport-bottom-bar{
+    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:800;
+    background:var(--bg2);border-top:1px solid var(--br2);
+    box-shadow:0 -4px 16px rgba(0,0,0,.15);
+    padding:6px 0 env(safe-area-inset-bottom,6px);
+  }
+  .sbb-btn{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    border:none;background:transparent;cursor:pointer;padding:4px 0;
+    font-family:var(--sans);
+  }
+  .sbb-icon{font-size:20px;line-height:1}
+  .sbb-label{font-size:9px;font-weight:600;color:var(--tx3);letter-spacing:.02em}
+  .sbb-btn.on .sbb-label{color:var(--amber)}
+  /* Push shell up so content isn't behind bar */
+  .shell{padding-bottom:72px!important}
+  /* Hide desktop sport strip on mobile (bottom bar replaces it) */
+  #sport-strip{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -3300,63 +3322,86 @@ function startLivePoll(){
   _livePollTimer=setInterval(poll, 60000);
 }
 
-async function loadToday(){
+const SPORT_ICONS={'football':'⚽','basketball':'🏀','hockey':'🏒','american_football':'🏈','baseball':'⚾'};
+const SPORT_COLORS={'football':'var(--green)','basketball':'var(--amber)','hockey':'var(--blue)','american_football':'var(--red)','baseball':'var(--purple)'};
+let _todayFilter='all';
+
+async function loadToday(filter){
+  if(filter) _todayFilter=filter;
   const el=document.getElementById('today-body');
   const kEl=document.getElementById('today-kpis');
   el.innerHTML=`<div id="live-section"></div><div id="fixtures-section"><div class="loading-state">${t('today.loading')}</div></div>`;
   try{
     const r=await fetch('/today?hours=36');
     const d=await r.json();
-    if(d.error){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    if(d.error&&!d.matches){el.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
     startLivePoll();
     const fx=document.getElementById('fixtures-section');
-    if(!d.leagues||!d.total){fx.innerHTML=`<div class="loading-state">No matches in the next 36 hours.</div>`;return;}
+    const allMatches=(d.matches||[]);
+    if(!allMatches.length){fx.innerHTML=`<div class="loading-state">No matches in the next 36 hours.</div>`;return;}
+
     const now=new Date();
     const todayKey=now.toLocaleDateString('en-CA');
     const tomorrowKey=new Date(now.getTime()+86400000).toLocaleDateString('en-CA');
 
-    // Flatten all matches, tag with comp, sort by kickoff
-    const all=[];
-    for(const league of d.leagues){
-      for(const m of league.matches) all.push({...m,comp:league.comp});
+    // Count per sport for filter bar
+    const sportCounts={};
+    for(const m of allMatches){
+      const s=m.sport||'football';
+      sportCounts[s]=(sportCounts[s]||0)+1;
     }
-    all.sort((a,b)=>(a.kickoff||'').localeCompare(b.kickoff||''));
+    const sports=['all',...Object.keys(sportCounts)];
+    const filterBar=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      ${sports.map(s=>`<button onclick="loadToday('${s}')" style="height:28px;padding:0 12px;border-radius:999px;border:1px solid ${_todayFilter===s?'var(--amber)':'var(--br2)'};background:${_todayFilter===s?'var(--amber)':'var(--bg3)'};color:${_todayFilter===s?'#1A0E00':'var(--tx2)'};font-size:11px;font-weight:700;cursor:pointer">
+        ${s==='all'?'All sports':SPORT_ICONS[s]||''} ${s==='all'?allMatches.length:sportCounts[s]} ${s==='all'?'':'matches'}
+      </button>`).join('')}
+    </div>`;
 
-    // Group by local date
+    // Filter
+    const filtered=_todayFilter==='all'?allMatches:allMatches.filter(m=>(m.sport||'football')===_todayFilter);
+    filtered.sort((a,b)=>(a.kickoff||'').localeCompare(b.kickoff||''));
+
+    // KPIs
+    const todayCount=filtered.filter(m=>{
+      const dk=m.kickoff?new Date(m.kickoff).toLocaleDateString('en-CA'):'';
+      return dk===todayKey||!dk;
+    }).length;
+    kEl.innerHTML=`
+      <div class="kpi"><div class="kpi-val">${todayCount}</div><div class="kpi-lbl">today</div></div>
+      <div class="kpi"><div class="kpi-val">${filtered.length}</div><div class="kpi-lbl">next 36h</div></div>
+      <div class="kpi"><div class="kpi-val">${Object.keys(sportCounts).length}</div><div class="kpi-lbl">sports</div></div>
+      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>`;
+
+    // Group by date
     const byDate={};
-    for(const m of all){
-      const dk=m.kickoff?new Date(m.kickoff).toLocaleDateString('en-CA'):'?';
+    for(const m of filtered){
+      const dk=m.kickoff?new Date(m.kickoff).toLocaleDateString('en-CA'):(m.date||'?');
       (byDate[dk]=byDate[dk]||[]).push(m);
     }
 
-    const todayCount=(byDate[todayKey]||[]).length;
-    const totalLeagues=d.leagues.length;
-    kEl.innerHTML=`
-      <div class="kpi"><div class="kpi-val">${todayCount}</div><div class="kpi-lbl">today</div></div>
-      <div class="kpi"><div class="kpi-val">${d.total}</div><div class="kpi-lbl">next 36h</div></div>
-      <div class="kpi"><div class="kpi-val">${totalLeagues}</div><div class="kpi-lbl">leagues</div></div>
-      <div class="kpi"><div class="kpi-val kpi-val-sm">${now.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div><div class="kpi-lbl">date</div></div>`;
-
-    let html='';
-    for(const [dk, matches] of Object.entries(byDate)){
-      const label=dk===todayKey?'Today':dk===tomorrowKey?'Tomorrow':new Date(dk+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
-      const isToday=dk===todayKey;
-      html+=`<div style="margin-bottom:24px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <span style="font-size:13px;font-weight:800;color:${isToday?'var(--amber)':'var(--tx2)'}">${label}</span>
+    let html=filterBar;
+    for(const [dk, matches] of Object.entries(byDate).sort()){
+      const label=dk===todayKey?'Today':dk===tomorrowKey?'Tomorrow':dk==='?'?'Upcoming':new Date(dk+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
+      html+=`<div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:800;color:${dk===todayKey?'var(--amber)':'var(--tx2)'}">${label}</span>
           <span style="font-size:11px;color:var(--tx3)">${matches.length} match${matches.length!==1?'es':''}</span>
           <div style="flex:1;height:1px;background:var(--br)"></div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px">`;
+        <div style="display:flex;flex-direction:column;gap:3px">`;
       for(const m of matches){
+        const sport=m.sport||'football';
+        const icon=SPORT_ICONS[sport]||'🏅';
+        const scolor=SPORT_COLORS[sport]||'var(--tx2)';
         const dt=m.kickoff?new Date(m.kickoff):null;
-        const timeStr=dt?dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'–';
-        html+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border-radius:6px;border:1px solid var(--br)">
-          <span class="league-badge" style="font-size:10px;padding:2px 6px;flex-shrink:0">${m.comp}</span>
+        const timeStr=dt&&!isNaN(dt)?dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'–';
+        html+=`<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--bg2);border-radius:6px;border:1px solid var(--br);border-left:3px solid ${scolor}">
+          <span style="font-size:13px;flex-shrink:0">${icon}</span>
+          <span class="league-badge" style="font-size:9px;padding:1px 5px;flex-shrink:0">${m.comp}</span>
           <span style="font-size:12px;font-weight:600;color:var(--amber);white-space:nowrap;min-width:36px">${timeStr}</span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1">${m.home}</span>
-          <span style="font-size:11px;color:var(--tx3);padding:0 4px;flex-shrink:0">vs</span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1;text-align:right">${m.away}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.home}</span>
+          <span style="font-size:10px;color:var(--tx3);flex-shrink:0">vs</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.away}</span>
         </div>`;
       }
       html+='</div></div>';
@@ -4431,6 +4476,10 @@ document.addEventListener('click',e=>{
 
 applyI18n();
 loadModelCalibration().finally(()=>loadConfig().then(()=>loadFixtures()));
+function _updateSportBar(sport){
+  document.querySelectorAll('.sbb-btn').forEach(b=>
+    b.classList.toggle('on', b.dataset.sport===sport));
+}
 
 // ── MULTI-SPORT ───────────────────────────────────────────────────────────────
 let currentSport = 'football';
@@ -4969,5 +5018,24 @@ function mlbTab(tab){
   loadMLB(tab);
 }
 </script>
+
+<!-- ── MOBILE BOTTOM SPORT BAR ─────────────────────── -->
+<div id="sport-bottom-bar">
+  <button class="sbb-btn on" data-sport="football" onclick="switchSport('football');_updateSportBar('football')">
+    <span class="sbb-icon">⚽</span><span class="sbb-label">Football</span>
+  </button>
+  <button class="sbb-btn" data-sport="basketball" onclick="switchSport('basketball');_updateSportBar('basketball')">
+    <span class="sbb-icon">🏀</span><span class="sbb-label">NBA</span>
+  </button>
+  <button class="sbb-btn" data-sport="hockey" onclick="switchSport('hockey');_updateSportBar('hockey')">
+    <span class="sbb-icon">🏒</span><span class="sbb-label">NHL</span>
+  </button>
+  <button class="sbb-btn" data-sport="nfl" onclick="switchSport('nfl');_updateSportBar('nfl')">
+    <span class="sbb-icon">🏈</span><span class="sbb-label">NFL</span>
+  </button>
+  <button class="sbb-btn" data-sport="mlb" onclick="switchSport('mlb');_updateSportBar('mlb')">
+    <span class="sbb-icon">⚾</span><span class="sbb-label">MLB</span>
+  </button>
+</div>
 </body>
 </html>

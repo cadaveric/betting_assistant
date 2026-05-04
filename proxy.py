@@ -647,6 +647,86 @@ def _season_stage():
     stages = {8:0.0,9:0.10,10:0.20,11:0.30,12:0.40,1:0.50,2:0.60,3:0.70,4:0.80,5:0.90,6:1.0,7:1.0}
     return stages.get(m, 0.5)
 
+# ── NBA ML model ──────────────────────────────────────────────────────────────
+_nba_ml_model = None
+_nba_ml_meta  = {}
+_NBA_FEAT_COUNT = 10  # must match train_basketball.FEATURE_NAMES
+
+def _load_nba_ml():
+    global _nba_ml_model, _nba_ml_meta
+    path = _data_path('data/nba_model.pkl')
+    if not os.path.exists(path):
+        return
+    try:
+        import joblib
+        _nba_ml_model = joblib.load(path)
+        mp = path.replace('.pkl', '_meta.json')
+        if os.path.exists(mp):
+            with open(mp) as f: _nba_ml_meta = json.load(f)
+        print(f'  [NBA-ML] Model loaded — acc={_nba_ml_meta.get("cv_accuracy","?")} n={_nba_ml_meta.get("n_train","?")}')
+    except Exception as e:
+        print(f'  [NBA-ML] Load failed: {e}')
+
+def _start_nba_training():
+    def worker():
+        try:
+            import train_basketball
+            if train_basketball.train(): _load_nba_ml()
+        except Exception as e:
+            print(f'  [NBA-ML] Training error: {e}')
+    threading.Thread(target=worker, daemon=True).start()
+
+def nba_ml_predict(h_stats, a_stats, h_elo=1500.0, a_elo=1500.0):
+    """Return ML win probability for NBA if model is loaded."""
+    if _nba_ml_model is None: return None
+    try:
+        import numpy as np
+        feat = [
+            h_stats.get('pts_home_pg', h_stats.get('pts_pg', 110)),
+            a_stats.get('pts_away_pg', a_stats.get('pts_pg', 108)),
+            110 - (h_stats.get('pts_away_pg', 108) - 110),  # approx opp pts allowed
+            108 - (a_stats.get('pts_home_pg', 110) - 108),
+            h_stats.get('form_pct', 0.5),
+            a_stats.get('form_pct', 0.5),
+            h_stats.get('fg_pct', 0.46),
+            a_stats.get('fg_pct', 0.46),
+            min(1.0, h_elo / 2000.0),
+            min(1.0, a_elo / 2000.0),
+        ]
+        proba = _nba_ml_model.predict_proba(np.array([feat], dtype=np.float32))[0]
+        return round(float(proba[1]) * 100, 1)  # probability home wins
+    except Exception:
+        return None
+
+# ── NHL ML model ──────────────────────────────────────────────────────────────
+_nhl_ml_model = None
+_nhl_ml_meta  = {}
+_NHL_FEAT_COUNT = 8
+
+def _load_nhl_ml():
+    global _nhl_ml_model, _nhl_ml_meta
+    path = _data_path('data/nhl_model.pkl')
+    if not os.path.exists(path):
+        return
+    try:
+        import joblib
+        _nhl_ml_model = joblib.load(path)
+        mp = path.replace('.pkl', '_meta.json')
+        if os.path.exists(mp):
+            with open(mp) as f: _nhl_ml_meta = json.load(f)
+        print(f'  [NHL-ML] Model loaded — acc={_nhl_ml_meta.get("cv_accuracy","?")} n={_nhl_ml_meta.get("n_train","?")}')
+    except Exception as e:
+        print(f'  [NHL-ML] Load failed: {e}')
+
+def _start_nhl_training():
+    def worker():
+        try:
+            import train_hockey
+            if train_hockey.train(): _load_nhl_ml()
+        except Exception as e:
+            print(f'  [NHL-ML] Training error: {e}')
+    threading.Thread(target=worker, daemon=True).start()
+
 _ML_LEAGUE_ORDER = ['PL','ELC','BL1','PD','SA','FL1','DED','PPL']
 
 # Must match len(train_model.FEATURE_NAMES); stale pkl triggers auto-retrain.
@@ -2793,52 +2873,85 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': f'Unknown sub: {sub}'}, 400)
 
     def handle_today(self, qs):
-        """Return all upcoming fixtures across core leagues for the next N hours."""
+        """Return upcoming fixtures across all sports for the next N hours."""
         params = urllib.parse.parse_qs(qs or '')
-        hours = min(48, max(1, int(params.get('hours', ['36'])[0])))
-        if not APIF_KEY:
-            self.send_json({'error': 'APIFOOTBALL_KEY not set'}); return
+        hours  = min(48, max(1, int(params.get('hours', ['36'])[0])))
+        sports = params.get('sports', ['all'])[0].lower()
         now    = _dt.datetime.now(_dt.timezone.utc)
         cutoff = now + _dt.timedelta(hours=hours)
-
-        def fetch_lg(comp):
-            try:
-                return comp, fetch_today_fixtures(comp)
-            except Exception:
-                return comp, []
-
-        all_results = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futs = {pool.submit(fetch_lg, c): c for c in TODAY_CORE_LEAGUES}
-            for fut in concurrent.futures.as_completed(futs):
-                try:
-                    comp, matches = fut.result()
-                    all_results[comp] = matches
-                except Exception:
-                    pass
-
         leagues_out = []
-        for comp in TODAY_CORE_LEAGUES:
-            matches = []
-            for m in (all_results.get(comp) or []):
-                raw_dt = (m.get('kickoff') or '').replace('Z', '+00:00')
-                try:
-                    starts = _dt.datetime.fromisoformat(raw_dt)
-                    if starts.tzinfo is None:
-                        starts = starts.replace(tzinfo=_dt.timezone.utc)
-                    if starts < now or starts > cutoff:
-                        continue
-                except Exception:
-                    pass
-                matches.append(m)
-            if matches:
-                leagues_out.append({
-                    'comp': comp,
-                    'matches': sorted(matches, key=lambda m: m.get('kickoff', '')),
-                    'count': len(matches),
-                })
-        total = sum(lg['count'] for lg in leagues_out)
-        self.send_json({'leagues': leagues_out, 'total': total,
+
+        # ── Football ─────────────────────────────────────────────────────────
+        if APIF_KEY and sports in ('all', 'football'):
+            def fetch_lg(comp):
+                try:  return comp, fetch_today_fixtures(comp)
+                except Exception:  return comp, []
+            all_results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futs = {pool.submit(fetch_lg, c): c for c in TODAY_CORE_LEAGUES}
+                for fut in concurrent.futures.as_completed(futs):
+                    try:
+                        comp, matches = fut.result()
+                        all_results[comp] = matches
+                    except Exception:
+                        pass
+            for comp in TODAY_CORE_LEAGUES:
+                matches = []
+                for m in (all_results.get(comp) or []):
+                    raw_dt = (m.get('kickoff') or '').replace('Z', '+00:00')
+                    try:
+                        starts = _dt.datetime.fromisoformat(raw_dt)
+                        if starts.tzinfo is None: starts = starts.replace(tzinfo=_dt.timezone.utc)
+                        if starts < now or starts > cutoff: continue
+                    except Exception:
+                        pass
+                    leagues_out.append({**m, 'sport': 'football', 'comp': comp})
+
+        # ── NBA ───────────────────────────────────────────────────────────────
+        if SPORTS_AVAILABLE and sports in ('all', 'basketball'):
+            try:
+                nba_games = _bball.get_today_games()
+                for g in nba_games:
+                    leagues_out.append({
+                        'sport': 'basketball', 'comp': 'NBA',
+                        'home': g.get('home', ''), 'away': g.get('away', ''),
+                        'kickoff': '', 'status': g.get('status', ''),
+                        'home_score': g.get('home_score'), 'away_score': g.get('away_score'),
+                        'home_id': g.get('home_id', ''), 'away_id': g.get('away_id', ''),
+                    })
+            except Exception as e:
+                print(f'  [TODAY] NBA error: {e}')
+
+        # ── NHL ───────────────────────────────────────────────────────────────
+        if sports in ('all', 'hockey'):
+            try:
+                nhl_games = _hockey.get_today_games()
+                for g in nhl_games:
+                    leagues_out.append({
+                        'sport': 'hockey', 'comp': 'NHL',
+                        'home': g.get('home', ''), 'away': g.get('away', ''),
+                        'home_abbr': g.get('home_abbr', ''), 'away_abbr': g.get('away_abbr', ''),
+                        'kickoff': g.get('kickoff', ''), 'status': g.get('status', ''),
+                    })
+            except Exception as e:
+                print(f'  [TODAY] NHL error: {e}')
+
+        # ── NFL ───────────────────────────────────────────────────────────────
+        if NFL_AVAILABLE and sports in ('all', 'nfl'):
+            try:
+                nfl_games = _nfl.get_week_games()
+                for g in nfl_games:
+                    leagues_out.append({
+                        'sport': 'american_football', 'comp': 'NFL',
+                        'home': g.get('home_team', ''), 'away': g.get('away_team', ''),
+                        'kickoff': g.get('gameday', ''), 'status': '',
+                        'week': g.get('week', ''),
+                    })
+            except Exception as e:
+                print(f'  [TODAY] NFL error: {e}')
+
+        total = len(leagues_out)
+        self.send_json({'matches': leagues_out, 'total': total,
                         'hours': hours, 'generated': now.isoformat()})
 
     def handle_ml_predict(self, qs):
@@ -2975,12 +3088,23 @@ if __name__ == '__main__':
 
     def startup():
         time.sleep(2)
-        # Load ML model if available, otherwise trigger background training
+        # Load football ML model
         if os.path.exists(_data_path('data/prediction_model.pkl')):
             _load_ml_model()
         else:
             print('  [ML] Model not found — training in background (takes ~2 min)')
             _start_ml_training()
+        # Load NBA/NHL ML models (train in background if missing)
+        if os.path.exists(_data_path('data/nba_model.pkl')):
+            _load_nba_ml()
+        else:
+            print('  [NBA-ML] Model not found — training in background (~5 min)')
+            _start_nba_training()
+        if os.path.exists(_data_path('data/nhl_model.pkl')):
+            _load_nhl_ml()
+        else:
+            print('  [NHL-ML] Model not found — training in background (~8 min)')
+            _start_nhl_training()
         ts = get_cache('/teamstats/PL')
         if ts and ts.get('teams'):
             with teamstats_lock: teamstats_status['PL'] = 'ready'
