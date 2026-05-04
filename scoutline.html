@@ -4484,50 +4484,50 @@ function _updateSportBar(sport){
 // ── MULTI-SPORT ───────────────────────────────────────────────────────────────
 let currentSport = 'football';
 
+const _FOOTBALL_CHROME = ['lgSelWrap','mob-menu-btn'];
+
 function switchSport(sport){
   currentSport = sport;
-  // Update sport button styles
   document.querySelectorAll('.sport-btn').forEach(b=>b.classList.remove('on'));
   const btn = document.getElementById('sbtn-'+sport);
   if(btn) btn.classList.add('on');
+  _updateSportBar(sport);
 
-  // Show/hide football chrome (league selector, main nav)
-  const footballOnly = document.getElementById('lgSelWrap');
-  if(footballOnly) footballOnly.style.display = sport==='football' ? '' : 'none';
+  const footballNav = document.querySelector('.nav');
 
   if(sport === 'football'){
-    // Restore football — re-show all pages, switch back to fixtures
-    document.getElementById('pg-basketball').style.display='none';
-    document.getElementById('pg-hockey').style.display='none';
-    document.querySelectorAll('.nav-btn').forEach(b=>{
-      const pg=b.getAttribute('onclick')?.match(/nav\('(\w+)'\)/)?.[1];
-      if(pg) document.getElementById('pg-'+pg)?.style.removeProperty('display');
+    // Re-show football nav and chrome
+    if(footballNav) footballNav.style.display = '';
+    _FOOTBALL_CHROME.forEach(id=>{
+      const el=document.getElementById(id); if(el) el.style.display='';
+    });
+    // Clear any inline display set by _sportShowOnly, restore page visibility
+    document.querySelectorAll('.page').forEach(p=>p.style.removeProperty('display'));
+    // Hide non-football sport pages
+    ['pg-basketball','pg-hockey','pg-nfl','pg-mlb'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.style.display='none';
     });
     nav('fixtures');
-  } else if(sport === 'basketball'){
-    _sportShowOnly('pg-basketball');
-    loadNBA('today');
-  } else if(sport === 'hockey'){
-    _sportShowOnly('pg-hockey');
-    loadNHL('today');
-  } else if(sport === 'nfl'){
-    _sportShowOnly('pg-nfl');
-    loadNFL('games');
-  } else if(sport === 'mlb'){
-    _sportShowOnly('pg-mlb');
-    loadMLB('standings');
+  } else {
+    // Hide football nav bar and chrome entirely — sport has its own tabs
+    if(footballNav) footballNav.style.display = 'none';
+    _FOOTBALL_CHROME.forEach(id=>{
+      const el=document.getElementById(id); if(el) el.style.display='none';
+    });
+    _sportShowOnly('pg-'+sport);
+    if(sport==='basketball') loadNBA('today');
+    else if(sport==='hockey')   loadNHL('today');
+    else if(sport==='nfl')      loadNFL('games');
+    else if(sport==='mlb')      loadMLB('standings');
   }
 }
 
 function _sportShowOnly(pageId){
-  // Hide all .page divs, show only the sport page
   document.querySelectorAll('.page').forEach(p=>{
-    p.classList.remove('on');
-    p.style.display='none';
+    p.classList.remove('on'); p.style.display='none';
   });
-  const el = document.getElementById(pageId);
-  if(el){ el.style.display=''; el.classList.add('on'); }
-  // Deactivate all nav buttons (sport has its own tabs)
+  const el=document.getElementById(pageId);
+  if(el){ el.style.removeProperty('display'); el.classList.add('on'); }
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
 }
 

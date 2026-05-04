@@ -2796,16 +2796,20 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(cached); return
         if not NFL_AVAILABLE:
             self.send_json({'error': 'nfl_data_py not installed', 'standings': [], 'games': []}); return
-        if action == 'standings':
-            data = _nfl.get_standings()
-            result = {'sport': 'american_football', 'league': 'NFL', 'standings': data}
-            set_cache(ck, result, 3600); self.send_json(result)
-        elif action == 'games':
-            data = _nfl.get_week_games()
-            result = {'sport': 'american_football', 'league': 'NFL', 'games': data}
-            set_cache(ck, result, 1800); self.send_json(result)
-        else:
-            self.send_json({'error': f'Unknown action: {action}'}, 400)
+        try:
+            if action == 'standings':
+                data = _nfl.get_standings()
+                result = {'sport': 'american_football', 'league': 'NFL', 'standings': data}
+                set_cache(ck, result, 3600); self.send_json(result)
+            elif action == 'games':
+                data = _nfl.get_week_games()
+                result = {'sport': 'american_football', 'league': 'NFL', 'games': data}
+                set_cache(ck, result, 1800); self.send_json(result)
+            else:
+                self.send_json({'error': f'Unknown action: {action}'}, 400)
+        except Exception as e:
+            print(f'  [NFL] handler error: {e}')
+            self.send_json({'error': str(e), 'games': [], 'standings': []})
 
     def handle_nfl_detail(self, sub, qs):
         params = urllib.parse.parse_qs(qs or '')

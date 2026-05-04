@@ -28,7 +28,15 @@ def _get_schedule():
         return []
     try:
         df = nfl.import_schedules([NFL_SEASON])
-        _schedule_cache = df.to_dict('records') if df is not None else []
+        if df is None:
+            return []
+        # Replace NaN/inf with None so the records are JSON-serialisable
+        import math
+        def _clean(v):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                return None
+            return v
+        _schedule_cache = [{k: _clean(v) for k, v in row.items()} for row in df.to_dict('records')]
         return _schedule_cache
     except Exception as e:
         print(f'  [NFL] schedule error: {e}')
