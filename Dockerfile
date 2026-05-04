@@ -8,6 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY proxy.py scoutline.html manage_users.py train_model.py ./
+COPY sports/ ./sports/
 
 EXPOSE 8081
 

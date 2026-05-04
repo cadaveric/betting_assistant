@@ -2,3 +2,4 @@ scikit-learn
 numpy
 joblib
 xgboost
+nba_api

@@ -1087,6 +1087,22 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 select:focus,input:focus{
   box-shadow:0 0 0 3px rgba(176,96,16,.15)!important;
 }
+/* ── SPORT SELECTOR ─────────────────────────────────────────── */
+.sport-btn{height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--br2);
+  background:var(--bg3);color:var(--tx2);font-family:var(--sans);font-size:12px;
+  font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.sport-btn.on{background:var(--amber);color:#1A0E00;border-color:var(--amber);
+  box-shadow:0 2px 12px rgba(176,96,16,.25)}
+.sport-btn:not(.on):hover{border-color:var(--amber);color:var(--amber)}
+.sport-tab-btn{height:30px;padding:0 14px;border-radius:8px;border:1px solid var(--br);
+  background:var(--bg3);color:var(--tx2);font-family:var(--sans);font-size:12px;
+  font-weight:600;cursor:pointer;transition:all .12s}
+.sport-tab-btn.on{background:var(--bg4);color:var(--tx);border-color:var(--br2)}
+.sport-tab-btn:not(.on):hover{color:var(--tx);background:rgba(176,96,16,.06)}
+.sport-game-card{background:var(--bg2);border:1px solid var(--br);border-radius:12px;
+  padding:14px 16px;transition:border-color .15s,box-shadow .15s}
+.sport-game-card:hover{border-color:var(--br2);box-shadow:var(--shadow)}
+.sport-odds-cell{background:var(--bg3);border-radius:8px;padding:8px 6px;text-align:center}
 </style>
 </head>
 <body>
@@ -1180,6 +1196,14 @@ select:focus,input:focus{
   </div>
 </div>
 
+<!-- ── SPORT SELECTOR ─────────────────────────────────────────── -->
+<div id="sport-strip" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+  <button class="sport-btn on" onclick="switchSport('football')" id="sbtn-football">⚽ Football</button>
+  <button class="sport-btn" onclick="switchSport('basketball')" id="sbtn-basketball">🏀 NBA</button>
+  <button class="sport-btn" onclick="switchSport('hockey')" id="sbtn-hockey">🏒 NHL</button>
+  <span style="margin-left:auto;font-size:11px;color:var(--tx3);align-self:center">More sports coming soon</span>
+</div>
+
 <div class="nav">
   <button id="mob-nav-close-btn" onclick="closeMobMenu()">✕ Close</button>
   <button class="nav-btn on" onclick="nav('fixtures')" data-i18n="nav.fixtures">Fixtures</button>
@@ -1208,6 +1232,28 @@ select:focus,input:focus{
 <div id="pg-today" class="page">
   <div id="today-kpis" class="kpi-row"></div>
   <div id="today-body"><div class="loading-state">Click Today to load all matches.</div></div>
+</div>
+
+<!-- ── BASKETBALL (NBA) PAGE ──────────────────────────────────── -->
+<div id="pg-basketball" class="page" style="display:none">
+  <div id="nba-kpis" class="kpi-row"></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="sport-tab-btn on" onclick="nbaTab('today')">Today's Games</button>
+    <button class="sport-tab-btn" onclick="nbaTab('standings')">Standings</button>
+    <button class="sport-tab-btn" onclick="nbaTab('predict')">Predict</button>
+  </div>
+  <div id="nba-body"><div class="loading-state">Loading NBA data…</div></div>
+</div>
+
+<!-- ── HOCKEY (NHL) PAGE ──────────────────────────────────────── -->
+<div id="pg-hockey" class="page" style="display:none">
+  <div id="nhl-kpis" class="kpi-row"></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="sport-tab-btn on" onclick="nhlTab('today')">Today's Games</button>
+    <button class="sport-tab-btn" onclick="nhlTab('standings')">Standings</button>
+    <button class="sport-tab-btn" onclick="nhlTab('predict')">Predict</button>
+  </div>
+  <div id="nhl-body"><div class="loading-state">Loading NHL data…</div></div>
 </div>
 
 <div id="pg-schedule" class="page">
@@ -4363,6 +4409,306 @@ document.addEventListener('click',e=>{
 
 applyI18n();
 loadModelCalibration().finally(()=>loadConfig().then(()=>loadFixtures()));
+
+// ── MULTI-SPORT ───────────────────────────────────────────────────────────────
+let currentSport = 'football';
+
+function switchSport(sport){
+  currentSport = sport;
+  // Update sport button styles
+  document.querySelectorAll('.sport-btn').forEach(b=>b.classList.remove('on'));
+  const btn = document.getElementById('sbtn-'+sport);
+  if(btn) btn.classList.add('on');
+
+  // Show/hide football chrome (league selector, main nav)
+  const footballOnly = document.getElementById('lgSelWrap');
+  if(footballOnly) footballOnly.style.display = sport==='football' ? '' : 'none';
+
+  if(sport === 'football'){
+    // Restore football — re-show all pages, switch back to fixtures
+    document.getElementById('pg-basketball').style.display='none';
+    document.getElementById('pg-hockey').style.display='none';
+    document.querySelectorAll('.nav-btn').forEach(b=>{
+      const pg=b.getAttribute('onclick')?.match(/nav\('(\w+)'\)/)?.[1];
+      if(pg) document.getElementById('pg-'+pg)?.style.removeProperty('display');
+    });
+    nav('fixtures');
+  } else if(sport === 'basketball'){
+    _sportShowOnly('pg-basketball');
+    loadNBA('today');
+  } else if(sport === 'hockey'){
+    _sportShowOnly('pg-hockey');
+    loadNHL('today');
+  }
+}
+
+function _sportShowOnly(pageId){
+  // Hide all .page divs, show only the sport page
+  document.querySelectorAll('.page').forEach(p=>{
+    p.classList.remove('on');
+    p.style.display='none';
+  });
+  const el = document.getElementById(pageId);
+  if(el){ el.style.display=''; el.classList.add('on'); }
+  // Deactivate all nav buttons (sport has its own tabs)
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('on'));
+}
+
+// ── NBA ───────────────────────────────────────────────────────────────────────
+let _nbaStandings=[];
+
+async function loadNBA(tab='today'){
+  const body=document.getElementById('nba-body');
+  const kpis=document.getElementById('nba-kpis');
+  body.innerHTML='<div class="loading-state">Loading NBA data…</div>';
+  // Activate tab button
+  document.querySelectorAll('#pg-basketball .sport-tab-btn').forEach(b=>{
+    b.classList.toggle('on', b.textContent.toLowerCase().includes(tab));
+  });
+  try{
+    if(tab==='today'){
+      const r=await fetch('/sport/nba?action=today');
+      const d=await r.json();
+      if(d.error){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+      const games=d.games||[];
+      kpis.innerHTML=`
+        <div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">games today</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">NBA</div><div class="kpi-lbl">league</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm">2024-25</div><div class="kpi-lbl">season</div></div>`;
+      if(!games.length){body.innerHTML='<div class="loading-state">No NBA games today.</div>';return;}
+      body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">
+        ${games.map(g=>`<div class="sport-game-card">
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px">${g.away} <span style="color:var(--tx3)">@</span> ${g.home}</div>
+          <div style="font-size:11px;color:var(--tx3)">${g.status||'Scheduled'}</div>
+          ${g.home_score!=null?`<div style="font-family:var(--mono);font-size:20px;font-weight:700;margin-top:6px;color:var(--amber)">${g.away_score} – ${g.home_score}</div>`:''}
+          <button onclick="nbaPredict('${g.away_id}','${g.home_id}','${g.away}','${g.home}')"
+            style="margin-top:10px;width:100%;height:30px;border-radius:8px;border:1px solid var(--br2);background:var(--bg3);color:var(--tx);font-size:11px;font-weight:600;cursor:pointer">
+            Predict this game →</button>
+        </div>`).join('')}
+      </div>`;
+    } else if(tab==='standings'){
+      const r=await fetch('/sport/nba?action=standings');
+      const d=await r.json();
+      if(d.error){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+      _nbaStandings=d.standings||[];
+      kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${_nbaStandings.length}</div><div class="kpi-lbl">teams</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">NBA 2024-25</div><div class="kpi-lbl">season</div></div>`;
+      const east=_nbaStandings.filter(t=>t.conf==='East');
+      const west=_nbaStandings.filter(t=>t.conf==='West');
+      const tableRows=(teams)=>teams.map((t,i)=>`<tr>
+        <td>${i+1}</td>
+        <td><strong>${t.full_name||t.name}</strong></td>
+        <td style="font-family:var(--mono)">${t.wins}-${t.losses}</td>
+        <td style="font-family:var(--mono)">${(t.pct*100).toFixed(1)}%</td>
+        <td style="font-family:var(--mono)">${t.streak||'–'}</td>
+      </tr>`).join('');
+      const tableHtml=(title,teams)=>`<div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">${title}</span></div>
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="stand-table"><thead><tr>
+            <th>#</th><th>Team</th><th>W-L</th><th>Win%</th><th>Streak</th>
+          </tr></thead><tbody>${tableRows(teams)}</tbody></table>
+        </div></div>`;
+      body.innerHTML=tableHtml('Eastern Conference',east)+tableHtml('Western Conference',west);
+    } else if(tab==='predict'){
+      // Show team selector
+      const r=await fetch('/sport/nba?action=standings');
+      const d=await r.json();
+      _nbaStandings=d.standings||[];
+      const opts=_nbaStandings.map(t=>`<option value="${t.team_id}">${t.full_name||t.name}</option>`).join('');
+      body.innerHTML=`<div class="card"><div class="card-head"><span class="card-title">NBA Game Predictor</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">AWAY TEAM</div>
+              <select id="nba-away-sel" style="width:100%">${opts}</select></div>
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">HOME TEAM</div>
+              <select id="nba-home-sel" style="width:100%">${opts}</select></div>
+          </div>
+          <button onclick="nbaRunPredict()" class="adv-scan-btn" style="width:100%;justify-content:center">🏀 Predict</button>
+          <div id="nba-pred-out" style="margin-top:16px"></div>
+        </div></div>`;
+    }
+  }catch(e){body.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+async function nbaPredict(awayId,homeId,awayName,homeName){
+  nbaTab('predict');
+  await loadNBA('predict');
+  const aSel=document.getElementById('nba-away-sel');
+  const hSel=document.getElementById('nba-home-sel');
+  if(aSel&&awayId)aSel.value=awayId;
+  if(hSel&&homeId)hSel.value=homeId;
+  nbaRunPredict();
+}
+
+async function nbaRunPredict(){
+  const out=document.getElementById('nba-pred-out');
+  if(!out)return;
+  const hId=document.getElementById('nba-home-sel')?.value;
+  const aId=document.getElementById('nba-away-sel')?.value;
+  if(!hId||!aId){out.innerHTML='<div class="error-state">Select two teams</div>';return;}
+  out.innerHTML='<div class="loading-state">Computing…</div>';
+  try{
+    const r=await fetch(`/sport/nba/predict?homeId=${hId}&awayId=${aId}`);
+    const d=await r.json();
+    if(d.error){out.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    const hSt=d.home_stats||{}, aSt=d.away_stats||{};
+    const hName=_nbaStandings.find(t=>t.team_id===hId)?.full_name||'Home';
+    const aName=_nbaStandings.find(t=>t.team_id===aId)?.full_name||'Away';
+    const favH=d.home_win>=d.away_win;
+    out.innerHTML=`<div class="pred-hero" style="border-radius:12px;padding:20px">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:16px">
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${aName}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'rgba(255,255,255,.5)':'#F7C66A'}">${d.away_win}%</div></div>
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,.4)">WIN PROB</div>
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${hName}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'#F7C66A':'rgba(255,255,255,.5)'}">${d.home_win}%</div></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <span class="tag tag-blue">Total pts: ${d.total_pts}</span>
+        <span class="tag tag-amber">Spread: ${d.spread>0?'+':''}${d.spread} home</span>
+        <span class="tag ${favH?'tag-green':'tag-red'}">${favH?hName:aName} favoured</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      ${[['Away: '+aName,aSt],['Home: '+hName,hSt]].map(([label,s])=>`
+      <div class="card"><div class="card-head"><span class="card-title">${label}</span></div>
+        <div class="card-body" style="padding:10px 14px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+            <div><div style="color:var(--tx3);font-size:10px">PTS/G</div><div style="font-weight:700;font-family:var(--mono)">${s.pts_pg||'–'}</div></div>
+            <div><div style="color:var(--tx3);font-size:10px">FORM L10</div><div style="font-weight:700;font-family:var(--mono)">${s.wins_l10||'–'}W</div></div>
+            <div><div style="color:var(--tx3);font-size:10px">FG%</div><div style="font-weight:700;font-family:var(--mono)">${s.fg_pct?Math.round(s.fg_pct*100)+'%':'–'}</div></div>
+            <div><div style="color:var(--tx3);font-size:10px">3P%</div><div style="font-weight:700;font-family:var(--mono)">${s.fg3_pct?Math.round(s.fg3_pct*100)+'%':'–'}</div></div>
+          </div>
+        </div></div>`).join('')}
+    </div>`;
+  }catch(e){out.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+function nbaTab(tab){
+  document.querySelectorAll('#pg-basketball .sport-tab-btn').forEach(b=>
+    b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab)));
+  loadNBA(tab);
+}
+
+// ── NHL ───────────────────────────────────────────────────────────────────────
+let _nhlStandings=[];
+
+async function loadNHL(tab='today'){
+  const body=document.getElementById('nhl-body');
+  const kpis=document.getElementById('nhl-kpis');
+  body.innerHTML='<div class="loading-state">Loading NHL data…</div>';
+  document.querySelectorAll('#pg-hockey .sport-tab-btn').forEach(b=>{
+    b.classList.toggle('on', b.textContent.toLowerCase().includes(tab));
+  });
+  try{
+    if(tab==='today'){
+      const r=await fetch('/sport/nhl?action=today');
+      const d=await r.json();
+      if(d.error){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+      const games=d.games||[];
+      kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">games today</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--blue)">NHL</div><div class="kpi-lbl">league</div></div>`;
+      if(!games.length){body.innerHTML='<div class="loading-state">No NHL games today.</div>';return;}
+      body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">
+        ${games.map(g=>`<div class="sport-game-card">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">${g.away} <span style="color:var(--tx3)">@</span> ${g.home}</div>
+          <div style="font-size:11px;color:var(--tx3)">${g.kickoff?new Date(g.kickoff).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+' UTC':''} · ${g.status||'Scheduled'}</div>
+          <button onclick="nhlPredict('${g.away_abbr}','${g.home_abbr}')"
+            style="margin-top:10px;width:100%;height:30px;border-radius:8px;border:1px solid var(--br2);background:var(--bg3);color:var(--tx);font-size:11px;font-weight:600;cursor:pointer">
+            Predict this game →</button>
+        </div>`).join('')}
+      </div>`;
+    } else if(tab==='standings'){
+      const r=await fetch('/sport/nhl?action=standings');
+      const d=await r.json();
+      if(d.error){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+      _nhlStandings=d.standings||[];
+      kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${_nhlStandings.length}</div><div class="kpi-lbl">teams</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--blue)">NHL</div><div class="kpi-lbl">league</div></div>`;
+      const east=_nhlStandings.filter(t=>t.conf==='Eastern');
+      const west=_nhlStandings.filter(t=>t.conf==='Western');
+      const rows=(teams)=>teams.map((t,i)=>`<tr>
+        <td>${i+1}</td><td><strong>${t.full_name||t.name}</strong></td>
+        <td style="font-family:var(--mono)">${t.wins}-${t.losses}-${t.ot_losses}</td>
+        <td style="font-family:var(--mono)">${t.points}</td>
+        <td style="font-family:var(--mono)">${t.gf_pg}</td>
+        <td style="font-family:var(--mono)">${t.ga_pg}</td>
+        <td>${t.streak||'–'}</td></tr>`).join('');
+      const tbl=(title,teams)=>`<div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">${title}</span></div>
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="stand-table"><thead><tr>
+            <th>#</th><th>Team</th><th>W-L-OT</th><th>PTS</th><th>GF/G</th><th>GA/G</th><th>Streak</th>
+          </tr></thead><tbody>${rows(teams)}</tbody></table>
+        </div></div>`;
+      body.innerHTML=tbl('Eastern Conference',east)+tbl('Western Conference',west);
+    } else if(tab==='predict'){
+      const r=await fetch('/sport/nhl?action=standings');
+      const d=await r.json();
+      _nhlStandings=d.standings||[];
+      const opts=_nhlStandings.map(t=>`<option value="${t.abbr}">${t.full_name||t.name}</option>`).join('');
+      body.innerHTML=`<div class="card"><div class="card-head"><span class="card-title">NHL Game Predictor</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">AWAY TEAM</div>
+              <select id="nhl-away-sel" style="width:100%">${opts}</select></div>
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">HOME TEAM</div>
+              <select id="nhl-home-sel" style="width:100%">${opts}</select></div>
+          </div>
+          <button onclick="nhlRunPredict()" class="adv-scan-btn" style="width:100%;justify-content:center">🏒 Predict</button>
+          <div id="nhl-pred-out" style="margin-top:16px"></div>
+        </div></div>`;
+    }
+  }catch(e){body.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+async function nhlPredict(awayAbbr,homeAbbr){
+  nhlTab('predict');
+  await loadNHL('predict');
+  const aSel=document.getElementById('nhl-away-sel');
+  const hSel=document.getElementById('nhl-home-sel');
+  if(aSel&&awayAbbr)aSel.value=awayAbbr;
+  if(hSel&&homeAbbr)hSel.value=homeAbbr;
+  nhlRunPredict();
+}
+
+async function nhlRunPredict(){
+  const out=document.getElementById('nhl-pred-out');
+  if(!out)return;
+  const hAbbr=document.getElementById('nhl-home-sel')?.value;
+  const aAbbr=document.getElementById('nhl-away-sel')?.value;
+  if(!hAbbr||!aAbbr){out.innerHTML='<div class="error-state">Select two teams</div>';return;}
+  out.innerHTML='<div class="loading-state">Computing…</div>';
+  try{
+    const r=await fetch(`/sport/nhl/predict?home=${hAbbr}&away=${aAbbr}`);
+    const d=await r.json();
+    if(d.error){out.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    const hName=_nhlStandings.find(t=>t.abbr===hAbbr)?.full_name||hAbbr;
+    const aName=_nhlStandings.find(t=>t.abbr===aAbbr)?.full_name||aAbbr;
+    const favH=d.home_win>=d.away_win;
+    out.innerHTML=`<div class="pred-hero" style="border-radius:12px;padding:20px">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:16px">
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${aName}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'rgba(255,255,255,.5)':'#F7C66A'}">${d.away_win}%</div></div>
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,.4)">WIN PROB</div>
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${hName}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'#F7C66A':'rgba(255,255,255,.5)'}">${d.home_win}%</div></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <span class="tag tag-blue">Exp. goals: ${d.total_goals} (${d.lh} / ${d.la})</span>
+        <span class="tag tag-amber">O5.5: ${d.over_5_5}%</span>
+        <span class="tag ${favH?'tag-green':'tag-red'}">${favH?hName:aName} favoured</span>
+      </div>
+    </div>`;
+  }catch(e){out.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+function nhlTab(tab){
+  document.querySelectorAll('#pg-hockey .sport-tab-btn').forEach(b=>
+    b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab)));
+  loadNHL(tab);
+}
 </script>
 </body>
 </html>

@@ -7,7 +7,17 @@ Run: python3 proxy.py
 from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 import urllib.request, urllib.error, ssl as _ssl
 import json, os, time, threading, hashlib, atexit, math, concurrent.futures, urllib.parse, re as _re
-import datetime as _dt, sqlite3, secrets
+import datetime as _dt, sqlite3, secrets, sys
+
+# ── Multi-sport adapters ──────────────────────────────────────────────────────
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from sports import basketball as _bball
+    from sports import hockey as _hockey
+    SPORTS_AVAILABLE = True
+except ImportError as _se:
+    SPORTS_AVAILABLE = False
+    print(f'  [SPORT] adapters unavailable: {_se}')
 
 # Load .env
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
@@ -2107,6 +2117,10 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/today':               self.handle_today(qs)
+        elif path == '/sport/nba':           self.handle_nba(qs)
+        elif path == '/sport/nhl':           self.handle_nhl(qs)
+        elif path.startswith('/sport/nba/'): self.handle_nba_detail(path.split('/sport/nba/')[1], qs)
+        elif path.startswith('/sport/nhl/'): self.handle_nhl_detail(path.split('/sport/nhl/')[1], qs)
         elif path == '/live':
             with _live_lock:
                 self.send_json({'matches': _live_data, 'count': len(_live_data), 'ts': _live_ts})
@@ -2574,6 +2588,106 @@ class Handler(SimpleHTTPRequestHandler):
                         'leagues_scanned': len(league_games), 'risk': risk,
                         'min_edge': min_edge, 'max_odds': cfg['max_odds'],
                         'min_prob': cfg['min_prob'], 'days': days})
+
+    # ── Multi-sport handlers ──────────────────────────────────────────────────
+
+    def handle_nba(self, qs):
+        if not SPORTS_AVAILABLE:
+            self.send_json({'error': 'nba_api not installed on server'}); return
+        params = urllib.parse.parse_qs(qs or '')
+        action = params.get('action', ['standings'])[0]
+        ck = f'_sport_nba_{action}'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        if action == 'standings':
+            data = _bball.get_standings()
+            set_cache(ck, data, 1800)
+            self.send_json({'sport': 'basketball', 'league': 'NBA', 'standings': data})
+        elif action == 'today':
+            data = _bball.get_today_games()
+            set_cache(ck, data, 300)
+            self.send_json({'sport': 'basketball', 'league': 'NBA', 'games': data})
+        else:
+            self.send_json({'error': f'Unknown action: {action}'}, 400)
+
+    def handle_nba_detail(self, sub, qs):
+        if not SPORTS_AVAILABLE:
+            self.send_json({'error': 'nba_api not installed'}); return
+        params = urllib.parse.parse_qs(qs or '')
+        if sub == 'team-stats':
+            team_id = params.get('id', [''])[0]
+            if not team_id:
+                self.send_json({'error': 'id required'}, 400); return
+            ck = f'_nba_ts_{team_id}'
+            cached = get_cache(ck)
+            if cached is not None:
+                self.send_json(cached); return
+            data = _bball.get_team_stats(team_id)
+            set_cache(ck, data, 3600)
+            self.send_json(data)
+        elif sub == 'predict':
+            h_id = params.get('homeId', [''])[0]
+            a_id = params.get('awayId', [''])[0]
+            if not h_id or not a_id:
+                self.send_json({'error': 'homeId and awayId required'}, 400); return
+            ck = f'_nba_pred_{h_id}_{a_id}'
+            cached = get_cache(ck)
+            if cached is not None:
+                self.send_json(cached); return
+            hstats = _bball.get_team_stats(h_id)
+            astats = _bball.get_team_stats(a_id)
+            h_elo = _bball._elo_store.get(h_id, 1500)
+            a_elo = _bball._elo_store.get(a_id, 1500)
+            pred = _bball.predict(hstats, astats, h_elo, a_elo)
+            result = {'sport': 'basketball', **pred, 'home_stats': hstats, 'away_stats': astats}
+            set_cache(ck, result, 900)
+            self.send_json(result)
+        else:
+            self.send_json({'error': f'Unknown sub: {sub}'}, 400)
+
+    def handle_nhl(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        action = params.get('action', ['standings'])[0]
+        ck = f'_sport_nhl_{action}'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        if action == 'standings':
+            data = _hockey.get_standings()
+            set_cache(ck, data, 1800)
+            self.send_json({'sport': 'hockey', 'league': 'NHL', 'standings': data})
+        elif action == 'today':
+            data = _hockey.get_today_games()
+            set_cache(ck, data, 300)
+            self.send_json({'sport': 'hockey', 'league': 'NHL', 'games': data})
+        else:
+            self.send_json({'error': f'Unknown action: {action}'}, 400)
+
+    def handle_nhl_detail(self, sub, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        if sub == 'predict':
+            h_abbr = params.get('home', [''])[0].upper()
+            a_abbr = params.get('away', [''])[0].upper()
+            if not h_abbr or not a_abbr:
+                self.send_json({'error': 'home and away abbr required'}, 400); return
+            ck = f'_nhl_pred_{h_abbr}_{a_abbr}'
+            cached = get_cache(ck)
+            if cached is not None:
+                self.send_json(cached); return
+            standings = _hockey.get_standings()
+            h_st = next((t for t in standings if t['abbr'] == h_abbr), {})
+            a_st = next((t for t in standings if t['abbr'] == a_abbr), {})
+            h_form = _hockey.get_team_schedule(h_abbr)
+            a_form = _hockey.get_team_schedule(a_abbr)
+            pred = _hockey.predict(h_st, a_st, h_form, a_form)
+            result = {'sport': 'hockey', **pred,
+                      'home': h_abbr, 'away': a_abbr,
+                      'home_stats': h_st, 'away_stats': a_st}
+            set_cache(ck, result, 900)
+            self.send_json(result)
+        else:
+            self.send_json({'error': f'Unknown sub: {sub}'}, 400)
 
     def handle_today(self, qs):
         """Return all upcoming fixtures across core leagues for the next N hours."""
