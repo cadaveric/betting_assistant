@@ -1201,7 +1201,8 @@ select:focus,input:focus{
   <button class="sport-btn on" onclick="switchSport('football')" id="sbtn-football">⚽ Football</button>
   <button class="sport-btn" onclick="switchSport('basketball')" id="sbtn-basketball">🏀 NBA</button>
   <button class="sport-btn" onclick="switchSport('hockey')" id="sbtn-hockey">🏒 NHL</button>
-  <span style="margin-left:auto;font-size:11px;color:var(--tx3);align-self:center">More sports coming soon</span>
+  <button class="sport-btn" onclick="switchSport('nfl')" id="sbtn-nfl">🏈 NFL</button>
+  <button class="sport-btn" onclick="switchSport('mlb')" id="sbtn-mlb">⚾ MLB</button>
 </div>
 
 <div class="nav">
@@ -1243,6 +1244,27 @@ select:focus,input:focus{
     <button class="sport-tab-btn" onclick="nbaTab('predict')">Predict</button>
   </div>
   <div id="nba-body"><div class="loading-state">Loading NBA data…</div></div>
+</div>
+
+<!-- ── NFL PAGE ──────────────────────────────────────────────── -->
+<div id="pg-nfl" class="page" style="display:none">
+  <div id="nfl-kpis" class="kpi-row"></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="sport-tab-btn on" onclick="nflTab('games')">This Week's Games</button>
+    <button class="sport-tab-btn" onclick="nflTab('standings')">Standings</button>
+    <button class="sport-tab-btn" onclick="nflTab('predict')">Predict</button>
+  </div>
+  <div id="nfl-body"><div class="loading-state">Loading NFL data…</div></div>
+</div>
+
+<!-- ── MLB PAGE ──────────────────────────────────────────────── -->
+<div id="pg-mlb" class="page" style="display:none">
+  <div id="mlb-kpis" class="kpi-row"></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="sport-tab-btn on" onclick="mlbTab('standings')">Standings</button>
+    <button class="sport-tab-btn" onclick="mlbTab('predict')">Predict</button>
+  </div>
+  <div id="mlb-body"><div class="loading-state">Loading MLB data…</div></div>
 </div>
 
 <!-- ── HOCKEY (NHL) PAGE ──────────────────────────────────────── -->
@@ -4439,6 +4461,12 @@ function switchSport(sport){
   } else if(sport === 'hockey'){
     _sportShowOnly('pg-hockey');
     loadNHL('today');
+  } else if(sport === 'nfl'){
+    _sportShowOnly('pg-nfl');
+    loadNFL('games');
+  } else if(sport === 'mlb'){
+    _sportShowOnly('pg-mlb');
+    loadMLB('standings');
   }
 }
 
@@ -4708,6 +4736,237 @@ function nhlTab(tab){
   document.querySelectorAll('#pg-hockey .sport-tab-btn').forEach(b=>
     b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab)));
   loadNHL(tab);
+}
+
+// ── NFL ───────────────────────────────────────────────────────────────────────
+let _nflStandings=[];
+
+async function loadNFL(tab='games'){
+  const body=document.getElementById('nfl-body');
+  const kpis=document.getElementById('nfl-kpis');
+  body.innerHTML='<div class="loading-state">Loading NFL data…</div>';
+  document.querySelectorAll('#pg-nfl .sport-tab-btn').forEach(b=>{
+    b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab));
+  });
+  try{
+    if(tab==='games'){
+      const r=await fetch('/sport/nfl?action=games');
+      const d=await r.json();
+      if(d.error&&!d.games){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+      const games=d.games||[];
+      kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length||'–'}</div><div class="kpi-lbl">games this week</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--red)">NFL</div><div class="kpi-lbl">league</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm">2024</div><div class="kpi-lbl">season</div></div>`;
+      if(!games.length){body.innerHTML='<div class="loading-state">No upcoming NFL games found. Season may be in off-season.</div>';return;}
+      body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">
+        ${games.map(g=>{
+          const hs=g.home_score!=null?g.home_score:'–'; const as_=g.away_score!=null?g.away_score:'–';
+          const finished=g.home_score!=null&&g.away_score!=null;
+          return `<div class="sport-game-card">
+            <div style="font-size:12px;color:var(--tx3);margin-bottom:4px">${g.gameday||''} ${g.gametime||''} · Week ${g.week||'?'}</div>
+            <div style="font-size:14px;font-weight:700">${g.away_team||'Away'} <span style="color:var(--tx3)">@</span> ${g.home_team||'Home'}</div>
+            ${finished?`<div style="font-family:var(--mono);font-size:20px;font-weight:700;margin-top:6px;color:var(--amber)">${as_} – ${hs}</div>`:''}
+            <button onclick="nflPredict('${g.away_team}','${g.home_team}')"
+              style="margin-top:10px;width:100%;height:30px;border-radius:8px;border:1px solid var(--br2);background:var(--bg3);color:var(--tx);font-size:11px;font-weight:600;cursor:pointer">
+              Predict →</button>
+          </div>`;}).join('')}
+      </div>`;
+    } else if(tab==='standings'){
+      const r=await fetch('/sport/nfl?action=standings');
+      const d=await r.json();
+      if(d.error&&!d.standings?.length){body.innerHTML=`<div class="error-state">${d.error||'No data'}</div>`;return;}
+      _nflStandings=d.standings||[];
+      kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${_nflStandings.length}</div><div class="kpi-lbl">teams</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--red)">NFL 2024</div><div class="kpi-lbl">season</div></div>`;
+      const afc=_nflStandings.filter(t=>t.conf==='AFC');
+      const nfc=_nflStandings.filter(t=>t.conf==='NFC');
+      const rows=(teams)=>teams.map((t,i)=>`<tr>
+        <td>${i+1}</td><td><strong>${t.name}</strong></td>
+        <td style="font-family:var(--mono)">${t.wins}-${t.losses}${t.ties?'-'+t.ties:''}</td>
+        <td style="font-family:var(--mono)">${(t.pct*100).toFixed(1)}%</td>
+        <td style="font-family:var(--mono)">${t.pf_pg}</td>
+        <td style="font-family:var(--mono)">${t.pa_pg}</td>
+        <td style="font-size:10px;color:var(--tx3)">${t.div}</td></tr>`).join('');
+      const tbl=(title,teams)=>`<div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">${title}</span></div>
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="stand-table"><thead><tr>
+            <th>#</th><th>Team</th><th>W-L</th><th>Win%</th><th>PF/G</th><th>PA/G</th><th>Division</th>
+          </tr></thead><tbody>${rows(teams)}</tbody></table>
+        </div></div>`;
+      body.innerHTML=tbl('AFC',afc)+tbl('NFC',nfc);
+    } else if(tab==='predict'){
+      const r=await fetch('/sport/nfl?action=standings');
+      const d=await r.json();
+      _nflStandings=d.standings||[];
+      const teams=[...new Set(_nflStandings.map(t=>t.team))].sort();
+      const opts=teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+      body.innerHTML=`<div class="card"><div class="card-head"><span class="card-title">NFL Game Predictor</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">AWAY TEAM</div>
+              <select id="nfl-away-sel" style="width:100%">${opts}</select></div>
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">HOME TEAM</div>
+              <select id="nfl-home-sel" style="width:100%">${opts}</select></div>
+          </div>
+          <button onclick="nflRunPredict()" class="adv-scan-btn" style="width:100%;justify-content:center">🏈 Predict</button>
+          <div id="nfl-pred-out" style="margin-top:16px"></div>
+        </div></div>`;
+    }
+  }catch(e){body.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+async function nflPredict(away,home){
+  nflTab('predict');
+  await loadNFL('predict');
+  const aSel=document.getElementById('nfl-away-sel');
+  const hSel=document.getElementById('nfl-home-sel');
+  if(aSel&&away)aSel.value=away;
+  if(hSel&&home)hSel.value=home;
+  nflRunPredict();
+}
+
+async function nflRunPredict(){
+  const out=document.getElementById('nfl-pred-out');
+  if(!out)return;
+  const home=document.getElementById('nfl-home-sel')?.value;
+  const away=document.getElementById('nfl-away-sel')?.value;
+  if(!home||!away){out.innerHTML='<div class="error-state">Select two teams</div>';return;}
+  out.innerHTML='<div class="loading-state">Computing…</div>';
+  try{
+    const r=await fetch(`/sport/nfl/predict?home=${home}&away=${away}`);
+    const d=await r.json();
+    if(d.error){out.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    const favH=d.home_win>=d.away_win;
+    out.innerHTML=`<div class="pred-hero" style="border-radius:12px;padding:20px">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:16px">
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${away}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'rgba(255,255,255,.5)':'#F7C66A'}">${d.away_win}%</div></div>
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,.4)">WIN PROB</div>
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${home}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'#F7C66A':'rgba(255,255,255,.5)'}">${d.home_win}%</div></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <span class="tag tag-blue">Total: ${d.total_pts} pts</span>
+        <span class="tag tag-amber">Spread: ${d.spread>0?'+':''}${d.spread} ${home}</span>
+        <span class="tag tag-green">${favH?home:away} favoured</span>
+        <span class="tag tag-gray">Score est: ${away} ${d.away_pts} – ${home} ${d.home_pts}</span>
+      </div>
+    </div>`;
+  }catch(e){out.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+function nflTab(tab){
+  document.querySelectorAll('#pg-nfl .sport-tab-btn').forEach(b=>
+    b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab)));
+  loadNFL(tab);
+}
+
+// ── MLB ───────────────────────────────────────────────────────────────────────
+let _mlbStandings=[];
+
+async function loadMLB(tab='standings'){
+  const body=document.getElementById('mlb-body');
+  const kpis=document.getElementById('mlb-kpis');
+  body.innerHTML='<div class="loading-state">Loading MLB data…</div>';
+  document.querySelectorAll('#pg-mlb .sport-tab-btn').forEach(b=>{
+    b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab));
+  });
+  try{
+    if(tab==='standings'){
+      const r=await fetch('/sport/mlb?action=standings');
+      const d=await r.json();
+      if(d.error&&!d.standings?.length){body.innerHTML=`<div class="error-state">${d.error||'No data'}</div>`;return;}
+      _mlbStandings=d.standings||[];
+      kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${_mlbStandings.length}</div><div class="kpi-lbl">teams</div></div>
+        <div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--blue)">MLB</div><div class="kpi-lbl">league</div></div>`;
+      const al=_mlbStandings.filter(t=>t.conf==='AL');
+      const nl=_mlbStandings.filter(t=>t.conf==='NL');
+      const rows=(teams)=>teams.map((t,i)=>`<tr>
+        <td>${i+1}</td><td><strong>${t.name}</strong></td>
+        <td style="font-family:var(--mono)">${t.wins}-${t.losses}</td>
+        <td style="font-family:var(--mono)">${(t.pct*100).toFixed(1)}%</td>
+        <td style="font-family:var(--mono)">${t.gb}</td>
+        <td style="font-family:var(--mono)">${t.rs_pg}</td>
+        <td style="font-family:var(--mono)">${t.ra_pg}</td>
+        <td style="font-size:10px;color:var(--tx3)">${t.div}</td></tr>`).join('');
+      const tbl=(title,teams)=>`<div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">${title}</span></div>
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="stand-table"><thead><tr>
+            <th>#</th><th>Team</th><th>W-L</th><th>Win%</th><th>GB</th><th>RS/G</th><th>RA/G</th><th>Division</th>
+          </tr></thead><tbody>${rows(teams)}</tbody></table>
+        </div></div>`;
+      body.innerHTML=tbl('American League',al)+tbl('National League',nl);
+    } else if(tab==='predict'){
+      if(!_mlbStandings.length){
+        const r=await fetch('/sport/mlb?action=standings');
+        const d=await r.json();
+        _mlbStandings=d.standings||[];
+      }
+      const teams=[...new Set(_mlbStandings.map(t=>t.team))].sort();
+      const opts=teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+      body.innerHTML=`<div class="card"><div class="card-head"><span class="card-title">MLB Game Predictor</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">AWAY TEAM</div>
+              <select id="mlb-away-sel" style="width:100%">${opts}</select></div>
+            <div><div style="font-size:11px;color:var(--tx2);margin-bottom:4px">HOME TEAM</div>
+              <select id="mlb-home-sel" style="width:100%">${opts}</select></div>
+          </div>
+          <button onclick="mlbRunPredict()" class="adv-scan-btn" style="width:100%;justify-content:center">⚾ Predict</button>
+          <div id="mlb-pred-out" style="margin-top:16px"></div>
+        </div></div>`;
+    }
+  }catch(e){body.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+async function mlbRunPredict(){
+  const out=document.getElementById('mlb-pred-out');
+  if(!out)return;
+  const home=document.getElementById('mlb-home-sel')?.value;
+  const away=document.getElementById('mlb-away-sel')?.value;
+  if(!home||!away){out.innerHTML='<div class="error-state">Select two teams</div>';return;}
+  out.innerHTML='<div class="loading-state">Computing…</div>';
+  try{
+    const r=await fetch(`/sport/mlb/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}`);
+    const d=await r.json();
+    if(d.error){out.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
+    const favH=d.home_win>=d.away_win;
+    out.innerHTML=`<div class="pred-hero" style="border-radius:12px;padding:20px">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:16px">
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${away}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'rgba(255,255,255,.5)':'#F7C66A'}">${d.away_win}%</div></div>
+        <div style="text-align:center;font-size:11px;color:rgba(255,255,255,.4)">WIN PROB</div>
+        <div style="text-align:center"><div style="font-size:13px;font-weight:700;color:var(--tx)">${home}</div>
+          <div style="font-size:28px;font-weight:800;font-family:var(--mono);color:${favH?'#F7C66A':'rgba(255,255,255,.5)'}">${d.home_win}%</div></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <span class="tag tag-blue">Total runs: ${d.total_runs}</span>
+        <span class="tag tag-amber">O8.5: ${d.over_8_5}%</span>
+        <span class="tag ${favH?'tag-green':'tag-red'}">${favH?home:away} favoured</span>
+        <span class="tag tag-gray">Est: ${away} ${d.away_runs} – ${home} ${d.home_runs}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+        ${[['Away: '+away,d.away_bat||{},d.away_pitch||{}],['Home: '+home,d.home_bat||{},d.home_pitch||{}]].map(([label,bat,pit])=>`
+        <div class="card"><div class="card-head"><span class="card-title">${label}</span></div>
+          <div class="card-body" style="padding:10px 14px;font-size:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              <div><div style="color:var(--tx3);font-size:10px">wRC+</div><div style="font-weight:700;font-family:var(--mono)">${bat.wrc_plus||'–'}</div></div>
+              <div><div style="color:var(--tx3);font-size:10px">wOBA</div><div style="font-weight:700;font-family:var(--mono)">${bat.woba||'–'}</div></div>
+              <div><div style="color:var(--tx3);font-size:10px">ERA</div><div style="font-weight:700;font-family:var(--mono)">${pit.era||'–'}</div></div>
+              <div><div style="color:var(--tx3);font-size:10px">WHIP</div><div style="font-weight:700;font-family:var(--mono)">${pit.whip||'–'}</div></div>
+            </div>
+          </div></div>`).join('')}
+      </div>
+    </div>`;
+  }catch(e){out.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
+}
+
+function mlbTab(tab){
+  document.querySelectorAll('#pg-mlb .sport-tab-btn').forEach(b=>
+    b.classList.toggle('on', b.getAttribute('onclick')?.includes(tab)));
+  loadMLB(tab);
 }
 </script>
 </body>

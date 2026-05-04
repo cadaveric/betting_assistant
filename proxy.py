@@ -17,7 +17,21 @@ try:
     SPORTS_AVAILABLE = True
 except ImportError as _se:
     SPORTS_AVAILABLE = False
-    print(f'  [SPORT] adapters unavailable: {_se}')
+    print(f'  [SPORT] basketball/hockey unavailable: {_se}')
+
+try:
+    from sports import american_football as _nfl
+    NFL_AVAILABLE = True
+except ImportError as _se:
+    NFL_AVAILABLE = False
+    print(f'  [SPORT] NFL unavailable: {_se}')
+
+try:
+    from sports import baseball as _mlb
+    MLB_AVAILABLE = True
+except ImportError as _se:
+    MLB_AVAILABLE = False
+    print(f'  [SPORT] MLB unavailable: {_se}')
 
 # Load .env
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
@@ -2119,8 +2133,12 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == '/today':               self.handle_today(qs)
         elif path == '/sport/nba':           self.handle_nba(qs)
         elif path == '/sport/nhl':           self.handle_nhl(qs)
+        elif path == '/sport/nfl':           self.handle_nfl(qs)
+        elif path == '/sport/mlb':           self.handle_mlb(qs)
         elif path.startswith('/sport/nba/'): self.handle_nba_detail(path.split('/sport/nba/')[1], qs)
         elif path.startswith('/sport/nhl/'): self.handle_nhl_detail(path.split('/sport/nhl/')[1], qs)
+        elif path.startswith('/sport/nfl/'): self.handle_nfl_detail(path.split('/sport/nfl/')[1], qs)
+        elif path.startswith('/sport/mlb/'): self.handle_mlb_detail(path.split('/sport/mlb/')[1], qs)
         elif path == '/live':
             with _live_lock:
                 self.send_json({'matches': _live_data, 'count': len(_live_data), 'ts': _live_ts})
@@ -2686,6 +2704,91 @@ class Handler(SimpleHTTPRequestHandler):
                       'home_stats': h_st, 'away_stats': a_st}
             set_cache(ck, result, 900)
             self.send_json(result)
+        else:
+            self.send_json({'error': f'Unknown sub: {sub}'}, 400)
+
+    def handle_nfl(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        action = params.get('action', ['standings'])[0]
+        ck = f'_sport_nfl_{action}'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        if not NFL_AVAILABLE:
+            self.send_json({'error': 'nfl_data_py not installed', 'standings': [], 'games': []}); return
+        if action == 'standings':
+            data = _nfl.get_standings()
+            result = {'sport': 'american_football', 'league': 'NFL', 'standings': data}
+            set_cache(ck, result, 3600); self.send_json(result)
+        elif action == 'games':
+            data = _nfl.get_week_games()
+            result = {'sport': 'american_football', 'league': 'NFL', 'games': data}
+            set_cache(ck, result, 1800); self.send_json(result)
+        else:
+            self.send_json({'error': f'Unknown action: {action}'}, 400)
+
+    def handle_nfl_detail(self, sub, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        if sub == 'predict':
+            home = params.get('home', [''])[0].upper()
+            away = params.get('away', [''])[0].upper()
+            if not home or not away:
+                self.send_json({'error': 'home and away required'}, 400); return
+            ck = f'_nfl_pred_{home}_{away}'
+            cached = get_cache(ck)
+            if cached is not None:
+                self.send_json(cached); return
+            if not NFL_AVAILABLE:
+                self.send_json({'error': 'nfl_data_py not installed'}); return
+            h_st = _nfl.get_team_stats(home)
+            a_st = _nfl.get_team_stats(away)
+            pred = _nfl.predict(home, away, h_st, a_st)
+            result = {'sport': 'american_football', **pred,
+                      'home': home, 'away': away,
+                      'home_stats': h_st, 'away_stats': a_st}
+            set_cache(ck, result, 1800); self.send_json(result)
+        else:
+            self.send_json({'error': f'Unknown sub: {sub}'}, 400)
+
+    def handle_mlb(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        action = params.get('action', ['standings'])[0]
+        ck = f'_sport_mlb_{action}'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        if not MLB_AVAILABLE:
+            self.send_json({'error': 'pybaseball not installed', 'standings': []}); return
+        if action == 'standings':
+            data = _mlb.get_standings()
+            result = {'sport': 'baseball', 'league': 'MLB', 'standings': data}
+            set_cache(ck, result, 3600); self.send_json(result)
+        else:
+            self.send_json({'error': f'Unknown action: {action}'}, 400)
+
+    def handle_mlb_detail(self, sub, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        if sub == 'predict':
+            home = params.get('home', [''])[0]
+            away = params.get('away', [''])[0]
+            if not home or not away:
+                self.send_json({'error': 'home and away required'}, 400); return
+            ck = f'_mlb_pred_{home}_{away}'
+            cached = get_cache(ck)
+            if cached is not None:
+                self.send_json(cached); return
+            if not MLB_AVAILABLE:
+                self.send_json({'error': 'pybaseball not installed'}); return
+            h_bat  = _mlb.get_team_batting(home)
+            a_bat  = _mlb.get_team_batting(away)
+            h_pit  = _mlb.get_team_pitching(home)
+            a_pit  = _mlb.get_team_pitching(away)
+            pred   = _mlb.predict(home, away, h_bat, a_bat, h_pit, a_pit)
+            result = {'sport': 'baseball', **pred,
+                      'home': home, 'away': away,
+                      'home_bat': h_bat, 'away_bat': a_bat,
+                      'home_pitch': h_pit, 'away_pitch': a_pit}
+            set_cache(ck, result, 1800); self.send_json(result)
         else:
             self.send_json({'error': f'Unknown sub: {sub}'}, 400)
 

@@ -3,3 +3,5 @@ numpy
 joblib
 xgboost
 nba_api
+nfl_data_py
+pybaseball
