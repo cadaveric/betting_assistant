@@ -958,6 +958,7 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
   font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;
   background:var(--bg4);color:var(--tx3);letter-spacing:.04em;flex-shrink:0;white-space:nowrap;
 }
+.csel-mobile-head{display:none}
 @media(max-width:600px){
   .csel-wrap{min-width:0;width:100%}
   .csel-drop{
@@ -969,6 +970,15 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
   .csel-drop::before{
     content:'';display:block;width:36px;height:4px;border-radius:2px;
     background:var(--br2);margin:10px auto 6px;
+  }
+  .csel-mobile-head{
+    display:flex;position:sticky;top:0;z-index:2;align-items:center;justify-content:space-between;
+    min-height:46px;padding:0 12px;background:#FFFDF8;border-bottom:1px solid rgba(61,49,31,.10);
+    font-size:13px;font-weight:800;color:#20251F;
+  }
+  .csel-mobile-head button{
+    height:30px;border:1px solid rgba(61,49,31,.14);border-radius:8px;
+    background:#F1E8D9;color:#4F4538;padding:0 12px;font-weight:800;font-family:var(--sans);
   }
 }
 .csel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199}
@@ -1293,15 +1303,19 @@ select,input[type=text],input[type=number]{
     font-size:16px!important;border-radius:10px!important;
   }
   #lgSelTxt{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .csel-overlay{z-index:1190!important;background:rgba(31,28,22,.42)!important}
+  .csel-overlay{z-index:1190!important;background:rgba(31,28,22,.28)!important}
   .csel-drop{
-    position:fixed!important;left:8px!important;right:8px!important;bottom:8px!important;top:auto!important;
-    width:auto!important;min-width:0!important;max-height:min(68vh,520px)!important;
-    z-index:1200!important;border-radius:16px!important;
+    position:fixed!important;left:12px!important;right:12px!important;
+    top:auto!important;bottom:calc(82px + env(safe-area-inset-bottom,0px))!important;
+    width:auto!important;min-width:0!important;max-height:min(48vh,420px)!important;
+    z-index:1200!important;border-radius:14px!important;
     background:#FFFDF8!important;color:#20251F!important;border-color:rgba(61,49,31,.14)!important;
-    box-shadow:0 -12px 34px rgba(32,24,14,.26)!important;overscroll-behavior:contain;
+    box-shadow:0 18px 44px rgba(32,24,14,.22)!important;overscroll-behavior:contain;
   }
+  .csel-drop::before{display:none!important}
+  .csel-mobile-head{display:flex!important}
   .csel-sect-head{position:sticky;top:0;z-index:1;background:#F1E8D9!important;color:#6A5E4E!important}
+  .csel-mobile-head+ .csel-section .csel-sect-head{top:46px!important}
   .csel-opt{min-height:42px;font-size:14px!important;color:#20251F!important}
   .csel-opt:hover,.csel-opt.csel-sel{background:rgba(176,96,16,.10)!important;color:#A85807!important}
   #mob-menu-btn{
@@ -4780,7 +4794,7 @@ function buildLgDrop(){
   const drop=document.getElementById('lgSelDrop');
   if(!sel||!drop) return;
   const cur=sel.value;
-  let html='';
+  let html=window.innerWidth<=600?'<div class="csel-mobile-head"><span>Choose league</span><button type="button" onclick="event.stopPropagation();closeLgDrop()">Close</button></div>':'';
   Array.from(sel.querySelectorAll('optgroup')).forEach(og=>{
     const raw=og.getAttribute('label')||'';
     const lbl=raw.replace(/^──\s*/,'').replace(/\s*\(full data\)/i,'').replace(/\s*\[odds only\]/i,'').trim();
