@@ -252,18 +252,9 @@ def _parse_scoreboard(date_str):
                     game_teams = None
                 home_row = away_row = None
                 if game_teams is not None and len(game_teams) >= 2:
-                    # Determine home/away from the game code (format: date/AWAY@HOME)
-                    code = str(gh.get('gameCode', ''))
-                    away_code = code.split('/')[-1].split('@')[0].upper() if '/@' in code or '@' in code else ''
-                    for _, tr in game_teams.iterrows():
-                        tricode = str(tr.get('teamTricode', ''))
-                        if tricode == away_code:
-                            away_row = tr
-                        else:
-                            home_row = tr
-                    if home_row is None and len(game_teams) == 2:
-                        rows = list(game_teams.iterrows())
-                        away_row, home_row = rows[0][1], rows[1][1]
+                    # ScoreboardV3 returns teams in order: [0]=away, [1]=home
+                    rows = list(game_teams.iterrows())
+                    away_row, home_row = rows[0][1], rows[1][1]
                 def _tname(row):
                     if row is None: return ''
                     city = str(row.get('teamCity','') or '')
