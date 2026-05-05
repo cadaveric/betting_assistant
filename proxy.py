@@ -157,7 +157,7 @@ input:focus{border-color:#B76D12;box-shadow:0 0 0 3px rgba(183,109,18,.14)}
     </div>
     <div>
       <div class="logo-text">Scoutline</div>
-      <div class="logo-sub">FOOTBALL INTELLIGENCE</div>
+      <div class="logo-sub">MULTI-SPORT INTELLIGENCE</div>
     </div>
   </div>
   <h1>Sign in</h1>
@@ -2916,7 +2916,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def handle_mlb_fixtures(self):
         """Upcoming MLB games via MLB Stats API with pre-computed predictions."""
-        ck = f'_mlb_fixtures_3d_{_mlb.MLB_SEASON}'
+        ck = f'_mlb_fixtures_3d_v2_{_mlb.MLB_SEASON}'
         cached = get_cache(ck)
         if cached is not None:
             self.send_json(cached); return
@@ -3355,7 +3355,7 @@ if __name__ == '__main__':
         time.sleep(2)
         # Clear stale sport caches so empty results from previous runs don't persist
         sport_prefixes = ['_sport_nba_', '_sport_nhl_', '_sport_nfl_', '_sport_mlb_',
-                          '_nba_fixtures_', '_nhl_fixtures_', '_nba_ts_', '_nhl_pred_',
+                          '_nba_fixtures_', '_nhl_fixtures_', '_mlb_fixtures_', '_nba_ts_', '_nhl_pred_',
                           '_nfl_pred_', '_mlb_pred_']
         with cache_lock:
             stale = [k for k in cache if any(k.startswith(p) for p in sport_prefixes)]

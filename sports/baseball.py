@@ -3,7 +3,7 @@ MLB Baseball adapter.
 Uses pybaseball (wraps Baseball Reference / FanGraphs, free, no key).
 pip install pybaseball
 """
-import datetime as _dt, math
+import datetime as _dt, math, json, urllib.request
 
 try:
     import pybaseball as pb
@@ -25,12 +25,84 @@ LEAGUE_MAP = {
 _standings_cache = None
 _batting_cache = None
 _pitching_cache = None
+_official_batting_cache = None
+_official_pitching_cache = None
+
+_TEAM_ABBR = {
+    'ARI':'Arizona Diamondbacks','ATL':'Atlanta Braves','BAL':'Baltimore Orioles',
+    'BOS':'Boston Red Sox','CHC':'Chicago Cubs','CWS':'Chicago White Sox',
+    'CIN':'Cincinnati Reds','CLE':'Cleveland Guardians','COL':'Colorado Rockies',
+    'DET':'Detroit Tigers','HOU':'Houston Astros','KC':'Kansas City Royals',
+    'LAA':'Los Angeles Angels','LAD':'Los Angeles Dodgers','MIA':'Miami Marlins',
+    'MIL':'Milwaukee Brewers','MIN':'Minnesota Twins','NYM':'New York Mets',
+    'NYY':'New York Yankees','ATH':'Athletics','OAK':'Athletics',
+    'PHI':'Philadelphia Phillies','PIT':'Pittsburgh Pirates','SD':'San Diego Padres',
+    'SEA':'Seattle Mariners','SF':'San Francisco Giants','STL':'St. Louis Cardinals',
+    'TB':'Tampa Bay Rays','TEX':'Texas Rangers','TOR':'Toronto Blue Jays',
+    'WSH':'Washington Nationals','WAS':'Washington Nationals',
+}
 
 def _safe_float(v, default=0.0):
     try:
         return float(v) if v is not None else default
     except Exception:
         return default
+
+def _norm_team(team):
+    s = str(team or '').strip()
+    return _TEAM_ABBR.get(s.upper(), s)
+
+def _official_team_stats(group):
+    """Official MLB Stats API fallback; avoids FanGraphs 403s from pybaseball."""
+    global _official_batting_cache, _official_pitching_cache
+    if group == 'hitting' and _official_batting_cache is not None:
+        return _official_batting_cache
+    if group == 'pitching' and _official_pitching_cache is not None:
+        return _official_pitching_cache
+    url = f'https://statsapi.mlb.com/api/v1/teams/stats?season={MLB_SEASON}&group={group}&stats=season&sportIds=1'
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Scoutline/2.0'})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            raw = json.loads(r.read())
+        out = {}
+        for split in ((raw.get('stats') or [{}])[0].get('splits') or []):
+            team = split.get('team') or {}
+            name = team.get('name') or ''
+            stat = split.get('stat') or {}
+            if not name:
+                continue
+            games = max(1, int(_safe_float(stat.get('gamesPlayed'), 1)))
+            if group == 'hitting':
+                ops = _safe_float(stat.get('ops'), 0.720)
+                row = {
+                    'avg': round(_safe_float(stat.get('avg'), 0.245), 3),
+                    'obp': round(_safe_float(stat.get('obp'), 0.315), 3),
+                    'slg': round(_safe_float(stat.get('slg'), 0.405), 3),
+                    'ops': round(ops, 3),
+                    'runs_pg': round(_safe_float(stat.get('runs'), 0) / games, 2),
+                    'hr_pg': round(_safe_float(stat.get('homeRuns'), 0) / games, 2),
+                    'wrc_plus': int(max(70, min(135, round(100 * ops / 0.720)))),
+                    'source': 'mlb-stats-api',
+                }
+            else:
+                row = {
+                    'era': round(_safe_float(stat.get('era'), 4.5), 2),
+                    'whip': round(_safe_float(stat.get('whip'), 1.3), 2),
+                    'avg_allowed': round(_safe_float(stat.get('avg'), 0.245), 3),
+                    'runs_allowed_pg': round(_safe_float(stat.get('runs'), 0) / games, 2),
+                    'hr_allowed_pg': round(_safe_float(stat.get('homeRuns'), 0) / games, 2),
+                    'source': 'mlb-stats-api',
+                }
+            out[name] = row
+            out[str(team.get('id') or '')] = row
+        if group == 'hitting':
+            _official_batting_cache = out
+        else:
+            _official_pitching_cache = out
+        return out
+    except Exception as e:
+        print(f'  [MLB] official {group} stats error: {e}')
+        return {}
 
 def get_standings():
     """Return combined AL + NL standings."""
@@ -73,6 +145,10 @@ def get_standings():
 
 def get_team_batting(team):
     """Return team batting stats (wOBA, wRC+, ISO)."""
+    official = _official_team_stats('hitting')
+    key = _norm_team(team)
+    if official.get(key):
+        return official[key]
     global _batting_cache
     if _batting_cache is None and MLB_AVAILABLE:
         try:
@@ -84,6 +160,8 @@ def get_team_batting(team):
     try:
         df = _batting_cache
         row = df[df['Team'] == team]
+        if row.empty and key != team:
+            row = df[df['Team'] == key]
         if row.empty:
             return {}
         r = row.iloc[0]
@@ -101,6 +179,10 @@ def get_team_batting(team):
 
 def get_team_pitching(team):
     """Return team pitching stats (ERA, WHIP, FIP)."""
+    official = _official_team_stats('pitching')
+    key = _norm_team(team)
+    if official.get(key):
+        return official[key]
     global _pitching_cache
     if _pitching_cache is None and MLB_AVAILABLE:
         try:
@@ -112,6 +194,8 @@ def get_team_pitching(team):
     try:
         df = _pitching_cache
         row = df[df['Team'] == team]
+        if row.empty and key != team:
+            row = df[df['Team'] == key]
         if row.empty:
             return {}
         r = row.iloc[0]
@@ -136,15 +220,17 @@ def predict(home_team, away_team, home_bat, away_bat, home_pitch, away_pitch, ho
     lg_era  = 4.5
     lg_wrc  = 100
 
-    h_wrc  = home_bat.get('wrc_plus', lg_wrc)
-    a_wrc  = away_bat.get('wrc_plus', lg_wrc)
+    h_wrc  = home_bat.get('wrc_plus') or (home_bat.get('ops') and 100 * home_bat.get('ops') / 0.720) or lg_wrc
+    a_wrc  = away_bat.get('wrc_plus') or (away_bat.get('ops') and 100 * away_bat.get('ops') / 0.720) or lg_wrc
     h_era  = home_pitch.get('era', lg_era)
     a_era  = away_pitch.get('era', lg_era)
 
     # Expected runs: team offense quality vs opponent pitching quality
     # League avg ~4.5 runs/game; scale by wRC+ and ERA
-    h_runs = (h_wrc / lg_wrc) * (lg_era / max(0.1, a_era)) * 4.5 * 1.04  # home park
-    a_runs = (a_wrc / lg_wrc) * (lg_era / max(0.1, h_era)) * 4.5
+    h_base = home_bat.get('runs_pg') or 4.5
+    a_base = away_bat.get('runs_pg') or 4.5
+    h_runs = ((h_wrc / lg_wrc) * 4.5 * 0.55 + h_base * 0.45) * (lg_era / max(0.1, a_era)) * 1.04
+    a_runs = ((a_wrc / lg_wrc) * 4.5 * 0.55 + a_base * 0.45) * (lg_era / max(0.1, h_era))
 
     margin = h_runs - a_runs
     p_home = 1 / (1 + math.exp(-margin * 0.4))  # flatter sigmoid for baseball
