@@ -198,6 +198,7 @@ def get_upcoming_games(days=7):
     """
     today = _dt.date.today()
     games = []
+    seen = set()
     for d in range(days + 1):
         date = (today + _dt.timedelta(days=d)).isoformat()
         data = _fetch(f'schedule/{date}')
@@ -205,14 +206,17 @@ def get_upcoming_games(days=7):
         for gw in data.get('gameWeek', []):
             for g in gw.get('games', []):
                 if g.get('gameType') not in (2, 3): continue
+                gid = g.get('id')
+                if gid in seen: continue
+                seen.add(gid)
                 games.append({
-                    'game_id':    g.get('id'),
+                    'game_id':    gid,
                     'home':       (g.get('homeTeam') or {}).get('commonName',{}).get('default',''),
                     'away':       (g.get('awayTeam') or {}).get('commonName',{}).get('default',''),
                     'home_abbr':  (g.get('homeTeam') or {}).get('abbrev',''),
                     'away_abbr':  (g.get('awayTeam') or {}).get('abbrev',''),
                     'kickoff':    g.get('startTimeUTC',''),
-                    'gameday':    date,
+                    'gameday':    g.get('gameDate') or date,
                     'status':     g.get('gameState','Scheduled'),
                 })
-    return games
+    return sorted(games, key=lambda x: x.get('kickoff') or x.get('gameday') or '')
