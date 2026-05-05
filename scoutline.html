@@ -2323,6 +2323,20 @@ async function loadTeamStats(showProgress){
   }
 }
 
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function ensureTeamStatsReady(showProgress, timeoutMs=22000){
+  const start=Date.now();
+  let first=true;
+  while(Date.now()-start<timeoutMs){
+    if(Object.keys(teamStatsMap).length>0) return true;
+    const ok=await loadTeamStats(showProgress&&first);
+    first=false;
+    if(ok&&Object.keys(teamStatsMap).length>0) return true;
+    await sleep(2500);
+  }
+  return Object.keys(teamStatsMap).length>0;
+}
+
 
 // ── LEAGUE BASELINES ─────────────────────────────────────────────────────────
 // Baselines — overridden by live fdco data when available
@@ -3686,20 +3700,18 @@ async function loadFixtures(){
       kpiEl.innerHTML='';
       return;
     }
-    // Load team stats from proxy (built server-side, instant if already cached)
-    await loadTeamStats(true);
-    // If not ready yet, show fixtures anyway and retry stats quietly after 10s
-    if(Object.keys(teamStatsMap).length===0){
-      const requestedLeague=lg;
-      await loadUnderstatStats();
-      // Retry at 10s and 25s until stats are ready — prevents stale "Estimated" predictions
-      for(const delay of [10000,25000]){
-        setTimeout(async()=>{
-          if(lg!==requestedLeague||Object.keys(teamStatsMap).length>0) return;
-          await loadTeamStats(false);
-          if(Object.keys(teamStatsMap).length>0) await loadFixtures();
-        }, delay);
-      }
+    // Load rich team stats before rendering predictions. This prevents fixture cards
+    // from showing an estimated score and then changing after stats arrive.
+    const statsReady=await ensureTeamStatsReady(true,24000);
+    if(reqLeague!==lg||reqVersion!==leagueVersion)return;
+    if(!statsReady){
+      fixEl.innerHTML=`<div class="card"><div class="card-body" style="text-align:center;padding:28px 18px">
+        <div style="font-size:16px;font-weight:800;color:var(--tx);margin-bottom:6px">Team stats are still building</div>
+        <div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Predictions are paused so users do not see unstable estimated scores.</div>
+        <button class="adv-scan-btn" style="margin-left:0;height:34px;font-size:12px" onclick="loadFixtures()">Retry</button>
+      </div></div>`;
+      kpiEl.innerHTML='';
+      return;
     }
     const cutoff=new Date(today.getTime()+7*86400000);
     const foreignMatch=(mData.matches||[]).find(m=>m.competition?.code&&m.competition.code!==reqLeague);
@@ -4143,26 +4155,33 @@ async function runDeepPred(){
   const aName=aRow.team.shortName||aRow.team.name;
   document.getElementById('predOut').innerHTML=`<div class="loading-state" style="padding:3rem">${t('loading.h2h')}</div>`;
 
-  let h2hData=null,oddsH=0,oddsD=0,oddsA=0,fixtureIntel=null;
   try{
-    const r=await fetch('/api/competitions/'+lg+'/matches?homeTeam='+hRow.team.id+'&awayTeam='+aRow.team.id+'&limit=10');
-    const d=await r.json();
-    if(d.matches?.length) h2hData=buildH2HAggregates(d.matches,hRow.team.id,aRow.team.id);
-  }catch(e){}
-  const fxOdds=findFixtureOdds(hRow.team.name,aRow.team.name);
-  if(fxOdds){
-    const flipped=fxOdds.home===aRow.team.name;
-    oddsH=flipped?fxOdds.best_a:fxOdds.best_h;
-    oddsD=fxOdds.best_d;
-    oddsA=flipped?fxOdds.best_h:fxOdds.best_a;
-    if(fxOdds.id){
-      try{
-        const r=await fetch('/fixture-intel/'+fxOdds.id);
-        const d=await r.json();
-        if(!d.error)fixtureIntel=d;
-      }catch(e){}
+    const statsReady=await ensureTeamStatsReady(false,22000);
+    if(!statsReady){
+      document.getElementById('predOut').innerHTML=`<div class="error-state">Team stats are still building for ${lg}. Please retry in a moment; prediction is paused to avoid unstable estimated output.</div>`;
+      return;
     }
-  }
+
+    let h2hData=null,oddsH=0,oddsD=0,oddsA=0,fixtureIntel=null;
+    try{
+      const r=await fetch('/api/competitions/'+lg+'/matches?homeTeam='+hRow.team.id+'&awayTeam='+aRow.team.id+'&limit=10');
+      const d=await r.json();
+      if(d.matches?.length) h2hData=buildH2HAggregates(d.matches,hRow.team.id,aRow.team.id);
+    }catch(e){}
+    const fxOdds=findFixtureOdds(hRow.team.name,aRow.team.name);
+    if(fxOdds){
+      const flipped=fxOdds.home===aRow.team.name;
+      oddsH=flipped?fxOdds.best_a:fxOdds.best_h;
+      oddsD=fxOdds.best_d;
+      oddsA=flipped?fxOdds.best_h:fxOdds.best_a;
+      if(fxOdds.id){
+        try{
+          const r=await fetch('/fixture-intel/'+fxOdds.id);
+          const d=await r.json();
+          if(!d.error)fixtureIntel=d;
+        }catch(e){}
+      }
+    }
 
   let p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel,fxOdds?.num_bookmakers||0);
 
@@ -4201,6 +4220,10 @@ async function runDeepPred(){
   const oldPl=document.getElementById('player-intel');
   if(oldPl)oldPl.remove();
   fetchSuspensionWarnings(hRow.team.id,aRow.team.id,hName,aName);
+  }catch(e){
+    console.error('Prediction render failed',e);
+    document.getElementById('predOut').innerHTML=`<div class="error-state">Prediction failed to render: ${e.message||e}. Please refresh this league and retry.</div>`;
+  }
 }
 
 function buildH2HAggregates(matches,hId,aId){
