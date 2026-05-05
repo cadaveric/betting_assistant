@@ -4643,7 +4643,17 @@ async function loadNBAFixtures(body,kpis){
     if(d.error&&!d.games?.length){body.innerHTML=`<div class="error-state">${d.error}</div>`;return;}
     const games=d.games||[];
     if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${games.length}</div><div class="kpi-lbl">upcoming games</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:var(--amber)">NBA</div><div class="kpi-lbl">${d.season||'2025-26'}</div></div>`;
-    if(!games.length){body.innerHTML='<div class="loading-state">No upcoming NBA games found.</div>';return;}
+    if(!games.length){
+      body.innerHTML=`<div class="card"><div class="card-body" style="text-align:center;padding:28px 18px">
+        <div style="font-size:16px;font-weight:800;color:var(--tx);margin-bottom:6px">No confirmed NBA fixtures available</div>
+        <div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Standings and manual matchup prediction are available.</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="adv-scan-btn" style="margin-left:0;height:34px;font-size:12px" onclick="loadSportPage('nba','predict')">Open Predictor</button>
+          <button style="height:34px;padding:0 18px;border-radius:8px;border:1px solid var(--br2);background:var(--bg3);color:var(--tx);font-size:12px;cursor:pointer" onclick="loadSportPage('nba','standings')">View Standings</button>
+        </div>
+      </div></div>`;
+      return;
+    }
     body.innerHTML=games.map(g=>{
       const hId=g.home_id||''; const aId=g.away_id||'';
       const onP=`loadSportPage('nba','predict');setTimeout(()=>{document.getElementById('nba-away-sel')&&(document.getElementById('nba-away-sel').value='${aId}');document.getElementById('nba-home-sel')&&(document.getElementById('nba-home-sel').value='${hId}');nbaRunPredict();},300)`;
@@ -4710,7 +4720,7 @@ async function loadSportStandings(sport, body, kpis){
   const ep=endpts[sport]; if(!ep)return;
   try{
     const r=await fetch(ep); const d=await r.json();
-    const rows=d.standings||[];
+    const rows=d.standings||(Array.isArray(d)?d:[]);
     _sportStandings[sport]=rows;
     const meta=SPORT_META[sport];
     if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val">${rows.length}</div><div class="kpi-lbl">teams</div></div><div class="kpi"><div class="kpi-val kpi-val-sm" style="color:${meta.color}">${meta.label}</div><div class="kpi-lbl">league</div></div>`;
