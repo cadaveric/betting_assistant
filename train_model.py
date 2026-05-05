@@ -220,9 +220,10 @@ def build_dataset():
 
 def train():
     try:
-        from sklearn.model_selection import StratifiedKFold, cross_val_score
+        from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit, cross_val_score
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
+        from sklearn.base import clone
         import numpy as np
         import joblib
     except ImportError as e:
@@ -265,6 +266,15 @@ def train():
     scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy', n_jobs=1)
     print(f'  [ML] CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}')
 
+    ts_scores = []
+    if len(X) >= 5000:
+        tscv = TimeSeriesSplit(n_splits=5)
+        for train_idx, test_idx in tscv.split(X):
+            m = clone(model)
+            m.fit(X[train_idx], y[train_idx])
+            ts_scores.append(float(m.score(X[test_idx], y[test_idx])))
+        print(f'  [ML] Time-split accuracy: {np.mean(ts_scores):.3f} ± {np.std(ts_scores):.3f}')
+
     model.fit(X, y)
     joblib.dump(model, MODEL_PATH)
 
@@ -273,6 +283,9 @@ def train():
     meta = {
         'cv_accuracy': round(float(scores.mean()), 4),
         'cv_std':      round(float(scores.std()),  4),
+        'time_split_accuracy': round(float(np.mean(ts_scores)), 4) if ts_scores else None,
+        'time_split_std':      round(float(np.std(ts_scores)),  4) if ts_scores else None,
+        'time_split_note': 'Forward-chaining validation; safer than shuffled CV for betting use.',
         'n_train':     int(len(X)),
         'n_features':  len(FEATURE_NAMES),
         'algorithm':   algo,

@@ -2137,6 +2137,41 @@ function marketChip(pct,label,help){
     <span class="mchip-help">${help}</span>
   </div>`;
 }
+function trustLevel(score){
+  if(score>=75)return 'strong';
+  if(score>=55)return 'watch';
+  return 'low';
+}
+function marketTrust(label,p){
+  const l=(label||'').toLowerCase();
+  if(l.includes('corner')){
+    const s=p?.cornersReliability??0;
+    return {score:s,level:trustLevel(s),reason:'corner sample'};
+  }
+  if(l.includes('card')){
+    const s=p?.cardsReliability??0;
+    return {score:s,level:trustLevel(s),reason:'card/referee sample'};
+  }
+  if(l.includes('over')||l.includes('btts')||l.includes('goals')){
+    const s=p?.hasOdds?76:(p?.hDataBadge?.includes('xG')||p?.aDataBadge?.includes('xG')?66:50);
+    return {score:s,level:trustLevel(s),reason:'goals model'};
+  }
+  const s=p?.hasOdds?78:62;
+  return {score:s,level:trustLevel(s),reason:p?.hasOdds?'odds + model':'model only'};
+}
+function betConfidence(edge,ev,modelPct,odds,trust){
+  let score=28+Math.max(0,edge)*2.2+Math.max(0,ev)*85+Math.max(0,modelPct-45)*0.35;
+  if(odds&&odds>4.5)score-=6;
+  score=score*0.72+(trust?.score||50)*0.28;
+  if(trust?.level==='low')score=Math.min(score,58);
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
+function trustBadge(trust){
+  if(!trust)return '';
+  const cls=trust.level==='strong'?'tag-green':trust.level==='watch'?'tag-amber':'tag-red';
+  const label=trust.level==='strong'?'trusted':trust.level==='watch'?'caution':'low trust';
+  return `<span class="tag ${cls}" title="${trust.reason||''}">${label} ${trust.score??'–'}%</span>`;
+}
 
 // ── ELO ──────────────────────────────────────────────────────────────────────
 function _normName(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
@@ -2579,8 +2614,8 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const hCL=Math.max(1.0,Math.min(8.5,(hCornAtt*aCornDef)/Math.max(0.5,lgCornH)));
   const aCL=Math.max(1.0,Math.min(8.5,(aCornAtt*hCornDef)/Math.max(0.5,lgCornA)));
   const totCorn=hCL+aCL;
-  const pCorn85=Math.round((1-[0,1,2,3,4,5,6,7,8].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
-  const pCorn105=Math.round((1-[0,1,2,3,4,5,6,7,8,9,10].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
+  let pCorn85=Math.round((1-[0,1,2,3,4,5,6,7,8].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
+  let pCorn105=Math.round((1-[0,1,2,3,4,5,6,7,8,9,10].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
   const lgCard=LG_CARD[lg]??1.4;
   const hCardBase=blendByN(hS?.ycHomePg??hS?.last5?.ycardPg??hS?.ycardPg,lgCard,hSC.yellowCardsHome||hSC.yellowCards,6);
   const aCardBase=blendByN(aS?.ycAwayPg??aS?.last5?.ycardPg??aS?.ycardPg,lgCard,aSC.yellowCardsAway||aSC.yellowCards,6);
@@ -2591,11 +2626,31 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const refBoost=Math.max(0.90,Math.min(1.15,1+(rawRefBoost-1)*refRel));
   const hCard=hCardBase*refBoost, aCard=aCardBase*refBoost;
   const totCard=hCard+aCard;
-  const pCard25=Math.round((1-[0,1,2].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
-  const pCard35=Math.round((1-[0,1,2,3].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
+  let pCard25=Math.round((1-[0,1,2].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
+  let pCard35=Math.round((1-[0,1,2,3].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
+  const cornerTrustScore=Math.round(hCornerRel*100);
+  const cardTrustScore=Math.round(hCardRel*100);
+  if(cornerTrustScore<60){
+    const shrink=Math.max(0.25,cornerTrustScore/100);
+    pCorn85=Math.round(50+(pCorn85-50)*shrink);
+    pCorn105=Math.round(50+(pCorn105-50)*shrink);
+  }
+  if(cardTrustScore<60){
+    const shrink=Math.max(0.25,cardTrustScore/100);
+    pCard25=Math.round(50+(pCard25-50)*shrink);
+    pCard35=Math.round(50+(pCard35-50)*shrink);
+  }
   const pHWnil=Math.round(pH/100*pHCS), pAWnil=Math.round(pA/100*pACS);
   const htScoreH=Math.round(Math.max(0,hLamHT-0.1));
   const htScoreA=Math.round(Math.max(0,aLamHT-0.1));
+  const pickSide=pH>=pA&&pH>=pD?'H':pA>=pD?'A':'D';
+  const pickProb=pickSide==='H'?pH:pickSide==='A'?pA:pD;
+  const pickImpl=pickSide==='H'?Math.round(implH*100):pickSide==='A'?Math.round(implA*100):Math.round(implD*100);
+  const pickOdds=pickSide==='H'?bH:pickSide==='A'?bA:bD;
+  const pickEdge=hasOdds?pickProb-pickImpl:0;
+  const pickEv=hasOdds&&pickOdds>1?calcEV(pickOdds,pickProb/100):0;
+  const oneX2Trust=marketTrust('1X2',{hasOdds,cornersReliability:cornerTrustScore,cardsReliability:cardTrustScore,hDataBadge,aDataBadge});
+  const rawBetConfidence=hasOdds?betConfidence(pickEdge,pickEv,pickProb,pickOdds,oneX2Trust):null;
 
   return{
     pH,pD,pA,conf,scoreH,scoreA,
@@ -2638,7 +2693,14 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     pCards_over25:pCard25,pCards_over35:pCard35,
     hCorners:hCL.toFixed(1),aCorners:aCL.toFixed(1),totalCorners:totCorn.toFixed(1),cornersReal:!!(hS?.cornPg!=null&&aS?.cornPg!=null),
     hCards:hCard.toFixed(1),aCards:aCard.toFixed(1),totalCards:totCard.toFixed(1),cardsReal:!!(hS?.ycardPg!=null&&aS?.ycardPg!=null),
-    cornersReliability:Math.round(hCornerRel*100),cardsReliability:Math.round(hCardRel*100),
+    cornersReliability:cornerTrustScore,cardsReliability:cardTrustScore,
+    marketTrust:{
+      oneX2:oneX2Trust,
+      goals:marketTrust('goals',{hasOdds,cornersReliability:cornerTrustScore,cardsReliability:cardTrustScore,hDataBadge,aDataBadge}),
+      corners:marketTrust('corners',{hasOdds,cornersReliability:cornerTrustScore,cardsReliability:cardTrustScore,hDataBadge,aDataBadge}),
+      cards:marketTrust('cards',{hasOdds,cornersReliability:cornerTrustScore,cardsReliability:cardTrustScore,hDataBadge,aDataBadge}),
+    },
+    betConfidence:rawBetConfidence,pickEdge:Math.round(pickEdge),pickEv:Math.round(pickEv*1000)/1000,
     htScoreH,htScoreA
   };
 }
@@ -2782,14 +2844,14 @@ function renderMarkets(p,hName,aName){
       ${mCard('⏱',`HT: ${aName}`,`${aName} ahead`,p.pHT_A,t('mkt.sub.ht_away'),false)}
     </div>
   </div>
-  <div><div class="section-label">${t('section.corners_lbl')} ${p.cornersReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`}<span style="font-size:10px;font-weight:400;color:var(--tx3);margin-left:8px">no calibration data · use with caution</span></div>
+  <div><div class="section-label">${t('section.corners_lbl')} ${p.cornersReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`} ${trustBadge(p.marketTrust?.corners)}<span style="font-size:10px;font-weight:400;color:var(--tx3);margin-left:8px">low trust markets are shrunk toward neutral</span></div>
     <div class="markets-grid">
       ${mCard('📐',t('mkt.corners_85'),`${hName}: ${p.hCorners} · ${aName}: ${p.aCorners}`,p.pCorners_over85,`xTotal: ${p.totalCorners}`,p.cornersReal)}
       ${mCard('📐',t('mkt.corners_105'),`total: ${p.totalCorners}`,p.pCorners_over105,t('mkt.sub.corners_105'),p.cornersReal)}
       ${mCard('📐',`${hName} ${t('section.corners_lbl')}`,`home: ${p.hCorners}`,Math.round(parseFloat(p.hCorners)/parseFloat(p.totalCorners)*100),'home corner share',p.cornersReal)}
     </div>
   </div>
-  <div><div class="section-label">${t('section.cards_lbl')} ${p.cardsReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`}</div>
+  <div><div class="section-label">${t('section.cards_lbl')} ${p.cardsReal?`<span class="data-badge">${t('misc.real')}</span>`:`<span class="data-badge est">${t('misc.estimated')}</span>`} ${trustBadge(p.marketTrust?.cards)}</div>
     <div class="markets-grid">
       ${mCard('🟨',t('mkt.cards_25'),`${hName}: ${p.hCards} · ${aName}: ${p.aCards}`,p.pCards_over25,`xTotal: ${p.totalCards}`,p.cardsReal)}
       ${mCard('🟨',t('mkt.cards_35'),`total: ${p.totalCards}`,p.pCards_over35,t('mkt.sub.cards_35'),p.cardsReal)}
@@ -2858,11 +2920,13 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   if(favProb>=68&&p.pHT_H>=50&&favIsHome)
     bets.push({type:'good',market:`${hName} to score in both halves`,note:`${p.pHT_H}% HT lead probability with λ${p.hLam} attacking output.`});
 
-  // Corners
-  if(p.pCorn105>=55)
+  // Corners: only suggest when reliability is high enough; otherwise show only as informational.
+  if((p.cornersReliability||0)>=70&&p.pCorn105>=55)
     bets.push({type:'good',market:'Corners over 10.5',note:`${p.pCorn105}% probability. Expected ${p.totalCornLam} total (${hName} λ${p.hCornLam} / ${aName} λ${p.aCornLam}).`});
-  else if(p.pCorn85>=65)
+  else if((p.cornersReliability||0)>=70&&p.pCorn85>=65)
     bets.push({type:'good',market:'Corners over 8.5',note:`${p.pCorn85}% probability. Expected ${p.totalCornLam} corners total.`});
+  else if((p.cornersReliability||0)<60)
+    avoids.push('Corners markets — sample reliability is low, so probabilities are shrunk toward neutral');
 
   // Avoids
   const avoids=[];
@@ -2966,6 +3030,8 @@ function renderPredResult(p,hName,aName,h2hData){
       </div>
       <div class="pred-conf-row">
         <span class="pred-conf-badge ${confClass}">${p.conf}% ${t('pred.confidence')}</span>
+        ${p.betConfidence!=null?`<span class="pred-conf-badge ${p.betConfidence>=70?'high':p.betConfidence>=55?'med':''}" title="Requires odds edge. This is separate from raw prediction confidence.">${p.betConfidence}% bet confidence</span>`:''}
+        ${trustBadge(p.marketTrust?.oneX2)}
         <span class="pred-winner-pill" style="background:${wColor}22;color:${wColor};border:.5px solid ${wColor}55;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:500">${t('pred.outcome_pick')}: ${winner}</span>
         <span class="pred-conf-badge">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
       </div>
@@ -3037,13 +3103,13 @@ function renderPredResult(p,hName,aName,h2hData){
           ${mkt(t('mkt.ht_draw'),p.pHT_D,t('mkt.sub.ht_draw'))}
           ${mkt(t('mkt.lead_ht',{team:aName}),p.pHT_A,`${aName} ahead after 45 minutes`)}
         </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.corners_lbl')} · xTotal ${p.totalCornLam}</div><div class="pred-mkts">
+        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.corners_lbl')} · xTotal ${p.totalCornLam} ${trustBadge(p.marketTrust?.corners)}</div><div class="pred-mkts">
           ${mkt(t('mkt.corners_85'),p.pCorn85,t('mkt.sub.corners_85'))}
           ${mkt(t('mkt.corners_105'),p.pCorn105,t('mkt.sub.corners_105'))}
           ${mkt(t('mkt.home_cs',{team:hName})+' nil',p.pHWnil,`${hName} wins and ${aName} scores 0`)}
           ${mkt(t('mkt.away_cs',{team:aName})+' nil',p.pAWnil,`${aName} wins and ${hName} scores 0`)}
         </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.cards_lbl')} · xTotal ${p.totalCardLam}</div><div class="pred-mkts">
+        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.cards_lbl')} · xTotal ${p.totalCardLam} ${trustBadge(p.marketTrust?.cards)}</div><div class="pred-mkts">
           ${mkt(t('mkt.cards_25'),p.pCard25,t('mkt.sub.cards_25'))}
           ${mkt(t('mkt.cards_35'),p.pCard35,t('mkt.sub.cards_35'))}
         </div></div>
@@ -3254,16 +3320,19 @@ async function loadPredictionHistory(){
   const el=document.getElementById('hist-body');
   el.innerHTML=`<div class="loading-state">${t('loading.scoring')}</div>`;
   try{
-    const d=await fetch('/predictions?refresh=1&limit=150').then(r=>r.json());
+    const [d,accuracyData]=await Promise.all([
+      fetch('/predictions?refresh=1&limit=150').then(r=>r.json()),
+      fetch('/football-accuracy?refresh=0').then(r=>r.json()).catch(()=>null)
+    ]);
     const s=d.summary||{};
     const allRows=d.predictions||[];
-    renderHistory(el,allRows,s);
+    renderHistory(el,allRows,s,accuracyData);
   }catch(e){
     el.innerHTML=`<div class="error-state">${t('err.hist_failed')} ${e.message}</div>`;
   }
 }
 
-function renderHistory(el,allRows,s){
+function renderHistory(el,allRows,s,accuracyData){
   const rows=_histShowRec?allRows.filter(r=>(r.confidence||0)>=60):allRows;
   const pct=v=>v==null?'--':v+'%';
 
@@ -3288,7 +3357,41 @@ function renderHistory(el,allRows,s){
     ${mRow('Over 0.5 HT goals','htOver05')}
   </div>`:'';
 
-  let html=`<div class="kpi-row" style="margin-bottom:16px">
+  const accPanel=accuracyData?(()=>{
+    const model=accuracyData.model||{}, value=accuracyData.valueValidation||{}, mt=accuracyData.marketTrust||{};
+    const trustRow=(label,row)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--br);font-size:12px">
+      <span style="color:var(--tx2)">${label}</span>
+      <span>${trustBadge({level:row?.level||'unknown',score:row?.accuracy??row?.score??0,reason:row?.reason||''})} <span style="font-family:var(--mono);color:var(--tx2)">n=${row?.n??0}</span></span>
+    </div>`;
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="card-head"><div><div class="card-title">Football Accuracy & Value Safety</div>
+      <div style="font-size:12px;color:var(--tx2);margin-top:2px">Prediction confidence is not bet confidence. Value requires odds edge plus enough evidence.</div></div></div>
+      <div class="card-body">
+        <div class="kpi-row" style="margin-bottom:14px">
+          <div class="kpi"><div class="kpi-val ${accuracyData.readinessScore>=75?'kpi-acc-good':accuracyData.readinessScore>=55?'kpi-acc-warn':'kpi-acc-bad'}">${accuracyData.readinessScore}%</div><div class="kpi-lbl">betting readiness</div></div>
+          <div class="kpi"><div class="kpi-val">${model.timeSplitAccuracy!=null?Math.round(model.timeSplitAccuracy*1000)/10+'%':'retrain'}</div><div class="kpi-lbl">time-split validation</div></div>
+          <div class="kpi"><div class="kpi-val">${model.cvAccuracy!=null?Math.round(model.cvAccuracy*1000)/10+'%':'--'}</div><div class="kpi-lbl">historical CV</div></div>
+          <div class="kpi"><div class="kpi-val">${value.gradedWithOdds||0}</div><div class="kpi-lbl">graded with odds</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <div style="font-size:11px;font-weight:800;color:var(--tx2);text-transform:uppercase;margin-bottom:6px">Market trust</div>
+            ${trustRow('1X2 recommended picks',mt['1x2'])}
+            ${trustRow('Over 2.5 goals',mt.over25)}
+            ${trustRow('Both teams score',mt.btts)}
+            ${trustRow('Corners',mt.corners)}
+            ${trustRow('Cards',mt.cards)}
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:800;color:var(--tx2);text-transform:uppercase;margin-bottom:6px">Warnings</div>
+            ${(accuracyData.warnings||[]).map(w=>`<div class="tag tag-amber" style="display:block;margin-bottom:6px;white-space:normal">${w}</div>`).join('')||'<div class="tag tag-green">No critical warnings</div>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  })():'';
+
+  let html=`${accPanel}<div class="kpi-row" style="margin-bottom:16px">
     <div class="kpi"><div class="kpi-val">${rows.length}</div><div class="kpi-lbl">${_histShowRec?'≥60% picks':'all stored'}</div></div>
     <div class="kpi"><div class="kpi-val">${graded.length}</div><div class="kpi-lbl">graded</div></div>
     <div class="kpi"><div class="kpi-val ${accCls}">${pct(acc)}</div><div class="kpi-lbl">${_histShowRec?'≥60% acc':'all acc'}</div></div>
@@ -4131,7 +4234,8 @@ function buildH2HAggregates(matches,hId,aId){
 
 
 // ── BETTING ADVISOR ───────────────────────────────────────────────────────────
-const RISK_EDGE={conservative:12,balanced:8,risky:5};
+const RISK_EDGE={conservative:12,balanced:8,risky:6};
+const RISK_BET_CONF={conservative:72,balanced:64,risky:56};
 
 function kellyFraction(odds,prob){
   if(!odds||odds<=1||prob<=0||prob>=1)return 0;
@@ -4389,6 +4493,7 @@ async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
     el.innerHTML=`<div class="error-state">${t('err.no_odds_league')}</div>`;return;
   }
   const minEdge=RISK_EDGE[risk]||8;
+  const minBetConf=RISK_BET_CONF[risk]||64;
   const games=oddsCache[lg]||[];
   const now=Date.now(), cutoff=now+days*86400000;
   const bets=[];
@@ -4414,8 +4519,11 @@ async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
       const prob=o.modelPct/100;
       const evVal=calcEV(o.odds,prob);
       if(evVal<=0)return;
+      const trust=marketTrust(o.label,p);
+      const bConf=betConfidence(edge,evVal,o.modelPct,o.odds,trust);
+      if(bConf<minBetConf)return;
       const kf=kellyFraction(o.odds,prob);
-      bets.push({comp:lg,match:matchLabel,date:ds,label:o.label,odds:o.odds,bk:o.bk,modelPct:o.modelPct,implPct:o.implPct,edge,ev:evVal,kellyFrac:kf,stake:Math.round(budget*kf*100)/100});
+      bets.push({comp:lg,match:matchLabel,date:ds,label:o.label,odds:o.odds,bk:o.bk,modelPct:o.modelPct,implPct:o.implPct,edge,ev:evVal,kellyFrac:kf,stake:Math.round(budget*kf*100)/100,betConfidence:bConf,trust});
     });
   });
   bets.sort((a,b)=>b.ev-a.ev);
@@ -4467,6 +4575,8 @@ function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesS
           <div class="bet-meta">
             <strong>${b.label}</strong> @ <strong style="color:var(--green)">${b.odds}</strong>
             ${b.bk?`<span style="color:var(--tx3)"> · ${b.bk}</span>`:''}
+            ${b.betConfidence!=null?` <span class="tag ${b.betConfidence>=72?'tag-green':b.betConfidence>=56?'tag-amber':'tag-red'}" style="margin-left:6px">${b.betConfidence}% bet confidence</span>`:''}
+            ${trustBadge(b.trust)}
           </div>
           <div class="bet-meta"><strong>${t('adv.how_to_play')}</strong> ${t('adv.how_to_play_text',{bk:b.bk||'your bookmaker',match:b.match,label:b.label,stake:b.stake>0?b.stake.toFixed(2):'<1'})}</div>
           <div class="bet-meta">${b.date}</div>
@@ -4474,6 +4584,7 @@ function renderAdvisor(el,singles,accaLegs,budget,risk,strategy,minEdge,leaguesS
             <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.model_chance')}</div><div class="bet-reason-val">${b.modelPct}%</div><div class="bet-reason-help">${t('adv.model_pct_help')}</div></div>
             <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.market_chance')}</div><div class="bet-reason-val">${b.implPct}%</div><div class="bet-reason-help">${t('adv.impl_pct_help')}</div></div>
             <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.edge')}</div><div class="bet-reason-val" style="color:var(--green)">+${b.edge.toFixed(1)}pp</div><div class="bet-reason-help">${t('adv.model_minus_market')}</div></div>
+            <div class="bet-reason-cell"><div class="bet-reason-label">Bet confidence</div><div class="bet-reason-val">${b.betConfidence??'–'}%</div><div class="bet-reason-help">Edge, EV, odds risk and market trust combined</div></div>
             <div class="bet-reason-cell"><div class="bet-reason-label">${t('adv.if_wins')}</div><div class="bet-reason-val" style="color:var(--green)">€${ret}</div><div class="bet-reason-help">${t('adv.return_profit',{profit:profit.toFixed(2)})}</div></div>
           </div>
         </div>

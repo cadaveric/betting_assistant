@@ -1174,6 +1174,120 @@ def _football_audit_summary(rows):
         'summary': _prediction_summary(football),
     }
 
+def _grade_level(score):
+    if score is None:
+        return 'unknown'
+    if score >= 75:
+        return 'strong'
+    if score >= 62:
+        return 'watch'
+    return 'low'
+
+def _football_accuracy_report(rows):
+    audit = _football_audit_summary(rows)
+    summary = audit.get('summary') or {}
+    graded = audit.get('graded') or 0
+    rec_graded = summary.get('recGraded') or 0
+    rec_acc = summary.get('recAccuracy')
+    model_meta = dict(_ml_meta or {})
+    time_acc = model_meta.get('time_split_accuracy')
+    cv_acc = model_meta.get('cv_accuracy')
+    markets = summary.get('marketsAcc') or {}
+    with_odds = (audit.get('groups') or {}).get('odds', {}).get('with_odds', {}).get('n', 0)
+
+    readiness_score = 0
+    readiness_score += min(35, graded * 0.25)
+    readiness_score += min(20, rec_graded * 0.8)
+    if with_odds:
+        readiness_score += min(20, with_odds * 0.5)
+    if time_acc:
+        readiness_score += 15
+    elif cv_acc:
+        readiness_score += 8
+    if rec_acc is not None and rec_acc >= 55:
+        readiness_score += 10
+    readiness_score = round(_clamp(readiness_score, 0, 100), 1)
+
+    warnings = []
+    if graded < 300:
+        warnings.append('Need at least 300 graded football predictions before advertising stable betting accuracy.')
+    if rec_graded < 100:
+        warnings.append('Recommended-pick sample is still small; treat hit rate as provisional.')
+    if not with_odds:
+        warnings.append('No graded football rows include odds, so value/ROI versus bookmaker prices is not validated yet.')
+    if time_acc is None:
+        warnings.append('Current deployed model metadata has no time-split validation; retrain to populate stricter backtest metrics.')
+    if (summary.get('calibration') or {}).get('draw', {}).get('delta', 0) > 5:
+        warnings.append('Recent ledger suggests draws are underpriced; draw calibration should stay active.')
+
+    return {
+        'readinessScore': readiness_score,
+        'readinessLevel': _grade_level(readiness_score),
+        'audit': audit,
+        'model': {
+            'available': _ml_model is not None,
+            'algorithm': model_meta.get('algorithm'),
+            'nTrain': model_meta.get('n_train'),
+            'cvAccuracy': cv_acc,
+            'timeSplitAccuracy': time_acc,
+            'timeSplitStd': model_meta.get('time_split_std'),
+            'note': model_meta.get('time_split_note') or 'Shuffled CV only; time-split retrain recommended.',
+        },
+        'valueValidation': {
+            'gradedWithOdds': with_odds,
+            'gradedNoOdds': (audit.get('groups') or {}).get('odds', {}).get('no_odds', {}).get('n', 0),
+            'validated': with_odds >= 100,
+            'minimumUsefulSample': 100,
+        },
+        'marketTrust': {
+            '1x2': {'level': _grade_level(rec_acc), 'accuracy': rec_acc, 'n': rec_graded},
+            'over15': {'level': _grade_level(markets.get('over15')), 'accuracy': markets.get('over15'), 'n': graded},
+            'over25': {'level': _grade_level(markets.get('over25')), 'accuracy': markets.get('over25'), 'n': graded},
+            'btts': {'level': _grade_level(markets.get('btts')), 'accuracy': markets.get('btts'), 'n': graded},
+            'corners': {'level': 'low', 'accuracy': None, 'n': 0, 'reason': 'No graded corner-market backtest yet.'},
+            'cards': {'level': 'low', 'accuracy': None, 'n': 0, 'reason': 'No graded card-market backtest yet.'},
+        },
+        'warnings': warnings,
+        'recommendations': [
+            'Use Advisor value bets only when Bet Confidence is at or above the selected risk threshold.',
+            'Treat corners/cards as informational unless both teams show high sample reliability.',
+            'Prefer ROI and closing-line value over raw hit rate for long-term betting decisions.',
+        ],
+    }
+
+def _market_trust(label, hdata=None, adata=None, has_odds=False):
+    hdata = hdata or {}; adata = adata or {}
+    rel_h = hdata.get('reliability') or {}
+    rel_a = adata.get('reliability') or {}
+    l = (label or '').lower()
+    if 'corner' in l:
+        rel = min(rel_h.get('corners') or 0, rel_a.get('corners') or 0)
+        return {'level': 'strong' if rel >= 0.75 else 'watch' if rel >= 0.55 else 'low',
+                'score': round(rel * 100), 'reason': 'corner sample reliability'}
+    if 'card' in l:
+        rel = min(rel_h.get('cards') or 0, rel_a.get('cards') or 0)
+        ref_rel = max(rel_h.get('refereeCards') or 0, rel_a.get('refereeCards') or 0)
+        score = max(rel, ref_rel * 0.85)
+        return {'level': 'strong' if score >= 0.75 else 'watch' if score >= 0.55 else 'low',
+                'score': round(score * 100), 'reason': 'card/referee sample reliability'}
+    if 'over 2.5' in l or 'under 2.5' in l or 'btts' in l:
+        rich = bool((hdata.get('xg_pg') or hdata.get('xgPg') or hdata.get('sotPg')) and
+                    (adata.get('xg_pg') or adata.get('xgPg') or adata.get('sotPg')))
+        score = 76 if rich and has_odds else 66 if rich else 55 if has_odds else 45
+        return {'level': _grade_level(score), 'score': score, 'reason': 'goals model data/odds coverage'}
+    score = 78 if has_odds else 62
+    return {'level': _grade_level(score), 'score': score, 'reason': '1X2 odds and model agreement' if has_odds else '1X2 model only'}
+
+def _bet_confidence(edge, ev, model_pct, odds, trust):
+    trust_score = (trust or {}).get('score') or 50
+    score = 28 + max(0, edge) * 2.2 + max(0, ev) * 85 + max(0, model_pct - 45) * 0.35
+    if odds and odds > 4.5:
+        score -= 6
+    score = score * 0.72 + trust_score * 0.28
+    if (trust or {}).get('level') == 'low':
+        score = min(score, 58)
+    return round(_clamp(score, 0, 100), 1)
+
 def _avg(vals):
     vals = [v for v in vals if v is not None]
     return sum(vals) / len(vals) if vals else None
@@ -2375,6 +2489,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({'elo': dict(_rolling_elo), 'count': len(_rolling_elo)})
         elif path == '/predictions':         self.handle_predictions(qs)
         elif path == '/model-audit':         self.handle_model_audit(qs)
+        elif path == '/football-accuracy':   self.handle_football_accuracy(qs)
         elif path == '/calibration':         self.handle_calibration()
         elif path == '/ml-predict':          self.handle_ml_predict(qs)
         elif path == '/ml-status':           self.send_json({**_ml_meta, 'available': _ml_model is not None})
@@ -2523,6 +2638,15 @@ class Handler(SimpleHTTPRequestHandler):
             if refresh and APIF_KEY and _score_predictions(rows):
                 _save_predictions(rows)
             self.send_json(_football_audit_summary(rows))
+
+    def handle_football_accuracy(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        refresh = params.get('refresh', ['1'])[0].lower() in ('1', 'true', 'yes')
+        with prediction_lock:
+            rows = _load_predictions()
+            if refresh and APIF_KEY and _score_predictions(rows):
+                _save_predictions(rows)
+            self.send_json(_football_accuracy_report(rows))
 
     def handle_teamstats(self, comp):
         if not APIF_KEY:
@@ -2724,9 +2848,9 @@ class Handler(SimpleHTTPRequestHandler):
         except ValueError:
             days = 3
         risk_cfg = {
-            'conservative': {'min_edge': 10, 'max_odds': 2.2,  'min_prob': 0.42},
-            'balanced':     {'min_edge': 7,  'max_odds': 3.5,  'min_prob': 0.30},
-            'risky':        {'min_edge': 5,  'max_odds': 5.5,  'min_prob': 0.20},
+            'conservative': {'min_edge': 12, 'max_odds': 2.2,  'min_prob': 0.42, 'min_bet_conf': 72},
+            'balanced':     {'min_edge': 8,  'max_odds': 3.5,  'min_prob': 0.30, 'min_bet_conf': 64},
+            'risky':        {'min_edge': 6,  'max_odds': 5.5,  'min_prob': 0.20, 'min_bet_conf': 56},
         }
         cfg      = risk_cfg.get(risk, risk_cfg['balanced'])
         min_edge = cfg['min_edge']
@@ -2830,6 +2954,10 @@ class Handler(SimpleHTTPRequestHandler):
                     if edge < min_edge: continue
                     ev = model_p*(odds - 1) - (1 - model_p)
                     if ev <= 0: continue
+                    trust = _market_trust(label, hdata, adata, has_odds=True)
+                    bet_conf = _bet_confidence(edge, ev, model_p * 100, odds, trust)
+                    if bet_conf < cfg['min_bet_conf']:
+                        continue
                     b  = odds - 1
                     kf = max(0.0, min(KELLY_CAP, (b*model_p - (1 - model_p)) / b))
                     bets.append({
@@ -2838,12 +2966,14 @@ class Handler(SimpleHTTPRequestHandler):
                         'label': label, 'odds': odds, 'bk': bk,
                         'modelPct': round(model_p*100, 1), 'implPct': round(impl_p*100, 1),
                         'edge': edge, 'ev': round(ev, 4), 'kellyFrac': round(kf, 4),
+                        'betConfidence': bet_conf, 'trust': trust,
                     })
         bets.sort(key=lambda x: -x['ev'])
         self.send_json({'bets': bets[:top_n], 'total': len(bets),
                         'leagues_scanned': len(league_games), 'risk': risk,
                         'min_edge': min_edge, 'max_odds': cfg['max_odds'],
-                        'min_prob': cfg['min_prob'], 'days': days})
+                        'min_prob': cfg['min_prob'], 'min_bet_conf': cfg['min_bet_conf'],
+                        'days': days})
 
     # ── Multi-sport handlers ──────────────────────────────────────────────────
 
