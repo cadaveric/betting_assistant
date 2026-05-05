@@ -3008,12 +3008,16 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(cached); return
         if action == 'standings':
             data = _hockey.get_standings()
-            set_cache(ck, data, 1800)
-            self.send_json({'sport': 'hockey', 'league': 'NHL', 'standings': data})
+            result = {'sport': 'hockey', 'league': 'NHL', 'standings': data,
+                      'season': _hockey.NHL_SEASON}
+            set_cache(ck, result, 1800)
+            self.send_json(result)
         elif action == 'today':
             data = _hockey.get_today_games()
-            set_cache(ck, data, 300)
-            self.send_json({'sport': 'hockey', 'league': 'NHL', 'games': data})
+            result = {'sport': 'hockey', 'league': 'NHL', 'games': data,
+                      'season': _hockey.NHL_SEASON}
+            set_cache(ck, result, 300)
+            self.send_json(result)
         else:
             self.send_json({'error': f'Unknown action: {action}'}, 400)
 

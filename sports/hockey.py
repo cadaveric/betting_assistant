@@ -190,7 +190,12 @@ def _over_prob(lh, la, line=5.5, max_g=10):
     return p
 
 def get_upcoming_games(days=7):
-    """Return upcoming NHL games for the next N days."""
+    """Return upcoming NHL games for the next N days.
+
+    Includes regular season and playoffs. The NHL API marks playoff games as
+    gameType=3, so filtering only regular-season games makes the app look empty
+    during the most important part of the season.
+    """
     today = _dt.date.today()
     games = []
     for d in range(days + 1):
@@ -199,7 +204,7 @@ def get_upcoming_games(days=7):
         if not data: continue
         for gw in data.get('gameWeek', []):
             for g in gw.get('games', []):
-                if g.get('gameType') != 2: continue  # regular season only
+                if g.get('gameType') not in (2, 3): continue
                 games.append({
                     'game_id':    g.get('id'),
                     'home':       (g.get('homeTeam') or {}).get('commonName',{}).get('default',''),
