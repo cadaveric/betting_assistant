@@ -4869,7 +4869,7 @@ function _fixtureCard(g, sport, onPredict){
       </div>
     </div>
     <div class="prob-section">
-      ${_probBar(aw,hw,g.away||g.away_team||'Away',g.home||g.home_team||'Home',score,total,sport)}
+      ${_probBar(hw,aw,g.home||g.home_team||'Home',g.away||g.away_team||'Away',score,total,sport)}
       <div style="margin-top:8px;display:flex;gap:8px">
         <button onclick="${onPredict}" class="fixture-action fixture-action-main">Deep predict</button>
         <button onclick="_saveSportPred(${JSON.stringify(g).replace(/"/g,'&quot;')},'${sport}')" class="fixture-action fixture-action-track" title="Add this prediction to History for later review">Track</button>
@@ -5006,6 +5006,10 @@ async function loadSportPredict(sport, body, kpis){
   }
   const idKey={nba:'team_id',nhl:'abbr',nfl:'team',mlb:'team'}[sport]||'name';
   const labelKey={nba:'full_name',nhl:'full_name',nfl:'name',mlb:'name'}[sport]||'name';
+  if(!st||!st.length){
+    body.innerHTML=`<div class="error-state">Could not load ${meta.label} teams. Check server connection and try again.<br><button onclick="loadSportPage('${sport}','predict')" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:1px solid var(--br2);background:var(--bg3);color:var(--tx);cursor:pointer">Retry</button></div>`;
+    return;
+  }
   const opts=st.map(t=>`<option value="${t[idKey]||t.name}">${t[labelKey]||t.name}</option>`).join('');
   if(kpis)kpis.innerHTML=`<div class="kpi"><div class="kpi-val kpi-val-sm" style="color:${meta.color}">${meta.emoji} ${meta.label} Predictor</div><div class="kpi-lbl">select two teams below</div></div>`;
   body.innerHTML=`<div class="card"><div class="card-head"><span class="card-title">${meta.emoji} ${meta.label} Game Predictor</span></div>

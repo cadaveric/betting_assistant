@@ -92,7 +92,7 @@ def get_team_schedule(abbr, weeks=2):
             gd = _dt.date.fromisoformat(raw)
         except Exception:
             continue
-        if gd < cutoff or gd >= today:
+        if gd < cutoff or gd > today:
             continue
         away_score = (g.get('awayTeam') or {}).get('score')
         home_score = (g.get('homeTeam') or {}).get('score')

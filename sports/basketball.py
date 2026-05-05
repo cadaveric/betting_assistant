@@ -111,17 +111,68 @@ def get_standings():
         print(f'  [NBA] standings error: {e}')
         return _static_standings()
 
+# Module-level cache for TeamEstimatedMetrics — fetched once, reused for all teams
+_estimated_metrics_cache = None
+_estimated_metrics_season = None
+
+def _get_estimated_metrics():
+    global _estimated_metrics_cache, _estimated_metrics_season
+    if _estimated_metrics_cache is not None and _estimated_metrics_season == NBA_SEASON:
+        return _estimated_metrics_cache
+    try:
+        time.sleep(0.4)
+        tm = teamestimatedmetrics.TeamEstimatedMetrics(season=NBA_SEASON, league_id='00')
+        _estimated_metrics_cache = tm.get_data_frames()[0]
+        _estimated_metrics_season = NBA_SEASON
+    except Exception as e:
+        print(f'  [NBA] estimated metrics error: {e}')
+        _estimated_metrics_cache = None
+    return _estimated_metrics_cache
+
+# Module-level team ID→name lookup built from nba_teams_static
+_team_id_map = {}
+
+def _build_team_lookup():
+    global _team_id_map
+    if _team_id_map or not NBA_AVAILABLE:
+        return
+    try:
+        for t in nba_teams_static.get_teams():
+            tid = str(t.get('id', ''))
+            _team_id_map[tid] = {
+                'full_name': t.get('full_name', ''),
+                'name':      t.get('nickname', ''),
+                'city':      t.get('city', ''),
+                'abbr':      t.get('abbreviation', ''),
+            }
+    except Exception as e:
+        print(f'  [NBA] team lookup build error: {e}')
+
+_build_team_lookup()
+
+def _resolve_name(team_id, fallback=''):
+    """Look up team name from static data by ID; fall back to passed string."""
+    info = _team_id_map.get(str(team_id), {})
+    return info.get('full_name') or info.get('name') or fallback or ''
+
 def get_team_stats(team_id):
     """Return offensive/defensive ratings and form for a team."""
     if not NBA_AVAILABLE:
         return {}
     try:
         time.sleep(0.6)
-        gl = teamgamelog.TeamGameLog(
-            team_id=team_id, season=NBA_SEASON, season_type_all_star='Regular Season'
-        )
-        df = gl.get_data_frames()[0]
-        if df.empty:
+        # Try current season (Playoffs OR Regular Season, whichever has data)
+        df = None
+        for season_type in ('Playoffs', 'Regular Season'):
+            gl = teamgamelog.TeamGameLog(
+                team_id=team_id, season=NBA_SEASON,
+                season_type_all_star=season_type
+            )
+            candidate = gl.get_data_frames()[0]
+            if not candidate.empty:
+                df = candidate
+                break
+        if df is None or df.empty:
             return {}
         recent = df.head(10)
         pts_pg    = round(float(recent['PTS'].mean()), 1)
@@ -145,10 +196,8 @@ def get_team_stats(team_id):
         pts_allowed_away = round(float((away_g['PTS'] - away_g['PLUS_MINUS']).mean()), 1) if not away_g.empty and 'PLUS_MINUS' in away_g else pts_ag
         est = {}
         try:
-            time.sleep(0.4)
-            tm = teamestimatedmetrics.TeamEstimatedMetrics(season=NBA_SEASON, league_id='00')
-            mdf = tm.get_data_frames()[0]
-            erow = mdf[mdf['TEAM_ID'].astype(str) == str(team_id)]
+            mdf = _get_estimated_metrics()
+            erow = mdf[mdf['TEAM_ID'].astype(str) == str(team_id)] if mdf is not None else None
             if not erow.empty:
                 er = erow.iloc[0]
                 est = {
@@ -189,12 +238,16 @@ def get_today_games():
         games_df = sb.get_data_frames()[0]
         result = []
         for _, g in games_df.iterrows():
+            h_id = str(g.get('HOME_TEAM_ID', '') or '')
+            a_id = str(g.get('VISITOR_TEAM_ID', '') or '')
             result.append({
                 'game_id':    str(g.get('GAME_ID', '')),
-                'home':       str(g.get('HOME_TEAM_NAME', '') or g.get('HOME_TEAM_ABBREVIATION', '')),
-                'away':       str(g.get('VISITOR_TEAM_NAME', '') or g.get('VISITOR_TEAM_ABBREVIATION', '')),
-                'home_id':    str(g.get('HOME_TEAM_ID', '')),
-                'away_id':    str(g.get('VISITOR_TEAM_ID', '')),
+                'home':       _resolve_name(h_id, str(g.get('HOME_TEAM_ABBREVIATION', '') or '')),
+                'away':       _resolve_name(a_id, str(g.get('VISITOR_TEAM_ABBREVIATION', '') or '')),
+                'home_id':    h_id,
+                'away_id':    a_id,
+                'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION', '') or _team_id_map.get(h_id, {}).get('abbr', '')),
+                'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION', '') or _team_id_map.get(a_id, {}).get('abbr', '')),
                 'status':     str(g.get('GAME_STATUS_TEXT', '') or ''),
                 'home_score': g.get('HOME_TEAM_PTS'),
                 'away_score': g.get('VISITOR_TEAM_PTS'),
@@ -287,14 +340,16 @@ def get_upcoming_games(days=7):
                 status = str(g.get('GAME_STATUS_TEXT', '') or '')
                 if status.lower().startswith('final'):
                     continue
+                h_id = str(g.get('HOME_TEAM_ID', '') or '')
+                a_id = str(g.get('VISITOR_TEAM_ID', '') or '')
                 upcoming.append({
                     'game_id':    gid,
-                    'home':       str(g.get('HOME_TEAM_NAME', '') or g.get('HOME_TEAM_ABBREVIATION', '')),
-                    'away':       str(g.get('VISITOR_TEAM_NAME', '') or g.get('VISITOR_TEAM_ABBREVIATION', '')),
-                    'home_id':    str(g.get('HOME_TEAM_ID', '')),
-                    'away_id':    str(g.get('VISITOR_TEAM_ID', '')),
-                    'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION', '')),
-                    'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION', '')),
+                    'home':       _resolve_name(h_id, str(g.get('HOME_TEAM_ABBREVIATION', '') or '')),
+                    'away':       _resolve_name(a_id, str(g.get('VISITOR_TEAM_ABBREVIATION', '') or '')),
+                    'home_id':    h_id,
+                    'away_id':    a_id,
+                    'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION', '') or _team_id_map.get(h_id, {}).get('abbr', '')),
+                    'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION', '') or _team_id_map.get(a_id, {}).get('abbr', '')),
                     'kickoff':    day.isoformat(),
                     'gameday':    day.isoformat(),
                     'status':     status or 'Scheduled',

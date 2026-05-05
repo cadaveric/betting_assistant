@@ -3006,9 +3006,11 @@ class Handler(SimpleHTTPRequestHandler):
                     'prediction': pred,
                 })
             result = {'games': enriched, 'total': len(enriched), 'sport': 'basketball', 'season': _bball.NBA_SEASON}
-            set_cache(ck, result, 600)
+            if enriched:  # only cache non-empty results
+                set_cache(ck, result, 600)
             self.send_json(result)
         except Exception as e:
+            import traceback; traceback.print_exc()
             print(f'  [NBA-FIX] error: {e}')
             self.send_json({'games': [], 'error': str(e)})
 
@@ -3038,7 +3040,8 @@ class Handler(SimpleHTTPRequestHandler):
                     'prediction': pred,
                 })
             result = {'games': enriched, 'total': len(enriched), 'sport': 'hockey', 'season': _hockey.NHL_SEASON}
-            set_cache(ck, result, 600)
+            if enriched:
+                set_cache(ck, result, 600)
             self.send_json(result)
         except Exception as e:
             print(f'  [NHL-FIX] error: {e}')

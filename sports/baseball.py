@@ -23,10 +23,13 @@ LEAGUE_MAP = {
 }
 
 _standings_cache = None
+_standings_cache_ts = 0.0
 _batting_cache = None
 _pitching_cache = None
 _official_batting_cache = None
 _official_pitching_cache = None
+_official_cache_ts = 0.0
+_CACHE_TTL = 4 * 3600  # 4 hours
 
 _TEAM_ABBR = {
     'ARI':'Arizona Diamondbacks','ATL':'Atlanta Braves','BAL':'Baltimore Orioles',
@@ -54,10 +57,12 @@ def _norm_team(team):
 
 def _official_team_stats(group):
     """Official MLB Stats API fallback; avoids FanGraphs 403s from pybaseball."""
-    global _official_batting_cache, _official_pitching_cache
-    if group == 'hitting' and _official_batting_cache is not None:
+    global _official_batting_cache, _official_pitching_cache, _official_cache_ts
+    import time as _time
+    stale = (_time.time() - _official_cache_ts) > _CACHE_TTL
+    if group == 'hitting' and _official_batting_cache is not None and not stale:
         return _official_batting_cache
-    if group == 'pitching' and _official_pitching_cache is not None:
+    if group == 'pitching' and _official_pitching_cache is not None and not stale:
         return _official_pitching_cache
     url = f'https://statsapi.mlb.com/api/v1/teams/stats?season={MLB_SEASON}&group={group}&stats=season&sportIds=1'
     try:
@@ -99,15 +104,17 @@ def _official_team_stats(group):
             _official_batting_cache = out
         else:
             _official_pitching_cache = out
+        _official_cache_ts = _time.time()
         return out
     except Exception as e:
         print(f'  [MLB] official {group} stats error: {e}')
         return {}
 
 def get_standings():
-    """Return combined AL + NL standings."""
-    global _standings_cache
-    if _standings_cache is not None:
+    """Return combined AL + NL standings (refreshed every 4 hours)."""
+    global _standings_cache, _standings_cache_ts
+    import time as _time
+    if _standings_cache is not None and (_time.time() - _standings_cache_ts) < _CACHE_TTL:
         return _standings_cache
     if not MLB_AVAILABLE:
         return []
@@ -138,6 +145,7 @@ def get_standings():
                     'conf':   'AL' if div_name.startswith('AL') else 'NL',
                 })
         _standings_cache = sorted(result, key=lambda x: -x['pct'])
+        _standings_cache_ts = _time.time()
         return _standings_cache
     except Exception as e:
         print(f'  [MLB] standings error: {e}')

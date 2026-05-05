@@ -126,11 +126,13 @@ def is_off_season():
     """True when no upcoming regular season games exist in the next 60 days."""
     today = _dt.date.today()
     games = _get_schedule() or []
-    return not any(
-        g.get('game_type') == 'REG' and g.get('home_score') is None and
-        _dt.date.fromisoformat(g['gameday']) >= today
-        for g in games if g.get('gameday','')
-    )
+    def _is_future_reg(g):
+        try:
+            return (g.get('game_type') == 'REG' and g.get('home_score') is None and
+                    _dt.date.fromisoformat(g['gameday']) >= today)
+        except (ValueError, KeyError):
+            return False
+    return not any(_is_future_reg(g) for g in games if g.get('gameday', ''))
 
 def get_team_stats(team):
     """Compute offensive/defensive points per game for a team."""
