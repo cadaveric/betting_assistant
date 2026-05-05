@@ -11,9 +11,15 @@ try:
         leaguestandings, teamgamelog, leaguegamefinder, teamestimatedmetrics
     )
     try:
-        from nba_api.stats.endpoints import scoreboardv2 as scoreboard
+        from nba_api.stats.endpoints import scoreboardv3 as _scoreboard_mod
+        _USE_V3 = True
     except ImportError:
-        from nba_api.stats.endpoints import scoreboard  # older versions
+        try:
+            from nba_api.stats.endpoints import scoreboardv2 as _scoreboard_mod
+            _USE_V3 = False
+        except ImportError:
+            from nba_api.stats.endpoints import scoreboard as _scoreboard_mod
+            _USE_V3 = False
     from nba_api.stats.static import teams as nba_teams_static
     NBA_AVAILABLE = True
 except ImportError as _e:
@@ -223,39 +229,89 @@ def get_team_stats(team_id):
         print(f'  [NBA] team_stats {team_id} error: {e}')
         return {}
 
-def get_today_games():
-    """Return today's NBA games with basic info."""
-    if not NBA_AVAILABLE:
-        return []
+def _parse_scoreboard(date_str):
+    """Return list of game dicts from ScoreboardV3 (or V2 fallback) for a date."""
     try:
-        time.sleep(0.6)
-        today = _dt.date.today().strftime('%m/%d/%Y')
-        # scoreboardv2 / scoreboard both have ScoreboardV2 or Scoreboard class
-        try:
-            sb = scoreboard.ScoreboardV2(game_date=today)
-        except AttributeError:
-            sb = scoreboard.Scoreboard(game_date=today)
-        games_df = sb.get_data_frames()[0]
-        result = []
-        for _, g in games_df.iterrows():
-            h_id = str(g.get('HOME_TEAM_ID', '') or '')
-            a_id = str(g.get('VISITOR_TEAM_ID', '') or '')
-            result.append({
-                'game_id':    str(g.get('GAME_ID', '')),
-                'home':       _resolve_name(h_id, str(g.get('HOME_TEAM_ABBREVIATION', '') or '')),
-                'away':       _resolve_name(a_id, str(g.get('VISITOR_TEAM_ABBREVIATION', '') or '')),
-                'home_id':    h_id,
-                'away_id':    a_id,
-                'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION', '') or _team_id_map.get(h_id, {}).get('abbr', '')),
-                'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION', '') or _team_id_map.get(a_id, {}).get('abbr', '')),
-                'status':     str(g.get('GAME_STATUS_TEXT', '') or ''),
-                'home_score': g.get('HOME_TEAM_PTS'),
-                'away_score': g.get('VISITOR_TEAM_PTS'),
-            })
-        return result
+        if _USE_V3:
+            sb = _scoreboard_mod.ScoreboardV3(game_date=date_str, league_id='00')
+            dfs = sb.get_data_frames()
+            # df[1] = game header, df[2] = team info (two rows per game: home+away)
+            games_hdr  = dfs[1] if len(dfs) > 1 else None
+            teams_df   = dfs[2] if len(dfs) > 2 else None
+            if games_hdr is None or games_hdr.empty:
+                return []
+            result = []
+            for _, gh in games_hdr.iterrows():
+                gid = str(gh.get('gameId', ''))
+                if not gid:
+                    continue
+                # Find the two team rows for this game
+                if teams_df is not None and not teams_df.empty:
+                    game_teams = teams_df[teams_df['gameId'] == gid]
+                else:
+                    game_teams = None
+                home_row = away_row = None
+                if game_teams is not None and len(game_teams) >= 2:
+                    # Determine home/away from the game code (format: date/AWAY@HOME)
+                    code = str(gh.get('gameCode', ''))
+                    away_code = code.split('/')[-1].split('@')[0].upper() if '/@' in code or '@' in code else ''
+                    for _, tr in game_teams.iterrows():
+                        tricode = str(tr.get('teamTricode', ''))
+                        if tricode == away_code:
+                            away_row = tr
+                        else:
+                            home_row = tr
+                    if home_row is None and len(game_teams) == 2:
+                        rows = list(game_teams.iterrows())
+                        away_row, home_row = rows[0][1], rows[1][1]
+                def _tname(row):
+                    if row is None: return ''
+                    city = str(row.get('teamCity','') or '')
+                    name = str(row.get('teamName','') or '')
+                    return f"{city} {name}".strip() or str(row.get('teamTricode',''))
+                def _tid(row):
+                    return str(row.get('teamId','') or '') if row is not None else ''
+                h_id = _tid(home_row); a_id = _tid(away_row)
+                result.append({
+                    'game_id':    gid,
+                    'home':       _tname(home_row) or _resolve_name(h_id),
+                    'away':       _tname(away_row) or _resolve_name(a_id),
+                    'home_id':    h_id,
+                    'away_id':    a_id,
+                    'home_abbr':  str(home_row.get('teamTricode','') if home_row is not None else ''),
+                    'away_abbr':  str(away_row.get('teamTricode','') if away_row is not None else ''),
+                    'status':     str(gh.get('gameStatusText','') or ''),
+                    'home_score': gh.get('homeTeamScore'),
+                    'away_score': gh.get('awayTeamScore'),
+                })
+            return result
+        else:
+            # V2 fallback
+            sb = _scoreboard_mod.ScoreboardV2(game_date=date_str)
+            games_df = sb.get_data_frames()[0]
+            result = []
+            for _, g in games_df.iterrows():
+                h_id = str(g.get('HOME_TEAM_ID','') or ''); a_id = str(g.get('VISITOR_TEAM_ID','') or '')
+                result.append({
+                    'game_id':    str(g.get('GAME_ID','')),
+                    'home':       _resolve_name(h_id, str(g.get('HOME_TEAM_ABBREVIATION','') or '')),
+                    'away':       _resolve_name(a_id, str(g.get('VISITOR_TEAM_ABBREVIATION','') or '')),
+                    'home_id':    h_id, 'away_id': a_id,
+                    'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION','') or ''),
+                    'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION','') or ''),
+                    'status':     str(g.get('GAME_STATUS_TEXT','') or ''),
+                    'home_score': g.get('HOME_TEAM_PTS'), 'away_score': g.get('VISITOR_TEAM_PTS'),
+                })
+            return result
     except Exception as e:
-        print(f'  [NBA] today_games error: {e}')
+        print(f'  [NBA] parse_scoreboard {date_str} error: {e}')
         return []
+
+def get_today_games():
+    """Return today's NBA games."""
+    if not NBA_AVAILABLE: return []
+    time.sleep(0.6)
+    return _parse_scoreboard(_dt.date.today().strftime('%m/%d/%Y'))
 
 # ── Prediction ────────────────────────────────────────────────────────────────
 def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
@@ -312,49 +368,28 @@ def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
     }
 
 def get_upcoming_games(days=7):
-    """Return upcoming NBA games for the next N days from daily scoreboards."""
+    """Return upcoming NBA games for the next N days using ScoreboardV3."""
     if not NBA_AVAILABLE:
         return []
     try:
         today = _dt.date.today()
         upcoming = []
         seen = set()
-        for offset in range(max(1, days + 1)):
+        for offset in range(days + 1):
             day = today + _dt.timedelta(days=offset)
             time.sleep(0.35)
-            try:
-                date_str = day.strftime('%m/%d/%Y')
-                try:
-                    sb = scoreboard.ScoreboardV2(game_date=date_str)
-                except AttributeError:
-                    sb = scoreboard.Scoreboard(game_date=date_str)
-                df = sb.get_data_frames()[0]
-            except Exception as e:
-                print(f'  [NBA] scoreboard {day.isoformat()} error: {e}')
-                continue
-            for _, g in df.iterrows():
-                gid = str(g.get('GAME_ID', ''))
+            date_str = day.strftime('%m/%d/%Y')
+            games = _parse_scoreboard(date_str)
+            for g in games:
+                gid = g.get('game_id', '')
                 if not gid or gid in seen:
                     continue
                 seen.add(gid)
-                status = str(g.get('GAME_STATUS_TEXT', '') or '')
+                status = str(g.get('status', '') or '')
                 if status.lower().startswith('final'):
                     continue
-                h_id = str(g.get('HOME_TEAM_ID', '') or '')
-                a_id = str(g.get('VISITOR_TEAM_ID', '') or '')
-                upcoming.append({
-                    'game_id':    gid,
-                    'home':       _resolve_name(h_id, str(g.get('HOME_TEAM_ABBREVIATION', '') or '')),
-                    'away':       _resolve_name(a_id, str(g.get('VISITOR_TEAM_ABBREVIATION', '') or '')),
-                    'home_id':    h_id,
-                    'away_id':    a_id,
-                    'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION', '') or _team_id_map.get(h_id, {}).get('abbr', '')),
-                    'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION', '') or _team_id_map.get(a_id, {}).get('abbr', '')),
-                    'kickoff':    day.isoformat(),
-                    'gameday':    day.isoformat(),
-                    'status':     status or 'Scheduled',
-                })
-        return sorted(upcoming, key=lambda x: x.get('gameday',''))
+                upcoming.append({**g, 'kickoff': day.isoformat(), 'gameday': day.isoformat()})
+        return sorted(upcoming, key=lambda x: x.get('gameday', ''))
     except Exception as e:
         print(f'  [NBA] upcoming_games error: {e}')
         # Fall back to today's games
