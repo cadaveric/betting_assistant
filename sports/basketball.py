@@ -33,6 +33,34 @@ LEAGUE_MAP = {
     'NBA': {'id': '00', 'name': 'NBA', 'season': NBA_SEASON},
 }
 
+def _static_standings():
+    """Last-resort team list so the NBA predictor remains usable."""
+    if not NBA_AVAILABLE:
+        return []
+    try:
+        rows = []
+        for t in nba_teams_static.get_teams():
+            tid = str(t.get('id', '') or '')
+            rows.append({
+                'team_id': tid,
+                'name': t.get('nickname') or t.get('full_name') or t.get('abbreviation') or '',
+                'city': t.get('city') or '',
+                'full_name': t.get('full_name') or '',
+                'abbr': t.get('abbreviation') or '',
+                'wins': 0,
+                'losses': 0,
+                'pct': 0.0,
+                'conf': 'NBA',
+                'div': '',
+                'streak': '',
+                'elo': round(_elo_store.get(tid, 1500.0)),
+                'fallback': True,
+            })
+        return sorted(rows, key=lambda x: x.get('full_name') or x.get('name') or '')
+    except Exception as e:
+        print(f'  [NBA] static teams fallback error: {e}')
+        return []
+
 # ── Elo helpers ───────────────────────────────────────────────────────────────
 _elo_store = {}   # team_id -> float
 
@@ -76,11 +104,12 @@ def get_standings():
                 'elo':       round(_elo_store.get(tid, 1500.0)),
             })
         print(f'  [NBA] Standings loaded: {len(result)} teams ({NBA_SEASON})')
-        return sorted(result, key=lambda x: -x['pct'])
+        result = sorted(result, key=lambda x: -x['pct'])
+        return result or _static_standings()
     except Exception as e:
         import traceback; traceback.print_exc()
         print(f'  [NBA] standings error: {e}')
-        return []
+        return _static_standings()
 
 def get_team_stats(team_id):
     """Return offensive/defensive ratings and form for a team."""

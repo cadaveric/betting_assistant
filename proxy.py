@@ -2950,12 +2950,17 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(cached); return
         if action == 'standings':
             data = _bball.get_standings()
-            set_cache(ck, data, 1800)
-            self.send_json({'sport': 'basketball', 'league': 'NBA', 'standings': data})
+            result = {'sport': 'basketball', 'league': 'NBA', 'standings': data,
+                      'season': _bball.NBA_SEASON,
+                      'fallback': bool(data and data[0].get('fallback'))}
+            set_cache(ck, result, 1800)
+            self.send_json(result)
         elif action == 'today':
             data = _bball.get_today_games()
-            set_cache(ck, data, 300)
-            self.send_json({'sport': 'basketball', 'league': 'NBA', 'games': data})
+            result = {'sport': 'basketball', 'league': 'NBA', 'games': data,
+                      'season': _bball.NBA_SEASON}
+            set_cache(ck, result, 300)
+            self.send_json(result)
         else:
             self.send_json({'error': f'Unknown action: {action}'}, 400)
 
