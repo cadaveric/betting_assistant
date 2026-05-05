@@ -2134,6 +2134,8 @@ async function loadTeamStats(showProgress){
           cornHomePg:s.cornHomePg, cornAwayPg:s.cornAwayPg,
           cornAllowedHomePg:s.cornAllowedHomePg, cornAllowedAwayPg:s.cornAllowedAwayPg,
           ycHomePg:s.ycHomePg, ycAwayPg:s.ycAwayPg,
+          sampleCounts:s.sampleCounts||{},
+          reliability:s.reliability||{},
           last5:s.last5||{}, refCardPg:s.refCardPg,
           htGpg:s.htGpg, pensPg:s.pensPg,
           hasRealData:s.hasStats,
@@ -2431,18 +2433,31 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const lgCS=teamStatsMeta[lg]?.leagueAverages||{};
   const lgCornH=lgCS.homeCornersForPg||LG_CORN[lg]||4.5;
   const lgCornA=lgCS.awayCornersForPg||LG_CORN[lg]||4.0;
-  const hCornAtt=hS?.cornHomePg??hS?.cornPg??lgCornH;
-  const aCornDef=aS?.cornAllowedAwayPg??lgCornH;
-  const aCornAtt=aS?.cornAwayPg??aS?.cornPg??lgCornA;
-  const hCornDef=hS?.cornAllowedHomePg??lgCornA;
-  const hCL=Math.max(1.0,(hCornAtt*aCornDef)/lgCornH);
-  const aCL=Math.max(1.0,(aCornAtt*hCornDef)/lgCornA);
+  const blendByN=(val,base,n,readyN)=>{
+    if(val==null||!isFinite(val)) return base;
+    const w=Math.max(0,Math.min(1,(n||0)/readyN));
+    return val*w+base*(1-w);
+  };
+  const hSC=hS?.sampleCounts||{}, aSC=aS?.sampleCounts||{};
+  const hCornerRel=Math.min(hS?.reliability?.corners??0, aS?.reliability?.corners??0);
+  const hCardRel=Math.min(hS?.reliability?.cards??0, aS?.reliability?.cards??0);
+  const hCornAtt=blendByN(hS?.cornHomePg??hS?.cornPg,lgCornH,hSC.cornersHome||hSC.corners,6);
+  const aCornDef=blendByN(aS?.cornAllowedAwayPg,lgCornH,aSC.cornersAllowedAway,6);
+  const aCornAtt=blendByN(aS?.cornAwayPg??aS?.cornPg,lgCornA,aSC.cornersAway||aSC.corners,6);
+  const hCornDef=blendByN(hS?.cornAllowedHomePg,lgCornA,hSC.cornersAllowedHome,6);
+  const hCL=Math.max(1.0,Math.min(8.5,(hCornAtt*aCornDef)/Math.max(0.5,lgCornH)));
+  const aCL=Math.max(1.0,Math.min(8.5,(aCornAtt*hCornDef)/Math.max(0.5,lgCornA)));
   const totCorn=hCL+aCL;
   const pCorn85=Math.round((1-[0,1,2,3,4,5,6,7,8].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
   const pCorn105=Math.round((1-[0,1,2,3,4,5,6,7,8,9,10].reduce((s,k)=>s+poissonPMF(k,totCorn),0))*100);
-  const hCardBase=hS?.ycHomePg??hS?.last5?.ycardPg??hS?.ycardPg??LG_CARD[lg]??1.4;
-  const aCardBase=aS?.ycAwayPg??aS?.last5?.ycardPg??aS?.ycardPg??LG_CARD[lg]??1.4;
-  const refBoost=Math.max(0.85,Math.min(1.25,((hS?.refCardPg||aS?.refCardPg||((LG_CARD[lg]||1.4)*2))/((LG_CARD[lg]||1.4)*2))));
+  const lgCard=LG_CARD[lg]??1.4;
+  const hCardBase=blendByN(hS?.ycHomePg??hS?.last5?.ycardPg??hS?.ycardPg,lgCard,hSC.yellowCardsHome||hSC.yellowCards,6);
+  const aCardBase=blendByN(aS?.ycAwayPg??aS?.last5?.ycardPg??aS?.ycardPg,lgCard,aSC.yellowCardsAway||aSC.yellowCards,6);
+  const refCards=hS?.refCardPg||aS?.refCardPg;
+  const refGames=Math.max(hSC.refereeGames||0,aSC.refereeGames||0);
+  const refRel=Math.max(hS?.reliability?.refereeCards??0,aS?.reliability?.refereeCards??0,Math.min(1,refGames/6));
+  const rawRefBoost=(refCards||lgCard*2)/(lgCard*2);
+  const refBoost=Math.max(0.90,Math.min(1.15,1+(rawRefBoost-1)*refRel));
   const hCard=hCardBase*refBoost, aCard=aCardBase*refBoost;
   const totCard=hCard+aCard;
   const pCard25=Math.round((1-[0,1,2].reduce((s,k)=>s+poissonPMF(k,totCard),0))*100);
@@ -2492,6 +2507,7 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     pCards_over25:pCard25,pCards_over35:pCard35,
     hCorners:hCL.toFixed(1),aCorners:aCL.toFixed(1),totalCorners:totCorn.toFixed(1),cornersReal:!!(hS?.cornPg!=null&&aS?.cornPg!=null),
     hCards:hCard.toFixed(1),aCards:aCard.toFixed(1),totalCards:totCard.toFixed(1),cardsReal:!!(hS?.ycardPg!=null&&aS?.ycardPg!=null),
+    cornersReliability:Math.round(hCornerRel*100),cardsReliability:Math.round(hCardRel*100),
     htScoreH,htScoreA
   };
 }
@@ -4878,6 +4894,7 @@ function _saveSportPred(game, sport){
     awayTeamId: game.away_id||game.away_abbr||'',
     kickoff: game.kickoff||game.gameday||'',
     probabilities: {home:Math.round(hw), away:Math.round(aw)},
+    confidence: Math.round(Math.max(hw,aw)),
     pick: favH?'H':'A',
     predictedScore: {home:Math.round(pred.home_pts||pred.home_runs||pred.lh||0), away:Math.round(pred.away_pts||pred.away_runs||pred.la||0)},
     markets: {totalPts:pred.total_pts||pred.total_goals||pred.total_runs||0},
@@ -4896,6 +4913,7 @@ function _saveSportPredManual(sport,away,home,aw,hw,awayLabel,homeLabel){
     homeTeam:homeLabel||home, awayTeam:awayLabel||away,
     homeTeamId:home, awayTeamId:away,
     kickoff:'', probabilities:{home:Math.round(hw),away:Math.round(aw)},
+    confidence:Math.round(Math.max(hw,aw)),
     pick:favH?'H':'A', createdAt:new Date().toISOString(),
   };
   fetch('/predictions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
@@ -4918,7 +4936,7 @@ async function loadSportHistory(sport, body, kpis){
   try{
     const r=await fetch('/predictions?limit=200'); const d=await r.json();
     const sportKey=Object.keys(SPORT_META).find(k=>SPORT_META[k].label===meta.label)||sport;
-    const all=(d.history||d.rows||[]);
+    const all=(d.predictions||d.history||d.rows||[]);
     // Filter by sport field OR by competition name
     const rows=all.filter(p=>p.sport===sport||p.sport===sportKey||p.competition===meta.label||(sport==='nba'&&p.competition==='NBA')||(sport==='nhl'&&p.competition==='NHL')||(sport==='nfl'&&p.competition==='NFL')||(sport==='mlb'&&p.competition==='MLB'));
     const graded=rows.filter(r=>r.status==='graded');

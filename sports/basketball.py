@@ -96,7 +96,11 @@ def get_team_stats(team_id):
             return {}
         recent = df.head(10)
         pts_pg    = round(float(recent['PTS'].mean()), 1)
-        pts_ag    = round(float(recent['PTS'].mean()), 1)   # will be refined with opp
+        plus_minus = recent['PLUS_MINUS'] if 'PLUS_MINUS' in recent else None
+        if plus_minus is not None:
+            pts_ag = round(float((recent['PTS'] - plus_minus).mean()), 1)
+        else:
+            pts_ag = 110.0
         fg_pct    = round(float(recent['FG_PCT'].mean()), 3)
         fg3_pct   = round(float(recent['FG3_PCT'].mean()), 3)
         reb_pg    = round(float(recent['REB'].mean()), 1)
@@ -108,12 +112,34 @@ def get_team_stats(team_id):
         away_g    = recent[recent['MATCHUP'].str.contains('@', na=False)]
         pts_home  = round(float(home_g['PTS'].mean()), 1) if not home_g.empty else pts_pg
         pts_away  = round(float(away_g['PTS'].mean()), 1) if not away_g.empty else pts_pg
+        pts_allowed_home = round(float((home_g['PTS'] - home_g['PLUS_MINUS']).mean()), 1) if not home_g.empty and 'PLUS_MINUS' in home_g else pts_ag
+        pts_allowed_away = round(float((away_g['PTS'] - away_g['PLUS_MINUS']).mean()), 1) if not away_g.empty and 'PLUS_MINUS' in away_g else pts_ag
+        est = {}
+        try:
+            time.sleep(0.4)
+            tm = teamestimatedmetrics.TeamEstimatedMetrics(season=NBA_SEASON, league_id='00')
+            mdf = tm.get_data_frames()[0]
+            erow = mdf[mdf['TEAM_ID'].astype(str) == str(team_id)]
+            if not erow.empty:
+                er = erow.iloc[0]
+                est = {
+                    'off_rating': round(float(er.get('E_OFF_RATING', 110) or 110), 1),
+                    'def_rating': round(float(er.get('E_DEF_RATING', 110) or 110), 1),
+                    'net_rating': round(float(er.get('E_NET_RATING', 0) or 0), 1),
+                    'pace': round(float(er.get('E_PACE', 99) or 99), 1),
+                }
+        except Exception:
+            est = {}
         return {
             'pts_pg': pts_pg, 'fg_pct': fg_pct, 'fg3_pct': fg3_pct,
             'reb_pg': reb_pg, 'ast_pg': ast_pg, 'tov_pg': tov_pg,
             'pts_home_pg': pts_home, 'pts_away_pg': pts_away,
+            'pts_allowed_pg': pts_ag,
+            'pts_allowed_home_pg': pts_allowed_home,
+            'pts_allowed_away_pg': pts_allowed_away,
             'form_pct': form_pct, 'wins_l10': wins_l10,
             'games_l10': len(recent),
+            **est,
         }
     except Exception as e:
         print(f'  [NBA] team_stats {team_id} error: {e}')
@@ -159,13 +185,19 @@ def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
     # Elo component
     elo_exp_h = _elo_expected(home_elo + 50, away_elo)  # +50 home court
 
-    # Scoring-margin component
+    # Scoring-margin component, using both offense and opponent defense.
     h_pts = home_stats.get('pts_home_pg', home_stats.get('pts_pg', 110))
     a_pts = away_stats.get('pts_away_pg', away_stats.get('pts_pg', 110))
-    # How much each team outscores league avg (110 pts)
-    h_off = (h_pts - 110) / 20   # normalised
-    a_off = (a_pts - 110) / 20
-    margin_h = 0.5 + (h_off - a_off) * 0.3
+    h_allowed = home_stats.get('pts_allowed_home_pg', home_stats.get('pts_allowed_pg', 110))
+    a_allowed = away_stats.get('pts_allowed_away_pg', away_stats.get('pts_allowed_pg', 110))
+    h_exp = (h_pts + a_allowed) / 2
+    a_exp = (a_pts + h_allowed) / 2
+    if home_stats.get('pace') and away_stats.get('pace'):
+        pace_scale = max(0.92, min(1.08, ((home_stats['pace'] + away_stats['pace']) / 2) / 99.0))
+        h_exp *= pace_scale
+        a_exp *= pace_scale
+    margin = h_exp - a_exp
+    margin_h = 1 / (1 + math.exp(-margin / 9.5))
     margin_h = max(0.15, min(0.85, margin_h))
 
     # Form component
@@ -175,65 +207,69 @@ def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
     form_h = max(0.2, min(0.8, form_h))
 
     # Blend
-    p_home = round(elo_exp_h * 0.50 + margin_h * 0.30 + form_h * 0.20, 3)
+    rating_h = None
+    if home_stats.get('net_rating') is not None and away_stats.get('net_rating') is not None:
+        rating_margin = home_stats.get('net_rating', 0) - away_stats.get('net_rating', 0) + 2.0
+        rating_h = max(0.15, min(0.85, 1 / (1 + math.exp(-rating_margin / 10))))
+    if rating_h is None:
+        p_home = round(elo_exp_h * 0.45 + margin_h * 0.35 + form_h * 0.20, 3)
+    else:
+        p_home = round(elo_exp_h * 0.35 + margin_h * 0.30 + form_h * 0.15 + rating_h * 0.20, 3)
     p_away = round(1 - p_home, 3)
 
     # Total points estimate
-    total = round(h_pts + a_pts, 1)
+    total = round(h_exp + a_exp, 1)
 
     return {
         'home_win': round(p_home * 100, 1),
         'away_win': round(p_away * 100, 1),
         'total_pts': total,
-        'spread': round((h_pts - a_pts), 1),   # positive = home favoured
+        'home_pts': round(h_exp, 1),
+        'away_pts': round(a_exp, 1),
+        'spread': round((h_exp - a_exp), 1),   # positive = home favoured
     }
 
 def get_upcoming_games(days=7):
-    """Return upcoming NBA games for the next N days."""
+    """Return upcoming NBA games for the next N days from daily scoreboards."""
     if not NBA_AVAILABLE:
         return []
     try:
-        time.sleep(0.6)
-        from nba_api.stats.endpoints import leaguegamefinder
-        # Get recently scheduled games (current season)
-        gf = leaguegamefinder.LeagueGameFinder(
-            league_id_nullable='00',
-            season_nullable=NBA_SEASON,
-            season_type_nullable='Regular Season',
-        )
-        df = gf.get_data_frames()[0]
         today = _dt.date.today()
-        cutoff = today + _dt.timedelta(days=days)
-        # Filter to future games (no score yet = upcoming)
-        upcoming_ids = set()
         upcoming = []
-        for _, row in df.iterrows():
+        seen = set()
+        for offset in range(max(1, days + 1)):
+            day = today + _dt.timedelta(days=offset)
+            time.sleep(0.35)
             try:
-                gd = _dt.datetime.strptime(str(row.get('GAME_DATE','')), '%Y-%m-%dT%H:%M:%S').date()
-            except Exception:
-                try: gd = _dt.date.fromisoformat(str(row.get('GAME_DATE',''))[:10])
-                except: continue
-            if gd < today or gd > cutoff: continue
-            gid = str(row.get('GAME_ID',''))
-            if gid in upcoming_ids: continue
-            upcoming_ids.add(gid)
-            # Need to pair home and away — look for matching game
-            home_row = df[(df['GAME_ID']==row['GAME_ID']) & df['MATCHUP'].str.contains('vs\\.', na=False)]
-            away_row = df[(df['GAME_ID']==row['GAME_ID']) & df['MATCHUP'].str.contains('@', na=False)]
-            if home_row.empty or away_row.empty:
+                date_str = day.strftime('%m/%d/%Y')
+                try:
+                    sb = scoreboard.ScoreboardV2(game_date=date_str)
+                except AttributeError:
+                    sb = scoreboard.Scoreboard(game_date=date_str)
+                df = sb.get_data_frames()[0]
+            except Exception as e:
+                print(f'  [NBA] scoreboard {day.isoformat()} error: {e}')
                 continue
-            hr = home_row.iloc[0]; ar = away_row.iloc[0]
-            upcoming.append({
-                'game_id':  gid,
-                'home':     str(hr.get('TEAM_NAME','')),
-                'away':     str(ar.get('TEAM_NAME','')),
-                'home_id':  str(hr.get('TEAM_ID','')),
-                'away_id':  str(ar.get('TEAM_ID','')),
-                'home_abbr':str(hr.get('TEAM_ABBREVIATION','')),
-                'away_abbr':str(ar.get('TEAM_ABBREVIATION','')),
-                'gameday':  gd.isoformat(),
-                'status':   'Scheduled',
-            })
+            for _, g in df.iterrows():
+                gid = str(g.get('GAME_ID', ''))
+                if not gid or gid in seen:
+                    continue
+                seen.add(gid)
+                status = str(g.get('GAME_STATUS_TEXT', '') or '')
+                if status.lower().startswith('final'):
+                    continue
+                upcoming.append({
+                    'game_id':    gid,
+                    'home':       str(g.get('HOME_TEAM_NAME', '') or g.get('HOME_TEAM_ABBREVIATION', '')),
+                    'away':       str(g.get('VISITOR_TEAM_NAME', '') or g.get('VISITOR_TEAM_ABBREVIATION', '')),
+                    'home_id':    str(g.get('HOME_TEAM_ID', '')),
+                    'away_id':    str(g.get('VISITOR_TEAM_ID', '')),
+                    'home_abbr':  str(g.get('HOME_TEAM_ABBREVIATION', '')),
+                    'away_abbr':  str(g.get('VISITOR_TEAM_ABBREVIATION', '')),
+                    'kickoff':    day.isoformat(),
+                    'gameday':    day.isoformat(),
+                    'status':     status or 'Scheduled',
+                })
         return sorted(upcoming, key=lambda x: x.get('gameday',''))
     except Exception as e:
         print(f'  [NBA] upcoming_games error: {e}')

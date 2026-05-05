@@ -684,8 +684,8 @@ def nba_ml_predict(h_stats, a_stats, h_elo=1500.0, a_elo=1500.0):
         feat = [
             h_stats.get('pts_home_pg', h_stats.get('pts_pg', 110)),
             a_stats.get('pts_away_pg', a_stats.get('pts_pg', 108)),
-            110 - (h_stats.get('pts_away_pg', 108) - 110),  # approx opp pts allowed
-            108 - (a_stats.get('pts_home_pg', 110) - 108),
+            h_stats.get('pts_allowed_home_pg', h_stats.get('pts_allowed_pg', 110)),
+            a_stats.get('pts_allowed_away_pg', a_stats.get('pts_allowed_pg', 110)),
             h_stats.get('form_pct', 0.5),
             a_stats.get('form_pct', 0.5),
             h_stats.get('fg_pct', 0.46),
@@ -1119,6 +1119,60 @@ def _prediction_summary(rows):
             'marketsAcc': markets_acc,
             'calibration': cal,
             'tuning': _prediction_tuning(rows)}
+
+def _bucket_conf(conf):
+    try:
+        conf = float(conf or 0)
+    except (TypeError, ValueError):
+        conf = 0
+    if conf < 45: return '<45'
+    if conf < 55: return '45-54'
+    if conf < 65: return '55-64'
+    if conf < 75: return '65-74'
+    return '75+'
+
+def _football_audit_summary(rows):
+    football = [r for r in rows if (r.get('sport') in (None, '', 'football'))]
+    graded = [r for r in football if r.get('status') == 'graded']
+    def add(group, key, row):
+        g = group.setdefault(key or 'unknown', {'n': 0, 'correct': 0, 'brier': [], 'over25_n': 0, 'over25_hit': 0})
+        g['n'] += 1
+        if (row.get('metrics') or {}).get('outcomeCorrect'):
+            g['correct'] += 1
+        b = (row.get('metrics') or {}).get('brier')
+        if b is not None:
+            g['brier'].append(b)
+        markets = row.get('markets') or {}
+        metrics = row.get('metrics') or {}
+        if markets.get('over25') is not None and metrics.get('over25') is not None:
+            g['over25_n'] += 1
+            g['over25_hit'] += 1 if ((markets.get('over25') >= 50) == bool(metrics.get('over25'))) else 0
+    groups = {'league': {}, 'confidence': {}, 'dataQuality': {}, 'odds': {}, 'pick': {}}
+    for r in graded:
+        add(groups['league'], r.get('competition'), r)
+        add(groups['confidence'], _bucket_conf(r.get('confidence')), r)
+        add(groups['dataQuality'], (r.get('dataQuality') or {}).get('cls'), r)
+        add(groups['odds'], 'with_odds' if (r.get('odds') or {}).get('home') else 'no_odds', r)
+        add(groups['pick'], r.get('pick') or _prediction_pick(r), r)
+    def finish(g):
+        out = {}
+        for k, v in g.items():
+            out[k] = {
+                'n': v['n'],
+                'accuracy': round(v['correct'] / v['n'] * 100, 1) if v['n'] else None,
+                'avgBrier': round(sum(v['brier']) / len(v['brier']), 4) if v['brier'] else None,
+                'over25Accuracy': round(v['over25_hit'] / v['over25_n'] * 100, 1) if v['over25_n'] else None,
+                'over25N': v['over25_n'],
+            }
+        return dict(sorted(out.items(), key=lambda item: (-item[1]['n'], item[0])))
+    return {
+        'footballPredictions': len(football),
+        'graded': len(graded),
+        'pending': len(football) - len(graded),
+        'minimumUsefulSample': 100,
+        'groups': {k: finish(v) for k, v in groups.items()},
+        'summary': _prediction_summary(football),
+    }
 
 def _avg(vals):
     vals = [v for v in vals if v is not None]
@@ -1763,6 +1817,26 @@ def build_teamstats(comp):
                 'cornAllowedAwayPg': avg(s['away_corna'], s['away_corna_n']),
                 'ycHomePg':    avg(s['home_yc'], s['home_yc_n']),
                 'ycAwayPg':    avg(s['away_yc'], s['away_yc_n']),
+                'sampleCounts': {
+                    'games': g,
+                    'xg': s['xg_n'],
+                    'shotsOnTarget': s['sot_n'],
+                    'corners': s['corn_n'],
+                    'cornersHome': s['home_corn_n'],
+                    'cornersAway': s['away_corn_n'],
+                    'cornersAllowedHome': s['home_corna_n'],
+                    'cornersAllowedAway': s['away_corna_n'],
+                    'yellowCards': s['yc_n'],
+                    'yellowCardsHome': s['home_yc_n'],
+                    'yellowCardsAway': s['away_yc_n'],
+                    'refereeGames': s['ref_games'],
+                },
+                'reliability': {
+                    'xg': round(min(1.0, s['xg_n'] / 8), 2),
+                    'corners': round(min(1.0, min(s['home_corn_n'], s['away_corn_n']) / 5), 2),
+                    'cards': round(min(1.0, min(s['home_yc_n'], s['away_yc_n']) / 5), 2),
+                    'refereeCards': round(min(1.0, s['ref_games'] / 6), 2),
+                },
                 'last5': {
                     'games': len(recent),
                     'gfPg': recent_avg(recent, 'gf'),
@@ -2300,6 +2374,7 @@ class Handler(SimpleHTTPRequestHandler):
             with _rolling_elo_lock:
                 self.send_json({'elo': dict(_rolling_elo), 'count': len(_rolling_elo)})
         elif path == '/predictions':         self.handle_predictions(qs)
+        elif path == '/model-audit':         self.handle_model_audit(qs)
         elif path == '/calibration':         self.handle_calibration()
         elif path == '/ml-predict':          self.handle_ml_predict(qs)
         elif path == '/ml-status':           self.send_json({**_ml_meta, 'available': _ml_model is not None})
@@ -2439,6 +2514,15 @@ class Handler(SimpleHTTPRequestHandler):
             ordered = sorted(rows, key=lambda r: r.get('createdAt', ''), reverse=True)
             self.send_json({'predictions': ordered[:limit], 'summary': _prediction_summary(rows),
                             'file': _prediction_path()})
+
+    def handle_model_audit(self, qs):
+        params = urllib.parse.parse_qs(qs or '')
+        refresh = params.get('refresh', ['1'])[0].lower() in ('1', 'true', 'yes')
+        with prediction_lock:
+            rows = _load_predictions()
+            if refresh and APIF_KEY and _score_predictions(rows):
+                _save_predictions(rows)
+            self.send_json(_football_audit_summary(rows))
 
     def handle_teamstats(self, comp):
         if not APIF_KEY:
@@ -3304,4 +3388,3 @@ if __name__ == '__main__':
     server = ThreadingHTTPServer(('', PORT), Handler)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\n  Stopped.')
-
