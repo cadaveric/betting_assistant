@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Scoutline — Multi-Sport Intelligence</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234ADE80'/%3E%3Cpath d='M32 10 50 21v22L32 54 14 43V21L32 10Z' fill='none' stroke='white' stroke-width='4' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='32' r='8' fill='white' opacity='.92'/%3E%3Cpath d='M32 10v14M50 21 38 28M50 43 38 36M32 54V40M14 43l12-7M14 21l12 7' stroke='white' stroke-width='4' stroke-linecap='round' opacity='.9'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -2893,6 +2894,7 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   const favOdds=favIsHome?p.bH:p.bA;
   const isMismatch=Math.abs(hPos-aPos)>=10||Math.abs(p.pH-p.pA)>=30;
   const totalLam=(parseFloat(p.hLam)+parseFloat(p.aLam));
+  const avoids=[];
 
   let headline='';
   if(favProb>=70&&isMismatch)
@@ -2943,7 +2945,6 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
     avoids.push('Corners markets — sample reliability is low, so probabilities are shrunk toward neutral');
 
   // Avoids
-  const avoids=[];
   if(favProb>=75&&favOdds&&favOdds<1.25)
     avoids.push(`${favorite} to win at odds below 1.25 — near-zero return for the risk involved`);
   if(p.pBTTS>=60&&p.pOver25<48)
