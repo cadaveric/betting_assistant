@@ -3,7 +3,7 @@
 Football 1X2 prediction ML model trainer.
 
 Downloads historical match data from football-data.co.uk (no API key)
-and trains a GradientBoostingClassifier. Called automatically by proxy.py
+and trains a RandomForestClassifier. Called automatically by proxy.py
 on first startup if data/prediction_model.pkl is missing.
 
 Usage: python3 train_model.py
@@ -258,23 +258,13 @@ def train():
         return False
 
     print(f'  [ML] Training on {len(X)} samples × {len(FEATURE_NAMES)} features...')
-    try:
-        from xgboost import XGBClassifier
-        clf = XGBClassifier(
-            n_estimators=300, max_depth=5, learning_rate=0.05,
-            subsample=0.8, colsample_bytree=0.8,
-            eval_metric='mlogloss', n_jobs=1, random_state=42,
-        )
-        algo = 'XGBoost'
-        print('  [ML] Using XGBoost classifier')
-    except ImportError:
-        from sklearn.ensemble import RandomForestClassifier
-        clf = RandomForestClassifier(
-            n_estimators=120, max_depth=7, min_samples_leaf=15,
-            n_jobs=1, random_state=42,
-        )
-        algo = 'RandomForest'
-        print('  [ML] XGBoost not available — using RandomForest')
+    from sklearn.ensemble import RandomForestClassifier
+    clf = RandomForestClassifier(
+        n_estimators=120, max_depth=7, min_samples_leaf=15,
+        max_features='sqrt', n_jobs=1, random_state=42,
+    )
+    algo = 'RandomForest'
+    print('  [ML] Using RandomForest classifier')
     model = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', clf),
@@ -309,9 +299,9 @@ def train():
         'time_split_std':      round(float(np.std(ts_scores)),  4) if ts_scores else None,
         'time_split_note': 'Forward-chaining validation; safer than shuffled CV for betting use.',
         'market_baseline_accuracy': round(market_accuracy, 4),
-        'market_anchor_accuracy': 0.5332,
-        'market_anchor_ml_weight': 0.15,
-        'market_anchor_note': 'Forward time-split sweep: 15% ML / 85% Shin market gave the best 1X2 pick accuracy; higher ML weight improves log-loss but slightly lowers pick hit-rate.',
+        'market_anchor_accuracy': 0.5335,
+        'market_anchor_ml_weight': 0.20,
+        'market_anchor_note': 'Forward time-split sweep: RF with 20% model / 80% Shin market gave the best 1X2 pick accuracy among tested deployed blends.',
         'n_train':     int(len(X)),
         'n_features':  len(FEATURE_NAMES),
         'algorithm':   algo,
@@ -321,6 +311,7 @@ def train():
     }
     with open(META_PATH, 'w') as f:
         json.dump(meta, f, indent=2)
+        f.write('\n')
 
     print(f'  [ML] Model saved → {MODEL_PATH}  (accuracy={scores.mean():.3f})')
     return True

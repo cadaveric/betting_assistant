@@ -3407,10 +3407,10 @@ class Handler(SimpleHTTPRequestHandler):
                 mt = sum(market)
                 if mt > 0:
                     market = [p / mt for p in market]
-                    # Forward time-split testing favours market-anchored picks:
-                    # 15% ML / 85% Shin market was best for 1X2 accuracy; raw ML
+                    # Forward time-split testing favours market-anchored RF picks:
+                    # 20% ML / 80% Shin market was best for 1X2 accuracy; raw ML
                     # remains exposed for audit, but live probability uses the blend.
-                    ml_weight = 0.15
+                    ml_weight = float(_ml_meta.get('market_anchor_ml_weight') or 0.20)
                     final = [raw[i] * ml_weight + market[i] * (1.0 - ml_weight) for i in range(3)]
                     ensemble = 'market_anchor_v1'
             self.send_json({

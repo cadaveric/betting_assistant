@@ -1,16 +1,16 @@
 {
-  "cv_accuracy": 0.5277,
-  "cv_std": 0.0024,
-  "time_split_accuracy": 0.5268,
-  "time_split_std": 0.0174,
+  "cv_accuracy": 0.5287,
+  "cv_std": 0.0007,
+  "time_split_accuracy": 0.5318,
+  "time_split_std": 0.014,
   "time_split_note": "Forward-chaining validation; safer than shuffled CV for betting use.",
   "market_baseline_accuracy": 0.5296,
-  "market_anchor_accuracy": 0.5332,
-  "market_anchor_ml_weight": 0.15,
-  "market_anchor_note": "Forward time-split sweep: 15% ML / 85% Shin market gave the best 1X2 pick accuracy; higher ML weight improves log-loss but slightly lowers pick hit-rate.",
+  "market_anchor_accuracy": 0.5335,
+  "market_anchor_ml_weight": 0.2,
+  "market_anchor_note": "Forward time-split sweep: RF with 20% model / 80% Shin market gave the best 1X2 pick accuracy among tested deployed blends.",
   "n_train": 59904,
   "n_features": 28,
-  "algorithm": "XGBoost",
+  "algorithm": "RandomForest",
   "feature_names": [
     "form_h",
     "form_a",
@@ -46,5 +46,5 @@
     "D": 15105,
     "A": 17984
   },
-  "built": "2026-05-07T09:03:04.078165+00:00"
+  "built": "2026-05-07T11:26:26.540878+00:00"
 }
