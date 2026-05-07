@@ -4841,6 +4841,20 @@ function buildLgDrop(){
   const selOpt=sel.options[sel.selectedIndex];
   if(selOpt) document.getElementById('lgSelTxt').textContent=selOpt.textContent.replace(' [odds only]','').trim();
 }
+function _lgPreventScroll(e){
+  if(document.getElementById('lgSelDrop')?.contains(e.target))return;
+  e.preventDefault();
+}
+function _lgLockScroll(){
+  document.documentElement.style.overflow='hidden';
+  document.body.style.overflow='hidden';
+  document.addEventListener('touchmove',_lgPreventScroll,{passive:false});
+}
+function _lgUnlockScroll(){
+  document.documentElement.style.overflow='';
+  document.body.style.overflow='';
+  document.removeEventListener('touchmove',_lgPreventScroll);
+}
 function toggleLgDrop(e){
   e.stopPropagation();
   const btn=document.getElementById('lgSelBtn');
@@ -4849,7 +4863,7 @@ function toggleLgDrop(e){
   buildLgDrop();
   btn.classList.add('open');
   drop.classList.add('open');
-  document.body.style.overflow='hidden';
+  _lgLockScroll();
   if(window.innerWidth<=600){
     const ov=document.createElement('div');
     ov.className='csel-overlay';ov.id='lgSelOv';
@@ -4861,7 +4875,7 @@ function closeLgDrop(){
   document.getElementById('lgSelBtn')?.classList.remove('open');
   document.getElementById('lgSelDrop')?.classList.remove('open');
   document.getElementById('lgSelOv')?.remove();
-  document.body.style.overflow='';
+  _lgUnlockScroll();
 }
 function selectLg(val,name){
   const sel=document.getElementById('lgSel');
