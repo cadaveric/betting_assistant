@@ -1857,6 +1857,20 @@ const TRANSLATIONS={
     'misc.draw':'Draw','misc.real':'real data','misc.estimated':'estimated',
     'misc.pts':'pts','misc.saved':'saved','misc.score':'score',
     'vtag.value':'VALUE','vtag.edge':'edge','vtag.avoid':'avoid',
+    'mlb.bet.title':'What to bet',
+    'mlb.bet.sub':'Model markets from projected runs. Compare with bookmaker odds before staking.',
+    'mlb.market.moneyline':'Moneyline','mlb.market.run_line':'Run line',
+    'mlb.market.total_runs':'Total runs','mlb.market.team_total':'Team total',
+    'mlb.conf.strong':'strong','mlb.conf.lean':'lean','mlb.conf.watch':'watch','mlb.conf.thin':'thin',
+    'mlb.pick.over':'Over','mlb.pick.under':'Under',
+    'mlb.reason.moneyline':'Highest modeled win probability.',
+    'mlb.reason.fav_runline':'Favorite has enough projected run margin to consider the alternate risk/reward market.',
+    'mlb.reason.dog_runline':'Model expects a close game; the safer spread angle is the underdog run cushion.',
+    'mlb.reason.projected_total':'Projected total is {runs} runs.',
+    'mlb.reason.team_projected':'{team} projected for {runs} runs.',
+    'mlb.win_probability':'win probability','mlb.pick':'Pick','mlb.est':'Est',
+    'mlb.runs':'Runs','mlb.spread':'Spread','mlb.home':'home','mlb.team_stats':'Team Statistics',
+    'mlb.track':'Track prediction in History',
     'outcome.home_win':'Home win','outcome.away_win':'Away win','outcome.draw':'Draw',
   },
   bg:{
@@ -2049,6 +2063,20 @@ const TRANSLATIONS={
     'misc.draw':'Равен','misc.real':'реални данни','misc.estimated':'приблизителни',
     'misc.pts':'т.','misc.saved':'запазено','misc.score':'резултат',
     'vtag.value':'СТОЙНОСТ','vtag.edge':'предимство','vtag.avoid':'избягвай',
+    'mlb.bet.title':'Какво да заложите',
+    'mlb.bet.sub':'Пазари от модела на база прогнозни рънове. Сравнете с коефициентите на букмейкъра преди залог.',
+    'mlb.market.moneyline':'Победител','mlb.market.run_line':'Рън линия',
+    'mlb.market.total_runs':'Общо рънове','mlb.market.team_total':'Отборни рънове',
+    'mlb.conf.strong':'силно','mlb.conf.lean':'леко предимство','mlb.conf.watch':'внимание','mlb.conf.thin':'слабо',
+    'mlb.pick.over':'Над','mlb.pick.under':'Под',
+    'mlb.reason.moneyline':'Най-висока прогнозна вероятност за победа.',
+    'mlb.reason.fav_runline':'Фаворитът има достатъчна прогнозна разлика в ръновете за по-рисковия пазар.',
+    'mlb.reason.dog_runline':'Моделът очаква близък мач; по-сигурният спред ъгъл е авансът от +1.5 за аутсайдера.',
+    'mlb.reason.projected_total':'Прогнозният общ брой е {runs} ръна.',
+    'mlb.reason.team_projected':'{team} е прогнозиран за {runs} ръна.',
+    'mlb.win_probability':'вероятност за победа','mlb.pick':'Избор','mlb.est':'Прогноза',
+    'mlb.runs':'Рънове','mlb.spread':'Спред','mlb.home':'домакин','mlb.team_stats':'Статистики на отборите',
+    'mlb.track':'Запази прогнозата в История',
     'outcome.home_win':'Победа домакин','outcome.away_win':'Победа гост','outcome.draw':'Равен',
   }
 };
@@ -2073,6 +2101,10 @@ function setLang(l){
   _lang=l;
   localStorage.setItem('scoutline_lang',l);
   applyI18n();
+  if(typeof currentSport!=='undefined'&&currentSport!=='football'){
+    loadSportPage(currentSport,_sportTab[currentSport]||(currentSport==='nfl'?'games':'fixtures'));
+    return;
+  }
   // Re-render current page
   const active=document.querySelector('.nav-btn.on');
   const pages=['fixtures','schedule','predictor','standings','results','teamstats','odds','advisor','history'];
@@ -5173,6 +5205,34 @@ async function loadSportPredict(sport, body, kpis){
     </div></div>`;
 }
 
+function _mlbMarketLabel(market){
+  const key={
+    'Moneyline':'mlb.market.moneyline',
+    'Run line':'mlb.market.run_line',
+    'Total runs':'mlb.market.total_runs',
+    'Team total':'mlb.market.team_total',
+  }[market];
+  return key?t(key):market;
+}
+function _mlbConfidenceLabel(conf){return t('mlb.conf.'+(conf||'thin'));}
+function _mlbPickLabel(pick){
+  if(_lang!=='bg')return pick;
+  return String(pick||'')
+    .replace(/\bOver\b/g,t('mlb.pick.over'))
+    .replace(/\bUnder\b/g,t('mlb.pick.under'));
+}
+function _mlbReasonLabel(reason){
+  const r=String(reason||'');
+  if(!r)return '';
+  if(r==='Highest modeled win probability.')return t('mlb.reason.moneyline');
+  if(r==='Favorite has enough projected run margin to consider the alternate risk/reward market.')return t('mlb.reason.fav_runline');
+  if(r==='Model expects a close game; the safer spread angle is the underdog run cushion.')return t('mlb.reason.dog_runline');
+  let m=r.match(/^Projected total is ([0-9.]+) runs\.$/);
+  if(m)return t('mlb.reason.projected_total',{runs:m[1]});
+  m=r.match(/^(.+) projected for ([0-9.]+) runs\.$/);
+  if(m)return t('mlb.reason.team_projected',{team:m[1],runs:m[2]});
+  return r;
+}
 function _renderMLBMarkets(d){
   const rows=d.betting_markets||[];
   if(!rows.length)return '';
@@ -5180,21 +5240,21 @@ function _renderMLBMarkets(d){
   return `<div style="margin-top:12px;background:rgba(255,253,248,.92);border:1px solid rgba(61,49,31,.12);border-radius:10px;overflow:hidden">
     <div style="padding:12px 14px;border-bottom:1px solid rgba(61,49,31,.10);display:flex;justify-content:space-between;gap:10px;align-items:center">
       <div>
-        <div style="font-size:14px;font-weight:900;color:#20251F">What to bet</div>
-        <div style="font-size:11px;color:#6A5E4E;margin-top:2px">Model markets from projected runs. Compare with bookmaker odds before staking.</div>
+        <div style="font-size:14px;font-weight:900;color:#20251F">${t('mlb.bet.title')}</div>
+        <div style="font-size:11px;color:#6A5E4E;margin-top:2px">${t('mlb.bet.sub')}</div>
       </div>
-      <span class="tag ${cls(rows[0])}" style="white-space:nowrap">${rows[0].confidence}</span>
+      <span class="tag ${cls(rows[0])}" style="white-space:nowrap">${_mlbConfidenceLabel(rows[0].confidence)}</span>
     </div>
     <div style="display:grid;gap:0">
       ${rows.map((m,i)=>`<div style="padding:12px 14px;border-bottom:${i===rows.length-1?'0':'1px solid rgba(61,49,31,.08)'};display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start">
         <div style="min-width:0">
-          <div style="font-size:11px;color:#8A7760;font-weight:800;text-transform:uppercase;letter-spacing:.04em">${m.market}${m.line?` · ${m.line}`:''}</div>
-          <div style="font-size:15px;font-weight:900;color:#20251F;margin-top:2px">${m.pick}</div>
-          <div style="font-size:12px;color:#6A5E4E;margin-top:3px;line-height:1.45">${m.reason||''}</div>
+          <div style="font-size:11px;color:#8A7760;font-weight:800;text-transform:uppercase;letter-spacing:.04em">${_mlbMarketLabel(m.market)}${m.line?` · ${m.line}`:''}</div>
+          <div style="font-size:15px;font-weight:900;color:#20251F;margin-top:2px">${_mlbPickLabel(m.pick)}</div>
+          <div style="font-size:12px;color:#6A5E4E;margin-top:3px;line-height:1.45">${_mlbReasonLabel(m.reason)}</div>
         </div>
         <div style="text-align:right">
           <div style="font-family:var(--mono);font-size:22px;font-weight:900;color:${m.probability>=60?'#0F7A52':m.probability>=55?'#B06010':'#6A5E4E'}">${m.probability}%</div>
-          <span class="tag ${cls(m)}" style="font-size:10px">${m.confidence}</span>
+          <span class="tag ${cls(m)}" style="font-size:10px">${_mlbConfidenceLabel(m.confidence)}</span>
         </div>
       </div>`).join('')}
     </div>
@@ -5226,8 +5286,8 @@ async function _runSportPredict(sport){
     const chips=[];
     if(d.total_pts)chips.push(`<span class="tag tag-blue">Total: ${d.total_pts}</span>`);
     if(d.total_goals)chips.push(`<span class="tag tag-blue">Exp goals: ${d.total_goals}</span>`);
-    if(d.total_runs)chips.push(`<span class="tag tag-blue">Runs: ${d.total_runs}</span>`);
-    if(d.spread!=null)chips.push(`<span class="tag tag-amber">Spread: ${d.spread>0?'+':''}${d.spread} home</span>`);
+    if(d.total_runs)chips.push(`<span class="tag tag-blue">${t('mlb.runs')}: ${d.total_runs}</span>`);
+    if(d.spread!=null)chips.push(`<span class="tag tag-amber">${t('mlb.spread')}: ${d.spread>0?'+':''}${d.spread} ${t('mlb.home')}</span>`);
     if(d.over_5_5)chips.push(`<span class="tag tag-amber">O5.5: ${d.over_5_5}%</span>`);
     if(d.over_8_5)chips.push(`<span class="tag tag-amber">O8.5: ${d.over_8_5}%</span>`);
     const mlbMarkets=sport==='mlb'?_renderMLBMarkets(d):'';
@@ -5253,13 +5313,13 @@ async function _runSportPredict(sport){
         <div style="text-align:center">
           <div style="font-size:14px;font-weight:700;color:#EDE0CC;margin-bottom:4px">${awayLabel}</div>
           <div style="font-size:36px;font-weight:800;font-family:var(--mono);color:${favH?'rgba(237,224,204,.45)':'#F7C66A'};line-height:1">${aw}%</div>
-          <div style="font-size:11px;color:rgba(237,224,204,.5);margin-top:4px">win probability</div>
+          <div style="font-size:11px;color:rgba(237,224,204,.5);margin-top:4px">${t('mlb.win_probability')}</div>
         </div>
         <div style="text-align:center;font-size:11px;color:rgba(237,224,204,.35);padding:0 6px;font-weight:700;letter-spacing:.08em">VS</div>
         <div style="text-align:center">
           <div style="font-size:14px;font-weight:700;color:#EDE0CC;margin-bottom:4px">${homeLabel}</div>
           <div style="font-size:36px;font-weight:800;font-family:var(--mono);color:${favH?'#F7C66A':'rgba(237,224,204,.45)'};line-height:1">${hw}%</div>
-          <div style="font-size:11px;color:rgba(237,224,204,.5);margin-top:4px">win probability</div>
+          <div style="font-size:11px;color:rgba(237,224,204,.5);margin-top:4px">${t('mlb.win_probability')}</div>
         </div>
       </div>
       <div class="prob-bar" style="margin-bottom:12px">
@@ -5267,12 +5327,12 @@ async function _runSportPredict(sport){
         <div class="pb-h" style="width:${hw}%;border-radius:0 4px 4px 0"></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:12px">
-        <span style="background:rgba(255,255,255,.12);color:#EDE0CC;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700">Pick: ${favH?homeLabel:awayLabel}</span>
-        ${scoreEst?`<span style="background:rgba(255,255,255,.08);color:rgba(237,224,204,.7);border-radius:999px;padding:4px 12px;font-size:12px">Est: ${awayLabel} ${scoreEst} ${homeLabel}</span>`:''}
+        <span style="background:rgba(255,255,255,.12);color:#EDE0CC;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700">${t('mlb.pick')}: ${favH?homeLabel:awayLabel}</span>
+        ${scoreEst?`<span style="background:rgba(255,255,255,.08);color:rgba(237,224,204,.7);border-radius:999px;padding:4px 12px;font-size:12px">${t('mlb.est')}: ${awayLabel} ${scoreEst} ${homeLabel}</span>`:''}
         ${chips.map(c=>c.replace('class="tag ','style="border-radius:999px;padding:4px 12px;font-size:12px;" class="tag ')).join('')}
       </div>
       ${statRows.length?`<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;font-size:13px;border-top:1px solid rgba(255,255,255,.12);padding-top:14px">
-        <div style="font-size:11px;color:rgba(237,224,204,.4);text-align:center;grid-column:1/-1;margin-bottom:4px">— Team Statistics —</div>
+        <div style="font-size:11px;color:rgba(237,224,204,.4);text-align:center;grid-column:1/-1;margin-bottom:4px">— ${t('mlb.team_stats')} —</div>
         ${statRows.map(([label,av,hv])=>`
           <div style="text-align:right;font-family:var(--mono);font-weight:700;font-size:14px;color:#EDE0CC">${av}</div>
           <div style="text-align:center;color:rgba(237,224,204,.45);font-size:10px;padding:0 8px;align-self:center;white-space:nowrap">${label}</div>
@@ -5280,7 +5340,7 @@ async function _runSportPredict(sport){
       </div>`:''}
     </div>${mlbMarkets}
     <div style="margin-top:10px">
-      <button onclick="_saveSportPredManual('${sport}','${away}','${home}',${aw},${hw},'${awayLabel}','${homeLabel}')" class="adv-scan-btn" style="width:100%;justify-content:center">Track prediction in History</button>
+      <button onclick="_saveSportPredManual('${sport}','${away}','${home}',${aw},${hw},'${awayLabel}','${homeLabel}')" class="adv-scan-btn" style="width:100%;justify-content:center">${sport==='mlb'?t('mlb.track'):'Track prediction in History'}</button>
     </div>`;
   }catch(e){out.innerHTML=`<div class="error-state">Error: ${e.message}</div>`;}
 }
