@@ -244,6 +244,7 @@ def predict(home_team, away_team, home_bat, away_bat, home_pitch, away_pitch, ho
     p_home = 1 / (1 + math.exp(-margin * 0.4))  # flatter sigmoid for baseball
     p_home = min(0.80, max(0.20, p_home))
     total  = round(h_runs + a_runs, 1)
+    over_8_5 = _over_runs(h_runs, a_runs, 8.5)
 
     return {
         'home_win':  round(p_home * 100, 1),
@@ -251,8 +252,9 @@ def predict(home_team, away_team, home_bat, away_bat, home_pitch, away_pitch, ho
         'home_runs': round(h_runs, 1),
         'away_runs': round(a_runs, 1),
         'total_runs': total,
-        'over_8_5':  round(_over_runs(h_runs, a_runs, 8.5) * 100, 1),
+        'over_8_5':  round(over_8_5 * 100, 1),
         'spread':    round(h_runs - a_runs, 2),
+        'betting_markets': _betting_markets(home_team, away_team, h_runs, a_runs, p_home, over_8_5),
     }
 
 def _over_runs(lh, la, line):
@@ -265,6 +267,113 @@ def _over_runs(lh, la, line):
             if h + a > line:
                 prob += ph * (la**a * exp(-la)) / factorial(a)
     return prob
+
+def _poisson_pmf(k, lam):
+    from math import exp, factorial
+    return (lam ** k * exp(-lam)) / factorial(k)
+
+def _team_over_prob(lam, line):
+    prob = 0.0
+    for runs in range(20):
+        if runs > line:
+            prob += _poisson_pmf(runs, lam)
+    return prob
+
+def _runline_prob(lh, la, team, line):
+    """Probability that team covers a run line, e.g. home -1.5 or away +1.5."""
+    prob = 0.0
+    for h in range(20):
+        ph = _poisson_pmf(h, lh)
+        for a in range(20):
+            pa = _poisson_pmf(a, la)
+            margin = h - a
+            if team == 'home' and margin + line > 0:
+                prob += ph * pa
+            elif team == 'away' and -margin + line > 0:
+                prob += ph * pa
+    return prob
+
+def _market_conf(prob_pct):
+    edge = abs(prob_pct - 50)
+    if prob_pct >= 60:
+        return 'strong'
+    if prob_pct >= 55:
+        return 'lean'
+    if edge >= 7:
+        return 'watch'
+    return 'thin'
+
+def _mk_market(market, pick, prob, line=None, reason=''):
+    pct = round(prob * 100, 1)
+    return {
+        'market': market,
+        'pick': pick,
+        'line': line,
+        'probability': pct,
+        'confidence': _market_conf(pct),
+        'reason': reason,
+    }
+
+def _betting_markets(home, away, h_runs, a_runs, p_home, over_8_5):
+    """Translate MLB model outputs into markets a bettor actually recognizes."""
+    markets = []
+    fav_home = p_home >= 0.5
+    fav = home if fav_home else away
+    dog = away if fav_home else home
+    fav_prob = p_home if fav_home else 1 - p_home
+    markets.append(_mk_market(
+        'Moneyline',
+        fav,
+        fav_prob,
+        reason='Highest modeled win probability.',
+    ))
+
+    fav_cover = _runline_prob(h_runs, a_runs, 'home' if fav_home else 'away', -1.5)
+    dog_cover = _runline_prob(h_runs, a_runs, 'away' if fav_home else 'home', 1.5)
+    if fav_cover >= 0.52:
+        markets.append(_mk_market(
+            'Run line',
+            f'{fav} -1.5',
+            fav_cover,
+            '-1.5',
+            'Favorite has enough projected run margin to consider the alternate risk/reward market.',
+        ))
+    else:
+        markets.append(_mk_market(
+            'Run line',
+            f'{dog} +1.5',
+            dog_cover,
+            '+1.5',
+            'Model expects a close game; the safer spread angle is the underdog run cushion.',
+        ))
+
+    total_prob = over_8_5 if over_8_5 >= 0.5 else 1 - over_8_5
+    markets.append(_mk_market(
+        'Total runs',
+        'Over 8.5' if over_8_5 >= 0.5 else 'Under 8.5',
+        total_prob,
+        '8.5',
+        f'Projected total is {round(h_runs + a_runs, 1)} runs.',
+    ))
+
+    home_o45 = _team_over_prob(h_runs, 4.5)
+    away_o45 = _team_over_prob(a_runs, 4.5)
+    team_totals = [
+        (f'{home} Over 4.5', home_o45, home, '4.5'),
+        (f'{home} Under 4.5', 1 - home_o45, home, '4.5'),
+        (f'{away} Over 4.5', away_o45, away, '4.5'),
+        (f'{away} Under 4.5', 1 - away_o45, away, '4.5'),
+    ]
+    pick, prob, team, line = max(team_totals, key=lambda x: x[1])
+    markets.append(_mk_market(
+        'Team total',
+        pick,
+        prob,
+        line,
+        f'{team} projected for {round(h_runs if team == home else a_runs, 1)} runs.',
+    ))
+
+    return sorted(markets, key=lambda m: m['probability'], reverse=True)
 
 def get_today_games(days=3):
     """Return upcoming MLB games via MLB Stats API (free, official, no key)."""

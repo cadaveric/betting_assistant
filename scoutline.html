@@ -5173,6 +5173,34 @@ async function loadSportPredict(sport, body, kpis){
     </div></div>`;
 }
 
+function _renderMLBMarkets(d){
+  const rows=d.betting_markets||[];
+  if(!rows.length)return '';
+  const cls=m=>m.confidence==='strong'?'tag-green':m.confidence==='lean'?'tag-amber':m.confidence==='watch'?'tag-blue':'tag-gray';
+  return `<div style="margin-top:12px;background:rgba(255,253,248,.92);border:1px solid rgba(61,49,31,.12);border-radius:10px;overflow:hidden">
+    <div style="padding:12px 14px;border-bottom:1px solid rgba(61,49,31,.10);display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <div>
+        <div style="font-size:14px;font-weight:900;color:#20251F">What to bet</div>
+        <div style="font-size:11px;color:#6A5E4E;margin-top:2px">Model markets from projected runs. Compare with bookmaker odds before staking.</div>
+      </div>
+      <span class="tag ${cls(rows[0])}" style="white-space:nowrap">${rows[0].confidence}</span>
+    </div>
+    <div style="display:grid;gap:0">
+      ${rows.map((m,i)=>`<div style="padding:12px 14px;border-bottom:${i===rows.length-1?'0':'1px solid rgba(61,49,31,.08)'};display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start">
+        <div style="min-width:0">
+          <div style="font-size:11px;color:#8A7760;font-weight:800;text-transform:uppercase;letter-spacing:.04em">${m.market}${m.line?` · ${m.line}`:''}</div>
+          <div style="font-size:15px;font-weight:900;color:#20251F;margin-top:2px">${m.pick}</div>
+          <div style="font-size:12px;color:#6A5E4E;margin-top:3px;line-height:1.45">${m.reason||''}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:900;color:${m.probability>=60?'#0F7A52':m.probability>=55?'#B06010':'#6A5E4E'}">${m.probability}%</div>
+          <span class="tag ${cls(m)}" style="font-size:10px">${m.confidence}</span>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
 async function _runSportPredict(sport){
   const out=document.getElementById(sport+'-pred-out'); if(!out)return;
   const home=document.getElementById(sport+'-home-sel')?.value;
@@ -5202,6 +5230,7 @@ async function _runSportPredict(sport){
     if(d.spread!=null)chips.push(`<span class="tag tag-amber">Spread: ${d.spread>0?'+':''}${d.spread} home</span>`);
     if(d.over_5_5)chips.push(`<span class="tag tag-amber">O5.5: ${d.over_5_5}%</span>`);
     if(d.over_8_5)chips.push(`<span class="tag tag-amber">O8.5: ${d.over_8_5}%</span>`);
+    const mlbMarkets=sport==='mlb'?_renderMLBMarkets(d):'';
     const scoreEst=d.home_pts?`${Math.round(d.away_pts||0)}-${Math.round(d.home_pts||0)}`
                   :d.home_runs?`${d.away_runs}-${d.home_runs}`
                   :d.la?`${d.la}-${d.lh} xG`:'';
@@ -5249,7 +5278,7 @@ async function _runSportPredict(sport){
           <div style="text-align:center;color:rgba(237,224,204,.45);font-size:10px;padding:0 8px;align-self:center;white-space:nowrap">${label}</div>
           <div style="font-family:var(--mono);font-weight:700;font-size:14px;color:#EDE0CC">${hv}</div>`).join('')}
       </div>`:''}
-    </div>
+    </div>${mlbMarkets}
     <div style="margin-top:10px">
       <button onclick="_saveSportPredManual('${sport}','${away}','${home}',${aw},${hw},'${awayLabel}','${homeLabel}')" class="adv-scan-btn" style="width:100%;justify-content:center">Track prediction in History</button>
     </div>`;
