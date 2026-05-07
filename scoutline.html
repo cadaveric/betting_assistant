@@ -980,7 +980,7 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
     background:#F1E8D9;color:#4F4538;padding:0 12px;font-weight:800;font-family:var(--sans);
   }
 }
-.csel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199}
+.csel-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199;touch-action:none}
 
 /* ─── KPI COMPACT STRIP — desktop ───────────────────────── */
 @media(min-width:601px){
@@ -4849,6 +4849,7 @@ function toggleLgDrop(e){
   buildLgDrop();
   btn.classList.add('open');
   drop.classList.add('open');
+  document.body.style.overflow='hidden';
   if(window.innerWidth<=600){
     const ov=document.createElement('div');
     ov.className='csel-overlay';ov.id='lgSelOv';
@@ -4860,6 +4861,7 @@ function closeLgDrop(){
   document.getElementById('lgSelBtn')?.classList.remove('open');
   document.getElementById('lgSelDrop')?.classList.remove('open');
   document.getElementById('lgSelOv')?.remove();
+  document.body.style.overflow='';
 }
 function selectLg(val,name){
   const sel=document.getElementById('lgSel');
