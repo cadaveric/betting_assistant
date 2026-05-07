@@ -733,7 +733,7 @@ _ML_LEAGUE_ORDER = [
 ]
 
 # Must match len(train_model.FEATURE_NAMES); stale pkl triggers auto-retrain.
-_ML_FEATURE_COUNT = 46
+_ML_FEATURE_COUNT = 52
 
 def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
                  has_odds=False, overround=0.0, elo_diff=0.0,
@@ -764,6 +764,14 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
     ref_card_pg = hdata.get('refCardPg') or adata.get('refCardPg') or (ycard_h + ycard_a + rcard_h + rcard_a)
     home_win_rate5 = hdata.get('homeWinRate5') or hdata.get('formPct') or 0.35
     away_win_rate5 = adata.get('awayWinRate5') or adata.get('formPct') or 0.28
+    pi_home = hdata.get('piHome') or 0.0
+    pi_away = adata.get('piAway') or 0.0
+    pi_diff = pi_home - pi_away
+    rating_goal_edge = ((hdata.get('homeAttackRating') or gf_h) + (adata.get('awayDefenseRating') or ga_a)
+                        - (adata.get('awayAttackRating') or gf_a) - (hdata.get('homeDefenseRating') or ga_h))
+    gap_shot_edge = ((hdata.get('homeShotForRating') or shots_h) + (adata.get('awayShotAgainstRating') or shots_a)
+                     - (adata.get('awayShotForRating') or shots_a) - (hdata.get('homeShotAgainstRating') or shots_h))
+    gap_shot_allowed_edge = (adata.get('awayShotAgainstRating') or shots_h) - (hdata.get('homeShotAgainstRating') or shots_a)
     xg_h    = hdata.get('xgHomePg')  or gf_h
     xg_a    = adata.get('xgAwayPg')  or gf_a
     xga_h   = hdata.get('xgaHomePg') or ga_h   # xG conceded by home team at home
@@ -785,7 +793,9 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
             market_home_away_gap, market_draw_gap, market_fav_prob,
             shots_h, shots_a, corn_h, corn_a, corna_h, corna_a,
             foul_h, foul_a, ycard_h, ycard_a, rcard_h, rcard_a,
-            ref_card_pg, home_win_rate5, away_win_rate5]
+            ref_card_pg, home_win_rate5, away_win_rate5,
+            pi_home, pi_away, pi_diff, rating_goal_edge,
+            gap_shot_edge, gap_shot_allowed_edge]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _stat_num(value):
@@ -849,6 +859,10 @@ def _dc_draw_prob(lh, la, rho, max_g=7):
         return 1.0
     return sum(_poisson_pmf(k, lh) * _poisson_pmf(k, la) * _tau(k, k)
                for k in range(max_g + 1))
+
+def _signed_log_error(actual, expected):
+    err = actual - expected
+    return math.copysign(math.log1p(abs(err)), err)
 
 def _match_probs_dc(lh, la, rho=-0.13, max_g=7):
     """Dixon-Coles corrected 1X2 probabilities (increases draw vs plain Poisson)."""
@@ -1830,8 +1844,25 @@ def build_teamstats(comp):
             return per_team[key]
 
         referees = {}
+        pi_ratings = {}
+        dyn_ratings = {}
+        def pi_for(tid):
+            key = str(tid)
+            if key not in pi_ratings:
+                pi_ratings[key] = {'home': 0.0, 'away': 0.0}
+            return pi_ratings[key]
+        def dyn_for(tid):
+            key = str(tid)
+            if key not in dyn_ratings:
+                dyn_ratings[key] = {
+                    'h_att': 1.30, 'h_def': 1.10,
+                    'a_att': 1.10, 'a_def': 1.20,
+                    'h_shot_for': 12.0, 'h_shot_against': 10.5,
+                    'a_shot_for': 10.5, 'a_shot_against': 12.0,
+                }
+            return dyn_ratings[key]
 
-        for fx in finished:
+        for fx in sorted(finished, key=lambda x: ((x.get('fixture') or {}).get('date') or '')):
             fixture = fx.get('fixture') or {}
             teams   = fx.get('teams')   or {}
             score   = fx.get('score')   or {}
@@ -1913,6 +1944,26 @@ def build_teamstats(comp):
 
             apply(hentry, stats_by_team.get(str(hid), {}), stats_by_team.get(str(aid), {}), 'home')
             apply(aentry, stats_by_team.get(str(aid), {}), stats_by_team.get(str(hid), {}), 'away')
+            hdr = dyn_for(hid); adr = dyn_for(aid)
+            hpi = pi_for(hid); api = pi_for(aid)
+            pi_step = 0.08 * _signed_log_error((hg or 0) - (ag or 0), hpi['home'] - api['away'])
+            hpi['home'] += pi_step
+            hpi['away'] += 0.35 * pi_step
+            api['away'] -= pi_step
+            api['home'] -= 0.35 * pi_step
+            alpha = 0.12
+            hdr['h_att'] += alpha * ((hg or 0) - hdr['h_att'])
+            hdr['h_def'] += alpha * ((ag or 0) - hdr['h_def'])
+            adr['a_att'] += alpha * ((ag or 0) - adr['a_att'])
+            adr['a_def'] += alpha * ((hg or 0) - adr['a_def'])
+            hshots = _stat_num((stats_by_team.get(str(hid), {}) or {}).get('Total Shots'))
+            ashots = _stat_num((stats_by_team.get(str(aid), {}) or {}).get('Total Shots'))
+            if hshots is not None:
+                hdr['h_shot_for'] += alpha * (hshots - hdr['h_shot_for'])
+                adr['a_shot_against'] += alpha * (hshots - adr['a_shot_against'])
+            if ashots is not None:
+                adr['a_shot_for'] += alpha * (ashots - adr['a_shot_for'])
+                hdr['h_shot_against'] += alpha * (ashots - hdr['h_shot_against'])
 
             ref = (fixture.get('referee') or '').split(',')[0].strip()
             hy = _stat_num((stats_by_team.get(str(hid), {}) or {}).get('Yellow Cards')) or 0
@@ -1942,6 +1993,8 @@ def build_teamstats(comp):
         for row in teams_in_league:
             team = row['team']; tid = str(team['id']); tname = team['name']
             s = per_team.get(tid) or ensure_team(tid, tname)
+            pi = pi_for(tid)
+            dyn = dyn_for(tid)
             g = max(1, s['games'])
             recent = sorted(s.get('recent') or [], key=lambda x: x.get('date') or '', reverse=True)[:5]
             entry = {
@@ -1979,6 +2032,16 @@ def build_teamstats(comp):
                 'ycAwayPg':    avg(s['away_yc'], s['away_yc_n']),
                 'homeWinRate5': recent_win_rate(s.get('recent') or [], 'home'),
                 'awayWinRate5': recent_win_rate(s.get('recent') or [], 'away'),
+                'piHome': round(pi['home'], 4),
+                'piAway': round(pi['away'], 4),
+                'homeAttackRating': round(dyn['h_att'], 3),
+                'homeDefenseRating': round(dyn['h_def'], 3),
+                'awayAttackRating': round(dyn['a_att'], 3),
+                'awayDefenseRating': round(dyn['a_def'], 3),
+                'homeShotForRating': round(dyn['h_shot_for'], 3),
+                'homeShotAgainstRating': round(dyn['h_shot_against'], 3),
+                'awayShotForRating': round(dyn['a_shot_for'], 3),
+                'awayShotAgainstRating': round(dyn['a_shot_against'], 3),
                 'sampleCounts': {
                     'games': g,
                     'xg': s['xg_n'],

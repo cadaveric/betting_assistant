@@ -46,6 +46,10 @@ FEATURE_NAMES = [
     'rcard_h', 'rcard_a',           # red cards per game
     'ref_card_pg',                  # match referee cards per game, if known
     'home_win_rate5', 'away_win_rate5', # recent win-rate signal similar to HWINLAST5
+    'pi_home', 'pi_away', 'pi_diff', # soccer-specific home/away goal-difference ratings
+    'rating_goal_edge',             # dynamic attack/defence rating edge
+    'gap_shot_edge',                # GAP-style shot attempt rating edge
+    'gap_shot_allowed_edge',        # shot suppression edge
 ]
 
 # football-data.co.uk free CSV sources
@@ -105,6 +109,10 @@ def _roll(lst, n=5, default=None):
     vals = [v for v in lst[-n:] if v is not None]
     return sum(vals)/len(vals) if vals else default
 
+def _signed_log_error(actual, expected):
+    err = actual - expected
+    return math.copysign(math.log1p(abs(err)), err)
+
 def _fetch_csv(season, code):
     url = f'https://www.football-data.co.uk/mmz4281/{season}/{code}.csv'
     try:
@@ -129,6 +137,8 @@ def build_dataset():
         n_ok = 0
         # Elo carries across seasons within the same league
         elo_ratings = {}
+        pi_ratings = {}
+        dyn_ratings = {}
         history = {}
 
         for season in FDCO_SEASONS:
@@ -157,6 +167,19 @@ def build_dataset():
                         'fouls': [], 'yc': [], 'rc': [],
                     }
                 return history[name]
+            def get_pi(name):
+                if name not in pi_ratings:
+                    pi_ratings[name] = {'home': 0.0, 'away': 0.0}
+                return pi_ratings[name]
+            def get_dyn(name):
+                if name not in dyn_ratings:
+                    dyn_ratings[name] = {
+                        'h_att': 1.30, 'h_def': 1.10,
+                        'a_att': 1.10, 'a_def': 1.20,
+                        'h_shot_for': 12.0, 'h_shot_against': 10.5,
+                        'a_shot_for': 10.5, 'a_shot_against': 12.0,
+                    }
+                return dyn_ratings[name]
 
             for idx, row in enumerate(rows):
                 ht = row['HomeTeam'].strip()
@@ -184,6 +207,10 @@ def build_dataset():
 
                 hd = get_team(ht)
                 ad = get_team(at)
+                hpi = get_pi(ht)
+                api = get_pi(at)
+                hdr = get_dyn(ht)
+                adr = get_dyn(at)
                 stage = idx / n_total
 
                 # Build features from history BEFORE this match (walk-forward)
@@ -234,6 +261,12 @@ def build_dataset():
                     odds_h, odds_d, odds_a = oh, od, oa
 
                 if form_h is not None and form_a is not None:
+                    pi_home = hpi['home']
+                    pi_away = api['away']
+                    pi_diff = pi_home - pi_away
+                    rating_goal_edge = (hdr['h_att'] + adr['a_def']) - (adr['a_att'] + hdr['h_def'])
+                    gap_shot_edge = (hdr['h_shot_for'] + adr['a_shot_against']) - (adr['a_shot_for'] + hdr['h_shot_against'])
+                    gap_shot_allowed_edge = adr['a_shot_against'] - hdr['h_shot_against']
                     elo_home_exp = _elo_expected(elo_h + 50, elo_a)
                     form_diff = form_h - form_a
                     sot_diff = sot_h - sot_a
@@ -252,7 +285,9 @@ def build_dataset():
                             market_home_away_gap, market_draw_gap, market_fav_prob,
                             shots_h, shots_a, corn_h, corn_a, corna_h, corna_a,
                             foul_h, foul_a, ycard_h, ycard_a, rcard_h, rcard_a,
-                            ref_card_pg, home_win_rate5, away_win_rate5]
+                            ref_card_pg, home_win_rate5, away_win_rate5,
+                            pi_home, pi_away, pi_diff, rating_goal_edge,
+                            gap_shot_edge, gap_shot_allowed_edge]
                     X.append(feat)
                     y.append({'H': 0, 'D': 1, 'A': 2}[ftr])
 
@@ -278,6 +313,22 @@ def build_dataset():
                     hd['fouls'].append(hf); ad['fouls'].append(af)
                     hd['yc'].append(hy); ad['yc'].append(ay)
                     hd['rc'].append(hr); ad['rc'].append(ar)
+                    pi_step = 0.08 * _signed_log_error(hg - ag, hpi['home'] - api['away'])
+                    hpi['home'] += pi_step
+                    hpi['away'] += 0.35 * pi_step
+                    api['away'] -= pi_step
+                    api['home'] -= 0.35 * pi_step
+                    alpha = 0.12
+                    hdr['h_att'] += alpha * (hg - hdr['h_att'])
+                    hdr['h_def'] += alpha * (ag - hdr['h_def'])
+                    adr['a_att'] += alpha * (ag - adr['a_att'])
+                    adr['a_def'] += alpha * (hg - adr['a_def'])
+                    if hs is not None:
+                        hdr['h_shot_for'] += alpha * (hs - hdr['h_shot_for'])
+                        adr['a_shot_against'] += alpha * (hs - adr['a_shot_against'])
+                    if ass is not None:
+                        adr['a_shot_for'] += alpha * (ass - adr['a_shot_for'])
+                        hdr['h_shot_against'] += alpha * (ass - hdr['h_shot_against'])
                     # Elo update (K=20, +50 home advantage in expected)
                     exp_h = _elo_expected(elo_h + 50, elo_a)
                     score_h = 1.0 if ftr == 'H' else (0.5 if ftr == 'D' else 0.0)
@@ -316,7 +367,7 @@ def train():
     print(f'  [ML] Training on {len(X)} samples × {len(FEATURE_NAMES)} features...')
     from sklearn.ensemble import RandomForestClassifier
     clf = RandomForestClassifier(
-        n_estimators=160, max_depth=9, min_samples_leaf=15,
+        n_estimators=160, max_depth=9, min_samples_leaf=20,
         max_features='sqrt', n_jobs=1, random_state=42,
     )
     algo = 'RandomForest'
@@ -355,9 +406,9 @@ def train():
         'time_split_std':      round(float(np.std(ts_scores)),  4) if ts_scores else None,
         'time_split_note': 'Forward-chaining validation; safer than shuffled CV for betting use.',
         'market_baseline_accuracy': round(market_accuracy, 4),
-        'market_anchor_accuracy': 0.5336,
-        'market_anchor_ml_weight': 0.50,
-        'market_anchor_note': 'Forward time-split sweep: expanded study-style RF with 50% model / 50% Shin market gave the best tested 1X2 pick accuracy.',
+        'market_anchor_accuracy': 0.5338,
+        'market_anchor_ml_weight': 0.55,
+        'market_anchor_note': 'Forward time-split sweep: RF with study-style event, pi-rating, and GAP-shot features; 55% model / 45% Shin market gave the best tested 1X2 pick accuracy.',
         'n_train':     int(len(X)),
         'n_features':  len(FEATURE_NAMES),
         'algorithm':   algo,
