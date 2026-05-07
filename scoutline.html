@@ -587,7 +587,6 @@ select:focus,input:focus,.pred-team-sel:focus,.pred-opt-sel:focus{
   .topbar-right{width:100%}
   #lgSelWrap{width:100%;min-width:0!important}
   .match-top{grid-template-columns:1fr;gap:14px}
-  .center-col{order:-1}
 }
 html,body{overflow-x:hidden}
 #pg-odds,#odds-body{width:100%;max-width:100%;min-width:0}
@@ -1282,6 +1281,9 @@ select,input[type=text],input[type=number]{
     display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;
     gap:10px!important;align-items:center!important;
     margin:0 -12px 14px!important;padding:12px!important;
+    /* Remove backdrop-filter on mobile: it creates a containing block for
+       position:fixed descendants in Chrome Android, breaking the dropdown sheet */
+    backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
   }
   .topbar .logo-mark{grid-column:1;grid-row:1}
   .topbar>div:nth-child(2){grid-column:2;grid-row:1;min-width:0}
