@@ -727,10 +727,13 @@ def _start_nhl_training():
             print(f'  [NHL-ML] Training error: {e}')
     threading.Thread(target=worker, daemon=True).start()
 
-_ML_LEAGUE_ORDER = ['PL','ELC','BL1','PD','SA','FL1','DED','PPL']
+_ML_LEAGUE_ORDER = [
+    # Must match train_model.FDCO_LEAGUES insertion order exactly.
+    'PL', 'ELC', 'BL1', 'PD', 'SA', 'FL1', 'DED', 'PPL', 'B1', 'SC0', 'T1', 'G1',
+]
 
 # Must match len(train_model.FEATURE_NAMES); stale pkl triggers auto-retrain.
-_ML_FEATURE_COUNT = 20
+_ML_FEATURE_COUNT = 28
 
 def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
                  has_odds=False, overround=0.0, elo_diff=0.0):
@@ -749,10 +752,20 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
     xg_a    = adata.get('xgAwayPg')  or gf_a
     xga_h   = hdata.get('xgaHomePg') or ga_h   # xG conceded by home team at home
     xga_a   = adata.get('xgaAwayPg') or ga_a   # xG conceded by away team away
+    elo_home_exp = 1.0 / (1.0 + 10.0 ** (-(float(elo_diff) + 50.0) / 400.0))
+    form_diff = form_h - form_a
+    sot_diff = sot_h - sot_a
+    goal_edge = (gf_h + ga_a) - (gf_a + ga_h)
+    xg_edge = (xg_h + xga_a) - (xg_a + xga_h)
+    market_home_away_gap = shin_h - shin_a
+    market_draw_gap = shin_d - ((shin_h + shin_a) / 2.0)
+    market_fav_prob = max(shin_h, shin_d, shin_a)
     return [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
             xg_h, xg_a, xga_h, xga_a,
             shin_h, shin_d, shin_a, float(has_odds), float(overround),
-            _season_stage(), lg_norm, float(elo_diff)]
+            _season_stage(), lg_norm, float(elo_diff),
+            elo_home_exp, form_diff, sot_diff, goal_edge, xg_edge,
+            market_home_away_gap, market_draw_gap, market_fav_prob]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _stat_num(value):
@@ -3385,12 +3398,34 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             import numpy as np
             proba = _ml_model.predict_proba(np.array([feat], dtype=np.float32))[0]
+            raw = [float(proba[0]), float(proba[1]), float(proba[2])]
+            final = raw
+            ensemble = 'ml'
+            ml_weight = 1.0
+            if has_odds and shin_h > 0 and shin_d > 0 and shin_a > 0:
+                market = [shin_h, shin_d, shin_a]
+                mt = sum(market)
+                if mt > 0:
+                    market = [p / mt for p in market]
+                    # Forward time-split testing favours market-anchored picks:
+                    # 15% ML / 85% Shin market was best for 1X2 accuracy; raw ML
+                    # remains exposed for audit, but live probability uses the blend.
+                    ml_weight = 0.15
+                    final = [raw[i] * ml_weight + market[i] * (1.0 - ml_weight) for i in range(3)]
+                    ensemble = 'market_anchor_v1'
             self.send_json({
                 'available': True,
-                'home': round(float(proba[0]) * 100, 1),
-                'draw': round(float(proba[1]) * 100, 1),
-                'away': round(float(proba[2]) * 100, 1),
+                'home': round(final[0] * 100, 1),
+                'draw': round(final[1] * 100, 1),
+                'away': round(final[2] * 100, 1),
+                'rawHome': round(raw[0] * 100, 1),
+                'rawDraw': round(raw[1] * 100, 1),
+                'rawAway': round(raw[2] * 100, 1),
+                'ensemble': ensemble,
+                'mlWeight': ml_weight,
+                'blendWeight': 0.80 if ensemble == 'market_anchor_v1' else 0.42,
                 'accuracy': _ml_meta.get('cv_accuracy'),
+                'ensembleAccuracy': _ml_meta.get('market_anchor_accuracy'),
                 'n_train':  _ml_meta.get('n_train'),
             })
         except Exception as e:

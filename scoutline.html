@@ -4303,14 +4303,14 @@ async function runDeepPred(){
       p.hElo, p.aElo, overround
     );
     if(ml?.home!=null){
-      const wML=p.hasOdds?0.65:0.42;
+      const wML=ml.blendWeight??(p.hasOdds?0.65:0.42);
       const wP=1-wML;
       const bH=Math.round(ml.home*wML+p.pH*wP);
       const bD=Math.round(ml.draw*wML+p.pD*wP);
       const bA=100-bH-bD;
       const newConf=Math.max(bH,bD,bA);
       p={...p,pH:bH,pD:bD,pA:Math.max(0,bA),conf:newConf,
-          mlUsed:true,mlAccuracy:ml.accuracy,mlN:ml.n_train};
+          mlUsed:true,mlAccuracy:ml.ensembleAccuracy||ml.accuracy,mlN:ml.n_train,mlEnsemble:ml.ensemble};
     }
   }catch(e){}
 
