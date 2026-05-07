@@ -24,6 +24,7 @@ FEATURE_NAMES = [
     'xg_h',   'xg_a',            # attack xG per game (venue-split; fallback=goals)
     'xga_h',  'xga_a',           # defensive xGA conceded per game (venue-split)
     'shin_h', 'shin_d', 'shin_a', # Shin-corrected market probs (0.44/0.27/0.29 default)
+    'odds_h', 'odds_d', 'odds_a', # raw decimal 1X2 odds, matching the study's B365H/D/A signal
     'has_odds',                    # 1 if odds available, else 0
     'overround',                   # bookmaker margin (sum 1/odds); 0 if no odds; lower=sharper market
     'season_stage',                # fraction of season elapsed (0–1)
@@ -37,6 +38,14 @@ FEATURE_NAMES = [
     'market_home_away_gap',        # Shin home − away
     'market_draw_gap',             # Shin draw − average side probability
     'market_fav_prob',             # strongest Shin market probability
+    'shots_h', 'shots_a',           # total shots per game (venue-split)
+    'corn_h', 'corn_a',             # corners for per game (venue-split)
+    'corn_allowed_h', 'corn_allowed_a', # corners allowed per game (venue-split)
+    'foul_h', 'foul_a',             # fouls per game
+    'ycard_h', 'ycard_a',           # yellow cards per game
+    'rcard_h', 'rcard_a',           # red cards per game
+    'ref_card_pg',                  # match referee cards per game, if known
+    'home_win_rate5', 'away_win_rate5', # recent win-rate signal similar to HWINLAST5
 ]
 
 # football-data.co.uk free CSV sources
@@ -139,9 +148,13 @@ def build_dataset():
             def get_team(name):
                 if name not in history:
                     history[name] = {
-                        'res': [],
-                        'h_gf': [], 'h_ga': [], 'h_sot': [], 'h_xg': [], 'h_xga': [],
-                        'a_gf': [], 'a_ga': [], 'a_sot': [], 'a_xg': [], 'a_xga': [],
+                        'res': [], 'wins': [],
+                        'h_wins': [], 'a_wins': [],
+                        'h_gf': [], 'h_ga': [], 'h_sot': [], 'h_shots': [],
+                        'h_xg': [], 'h_xga': [], 'h_corn': [], 'h_corna': [],
+                        'a_gf': [], 'a_ga': [], 'a_sot': [], 'a_shots': [],
+                        'a_xg': [], 'a_xga': [], 'a_corn': [], 'a_corna': [],
+                        'fouls': [], 'yc': [], 'rc': [],
                     }
                 return history[name]
 
@@ -151,8 +164,18 @@ def build_dataset():
                 ftr = row['FTR'].strip()
                 hg  = _safe_float(row.get('FTHG'))
                 ag  = _safe_float(row.get('FTAG'))
+                hs  = _safe_float(row.get('HS'))
+                ass = _safe_float(row.get('AS'))
                 hst = _safe_float(row.get('HST'))
                 ast = _safe_float(row.get('AST'))
+                hc  = _safe_float(row.get('HC'))
+                ac  = _safe_float(row.get('AC'))
+                hf  = _safe_float(row.get('HF'))
+                af  = _safe_float(row.get('AF'))
+                hy  = _safe_float(row.get('HY'))
+                ay  = _safe_float(row.get('AY'))
+                hr  = _safe_float(row.get('HR'))
+                ar  = _safe_float(row.get('AR'))
                 # xG available from fdco since ~2014; HSxG/ASxG columns
                 hxg = _safe_float(row.get('HSxG')) or _safe_float(row.get('xG_H'))
                 axg = _safe_float(row.get('ASxG')) or _safe_float(row.get('xG_A'))
@@ -175,10 +198,23 @@ def build_dataset():
 
                 sot_h = _roll(hd['h_sot'], default=4.0)
                 sot_a = _roll(ad['a_sot'], default=4.0)
+                shots_h = _roll(hd['h_shots'], default=12.0)
+                shots_a = _roll(ad['a_shots'], default=10.5)
                 gf_h  = _roll(hd['h_gf'],  default=1.3)
                 ga_h  = _roll(hd['h_ga'],  default=1.1)
                 gf_a  = _roll(ad['a_gf'],  default=1.1)
                 ga_a  = _roll(ad['a_ga'],  default=1.2)
+                corn_h = _roll(hd['h_corn'], default=5.0)
+                corn_a = _roll(ad['a_corn'], default=4.5)
+                corna_h = _roll(hd['h_corna'], default=4.5)
+                corna_a = _roll(ad['a_corna'], default=5.0)
+                foul_h = _roll(hd['fouls'], default=11.0)
+                foul_a = _roll(ad['fouls'], default=11.5)
+                ycard_h = _roll(hd['yc'], default=1.8)
+                ycard_a = _roll(ad['yc'], default=2.0)
+                rcard_h = _roll(hd['rc'], default=0.08)
+                rcard_a = _roll(ad['rc'], default=0.10)
+                ref_card_pg = (ycard_h + ycard_a + rcard_h + rcard_a)
                 # xG falls back to actual goals when not in CSV
                 xg_h  = _roll(hd['h_xg'],  default=None) or gf_h
                 xg_a  = _roll(ad['a_xg'],  default=None) or gf_a
@@ -193,6 +229,9 @@ def build_dataset():
                 has_odds = 1.0 if sh is not None else 0.0
                 if sh is None:
                     sh, sd, sa = 0.44, 0.27, 0.29
+                    odds_h, odds_d, odds_a = 0.0, 0.0, 0.0
+                else:
+                    odds_h, odds_d, odds_a = oh, od, oa
 
                 if form_h is not None and form_a is not None:
                     elo_home_exp = _elo_expected(elo_h + 50, elo_a)
@@ -203,11 +242,17 @@ def build_dataset():
                     market_home_away_gap = sh - sa
                     market_draw_gap = sd - ((sh + sa) / 2)
                     market_fav_prob = max(sh, sd, sa)
+                    home_win_rate5 = _roll(hd['h_wins'], default=0.35)
+                    away_win_rate5 = _roll(ad['a_wins'], default=0.28)
                     feat = [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
                             xg_h, xg_a, xga_h, xga_a,
-                            sh, sd, sa, has_odds, overround, stage, lg_norm, elo_diff,
+                            sh, sd, sa, odds_h, odds_d, odds_a,
+                            has_odds, overround, stage, lg_norm, elo_diff,
                             elo_home_exp, form_diff, sot_diff, goal_edge, xg_edge,
-                            market_home_away_gap, market_draw_gap, market_fav_prob]
+                            market_home_away_gap, market_draw_gap, market_fav_prob,
+                            shots_h, shots_a, corn_h, corn_a, corna_h, corna_a,
+                            foul_h, foul_a, ycard_h, ycard_a, rcard_h, rcard_a,
+                            ref_card_pg, home_win_rate5, away_win_rate5]
                     X.append(feat)
                     y.append({'H': 0, 'D': 1, 'A': 2}[ftr])
 
@@ -215,13 +260,24 @@ def build_dataset():
                 if hg is not None and ag is not None:
                     h_pts = 3 if hg > ag else (1 if hg == ag else 0)
                     a_pts = 3 if ag > hg else (1 if ag == hg else 0)
+                    h_win = 1.0 if hg > ag else 0.0
+                    a_win = 1.0 if ag > hg else 0.0
                     hd['res'].append(h_pts); ad['res'].append(a_pts)
+                    hd['wins'].append(h_win); ad['wins'].append(a_win)
+                    hd['h_wins'].append(h_win); ad['a_wins'].append(a_win)
                     hd['h_gf'].append(hg); hd['h_ga'].append(ag); hd['h_sot'].append(hst)
+                    hd['h_shots'].append(hs)
+                    hd['h_corn'].append(hc); hd['h_corna'].append(ac)
                     hd['h_xg'].append(hxg if hxg is not None else hg)
                     hd['h_xga'].append(axg if axg is not None else ag)   # xG conceded at home
                     ad['a_gf'].append(ag); ad['a_ga'].append(hg); ad['a_sot'].append(ast)
+                    ad['a_shots'].append(ass)
+                    ad['a_corn'].append(ac); ad['a_corna'].append(hc)
                     ad['a_xg'].append(axg if axg is not None else ag)
                     ad['a_xga'].append(hxg if hxg is not None else hg)  # xG conceded away
+                    hd['fouls'].append(hf); ad['fouls'].append(af)
+                    hd['yc'].append(hy); ad['yc'].append(ay)
+                    hd['rc'].append(hr); ad['rc'].append(ar)
                     # Elo update (K=20, +50 home advantage in expected)
                     exp_h = _elo_expected(elo_h + 50, elo_a)
                     score_h = 1.0 if ftr == 'H' else (0.5 if ftr == 'D' else 0.0)
@@ -260,7 +316,7 @@ def train():
     print(f'  [ML] Training on {len(X)} samples × {len(FEATURE_NAMES)} features...')
     from sklearn.ensemble import RandomForestClassifier
     clf = RandomForestClassifier(
-        n_estimators=120, max_depth=7, min_samples_leaf=15,
+        n_estimators=160, max_depth=9, min_samples_leaf=15,
         max_features='sqrt', n_jobs=1, random_state=42,
     )
     algo = 'RandomForest'
@@ -299,9 +355,9 @@ def train():
         'time_split_std':      round(float(np.std(ts_scores)),  4) if ts_scores else None,
         'time_split_note': 'Forward-chaining validation; safer than shuffled CV for betting use.',
         'market_baseline_accuracy': round(market_accuracy, 4),
-        'market_anchor_accuracy': 0.5335,
-        'market_anchor_ml_weight': 0.20,
-        'market_anchor_note': 'Forward time-split sweep: RF with 20% model / 80% Shin market gave the best 1X2 pick accuracy among tested deployed blends.',
+        'market_anchor_accuracy': 0.5336,
+        'market_anchor_ml_weight': 0.50,
+        'market_anchor_note': 'Forward time-split sweep: expanded study-style RF with 50% model / 50% Shin market gave the best tested 1X2 pick accuracy.',
         'n_train':     int(len(X)),
         'n_features':  len(FEATURE_NAMES),
         'algorithm':   algo,

@@ -1,15 +1,15 @@
 {
-  "cv_accuracy": 0.5287,
-  "cv_std": 0.0007,
-  "time_split_accuracy": 0.5318,
-  "time_split_std": 0.014,
+  "cv_accuracy": 0.5295,
+  "cv_std": 0.0017,
+  "time_split_accuracy": 0.5319,
+  "time_split_std": 0.0137,
   "time_split_note": "Forward-chaining validation; safer than shuffled CV for betting use.",
   "market_baseline_accuracy": 0.5296,
-  "market_anchor_accuracy": 0.5335,
-  "market_anchor_ml_weight": 0.2,
-  "market_anchor_note": "Forward time-split sweep: RF with 20% model / 80% Shin market gave the best 1X2 pick accuracy among tested deployed blends.",
+  "market_anchor_accuracy": 0.5336,
+  "market_anchor_ml_weight": 0.5,
+  "market_anchor_note": "Forward time-split sweep: expanded study-style RF with 50% model / 50% Shin market gave the best tested 1X2 pick accuracy.",
   "n_train": 59904,
-  "n_features": 28,
+  "n_features": 46,
   "algorithm": "RandomForest",
   "feature_names": [
     "form_h",
@@ -27,6 +27,9 @@
     "shin_h",
     "shin_d",
     "shin_a",
+    "odds_h",
+    "odds_d",
+    "odds_a",
     "has_odds",
     "overround",
     "season_stage",
@@ -39,12 +42,27 @@
     "xg_edge",
     "market_home_away_gap",
     "market_draw_gap",
-    "market_fav_prob"
+    "market_fav_prob",
+    "shots_h",
+    "shots_a",
+    "corn_h",
+    "corn_a",
+    "corn_allowed_h",
+    "corn_allowed_a",
+    "foul_h",
+    "foul_a",
+    "ycard_h",
+    "ycard_a",
+    "rcard_h",
+    "rcard_a",
+    "ref_card_pg",
+    "home_win_rate5",
+    "away_win_rate5"
   ],
   "outcome_dist": {
     "H": 26815,
     "D": 15105,
     "A": 17984
   },
-  "built": "2026-05-07T11:26:26.540878+00:00"
+  "built": "2026-05-07T12:10:06.041004+00:00"
 }

@@ -2196,13 +2196,14 @@ function _seasonStage(){
 }
 
 // Call /ml-predict with features; returns {home, draw, away, accuracy} or null.
-async function fetchMLPredict(homeId, awayId, comp, shinH, shinD, shinA, hasOdds, eloH, eloA, overround){
+async function fetchMLPredict(homeId, awayId, comp, shinH, shinD, shinA, hasOdds, eloH, eloA, overround, oddsH=0, oddsD=0, oddsA=0){
   try{
     const p=new URLSearchParams({
       homeId,awayId,comp,
       shinH:(shinH||0).toFixed(3),shinD:(shinD||0).toFixed(3),shinA:(shinA||0).toFixed(3),
       hasOdds:hasOdds?'1':'0',
       overround:((overround||0)).toFixed(4),
+      oddsH:((oddsH||0)).toFixed(3),oddsD:((oddsD||0)).toFixed(3),oddsA:((oddsA||0)).toFixed(3),
       eloH:Math.round(eloH||1500),eloA:Math.round(eloA||1500),
     });
     const r=await fetch('/ml-predict?'+p,{signal:AbortSignal.timeout(3000)});
@@ -4332,7 +4333,7 @@ async function runDeepPred(){
     const ml=await fetchMLPredict(
       hRow.team.id, aRow.team.id, lg,
       p.implH/100, p.implD/100, p.implA/100, p.hasOdds,
-      p.hElo, p.aElo, overround
+      p.hElo, p.aElo, overround, oddsH, oddsD, oddsA
     );
     if(ml?.home!=null){
       const wML=ml.blendWeight??(p.hasOdds?0.65:0.42);

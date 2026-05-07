@@ -733,10 +733,11 @@ _ML_LEAGUE_ORDER = [
 ]
 
 # Must match len(train_model.FEATURE_NAMES); stale pkl triggers auto-retrain.
-_ML_FEATURE_COUNT = 28
+_ML_FEATURE_COUNT = 46
 
 def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
-                 has_odds=False, overround=0.0, elo_diff=0.0):
+                 has_odds=False, overround=0.0, elo_diff=0.0,
+                 odds_h=0.0, odds_d=0.0, odds_a=0.0):
     """Build ML feature vector matching train_model.FEATURE_NAMES order."""
     lg_idx  = _ML_LEAGUE_ORDER.index(comp) if comp in _ML_LEAGUE_ORDER else 0
     lg_norm = lg_idx / max(1, len(_ML_LEAGUE_ORDER) - 1)
@@ -744,10 +745,25 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
     form_a  = adata.get('formPct') or 0.45
     sot_h   = hdata.get('sotHomePg') or hdata.get('sotPg') or 4.0
     sot_a   = adata.get('sotAwayPg') or adata.get('sotPg') or 4.0
+    shots_h = hdata.get('shotsHomePg') or hdata.get('shotsPg') or 12.0
+    shots_a = adata.get('shotsAwayPg') or adata.get('shotsPg') or 10.5
     gf_h    = hdata.get('gfHomePg')  or hdata.get('goals_pg') or 1.3
     ga_h    = hdata.get('gaHomePg')  or hdata.get('goals_ag_pg') or 1.1
     gf_a    = adata.get('gfAwayPg')  or adata.get('goals_pg') or 1.1
     ga_a    = adata.get('gaAwayPg')  or adata.get('goals_ag_pg') or 1.2
+    corn_h  = hdata.get('cornHomePg') or hdata.get('cornPg') or 5.0
+    corn_a  = adata.get('cornAwayPg') or adata.get('cornPg') or 4.5
+    corna_h = hdata.get('cornAllowedHomePg') or hdata.get('cornAllowedPg') or 4.5
+    corna_a = adata.get('cornAllowedAwayPg') or adata.get('cornAllowedPg') or 5.0
+    foul_h  = hdata.get('foulPg') or 11.0
+    foul_a  = adata.get('foulPg') or 11.5
+    ycard_h = hdata.get('ycHomePg') or hdata.get('ycardPg') or 1.8
+    ycard_a = adata.get('ycAwayPg') or adata.get('ycardPg') or 2.0
+    rcard_h = hdata.get('rcardPg') or 0.08
+    rcard_a = adata.get('rcardPg') or 0.10
+    ref_card_pg = hdata.get('refCardPg') or adata.get('refCardPg') or (ycard_h + ycard_a + rcard_h + rcard_a)
+    home_win_rate5 = hdata.get('homeWinRate5') or hdata.get('formPct') or 0.35
+    away_win_rate5 = adata.get('awayWinRate5') or adata.get('formPct') or 0.28
     xg_h    = hdata.get('xgHomePg')  or gf_h
     xg_a    = adata.get('xgAwayPg')  or gf_a
     xga_h   = hdata.get('xgaHomePg') or ga_h   # xG conceded by home team at home
@@ -762,10 +778,14 @@ def _ml_features(hdata, adata, comp, shin_h=0.44, shin_d=0.27, shin_a=0.29,
     market_fav_prob = max(shin_h, shin_d, shin_a)
     return [form_h, form_a, sot_h, sot_a, gf_h, ga_h, gf_a, ga_a,
             xg_h, xg_a, xga_h, xga_a,
-            shin_h, shin_d, shin_a, float(has_odds), float(overround),
+            shin_h, shin_d, shin_a, odds_h, odds_d, odds_a,
+            float(has_odds), float(overround),
             _season_stage(), lg_norm, float(elo_diff),
             elo_home_exp, form_diff, sot_diff, goal_edge, xg_edge,
-            market_home_away_gap, market_draw_gap, market_fav_prob]
+            market_home_away_gap, market_draw_gap, market_fav_prob,
+            shots_h, shots_a, corn_h, corn_a, corna_h, corna_a,
+            foul_h, foul_a, ycard_h, ycard_a, rcard_h, rcard_a,
+            ref_card_pg, home_win_rate5, away_win_rate5]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _stat_num(value):
@@ -1797,10 +1817,12 @@ def build_teamstats(comp):
                     'away_gf': 0.0, 'away_ga': 0.0,
                     'home_xg': 0.0, 'home_xga': 0.0, 'home_xg_n': 0,
                     'away_xg': 0.0, 'away_xga': 0.0, 'away_xg_n': 0,
+                    'home_shots': 0.0, 'home_shots_n': 0, 'away_shots': 0.0, 'away_shots_n': 0,
                     'home_sot': 0.0, 'home_sot_n': 0, 'away_sot': 0.0, 'away_sot_n': 0,
                     'home_corn': 0.0, 'home_corn_n': 0, 'away_corn': 0.0, 'away_corn_n': 0,
                     'home_corna': 0.0, 'home_corna_n': 0, 'away_corna': 0.0, 'away_corna_n': 0,
                     'home_yc': 0.0, 'home_yc_n': 0, 'away_yc': 0.0, 'away_yc_n': 0,
+                    'home_wins': 0.0, 'away_wins': 0.0,
                     'ht_g': 0.0, 'ht_n': 0, 'clean_sheets': 0,
                     'recent': [],
                     'ref_cards': 0.0, 'ref_games': 0,
@@ -1827,6 +1849,8 @@ def build_teamstats(comp):
             aentry['goals_f'] += ag; aentry['goals_a'] += hg
             hentry['home_games'] += 1; hentry['home_gf'] += hg; hentry['home_ga'] += ag
             aentry['away_games'] += 1; aentry['away_gf'] += ag; aentry['away_ga'] += hg
+            if hg > ag: hentry['home_wins'] += 1
+            if ag > hg: aentry['away_wins'] += 1
             if ag == 0: hentry['clean_sheets'] += 1
             if hg == 0: aentry['clean_sheets'] += 1
             ht = score.get('halftime') or {}
@@ -1866,6 +1890,7 @@ def build_teamstats(comp):
                 if venue == 'home':
                     if xg  is not None: entry['home_xg'] += xg; entry['home_xg_n'] += 1
                     if xga is not None: entry['home_xga'] += xga
+                    if shts is not None: entry['home_shots'] += shts; entry['home_shots_n'] += 1
                     if sot is not None: entry['home_sot'] += sot; entry['home_sot_n'] += 1
                     if corn is not None: entry['home_corn'] += corn; entry['home_corn_n'] += 1
                     if corna is not None: entry['home_corna'] += corna; entry['home_corna_n'] += 1
@@ -1873,6 +1898,7 @@ def build_teamstats(comp):
                 else:
                     if xg  is not None: entry['away_xg'] += xg; entry['away_xg_n'] += 1
                     if xga is not None: entry['away_xga'] += xga
+                    if shts is not None: entry['away_shots'] += shts; entry['away_shots_n'] += 1
                     if sot is not None: entry['away_sot'] += sot; entry['away_sot_n'] += 1
                     if corn is not None: entry['away_corn'] += corn; entry['away_corn_n'] += 1
                     if corna is not None: entry['away_corna'] += corna; entry['away_corna_n'] += 1
@@ -1906,6 +1932,11 @@ def build_teamstats(comp):
             vals = [_stat_num(x.get(key)) for x in sorted(items, key=lambda x: x.get('date') or '', reverse=True)[:n]]
             vals = [v for v in vals if v is not None]
             return round(sum(vals) / len(vals), 2) if vals else None
+        def recent_win_rate(items, venue, n=5):
+            rows = [x for x in sorted(items, key=lambda x: x.get('date') or '', reverse=True)
+                    if x.get('venue') == venue][:n]
+            if not rows: return None
+            return round(sum(1 for x in rows if (x.get('gf') or 0) > (x.get('ga') or 0)) / len(rows), 3)
 
         summary = {}; name_map = {}
         for row in teams_in_league:
@@ -1938,12 +1969,16 @@ def build_teamstats(comp):
                 'xgaAwayPg':   avg(s['away_xga'], s['away_xg_n']),
                 'sotHomePg':   avg(s['home_sot'], s['home_sot_n']),
                 'sotAwayPg':   avg(s['away_sot'], s['away_sot_n']),
+                'shotsHomePg': avg(s['home_shots'], s['home_shots_n']),
+                'shotsAwayPg': avg(s['away_shots'], s['away_shots_n']),
                 'cornHomePg':  avg(s['home_corn'], s['home_corn_n']),
                 'cornAwayPg':  avg(s['away_corn'], s['away_corn_n']),
                 'cornAllowedHomePg': avg(s['home_corna'], s['home_corna_n']),
                 'cornAllowedAwayPg': avg(s['away_corna'], s['away_corna_n']),
                 'ycHomePg':    avg(s['home_yc'], s['home_yc_n']),
                 'ycAwayPg':    avg(s['away_yc'], s['away_yc_n']),
+                'homeWinRate5': recent_win_rate(s.get('recent') or [], 'home'),
+                'awayWinRate5': recent_win_rate(s.get('recent') or [], 'away'),
                 'sampleCounts': {
                     'games': g,
                     'xg': s['xg_n'],
@@ -3378,6 +3413,9 @@ class Handler(SimpleHTTPRequestHandler):
             shin_a  = float(params.get('shinA', [0.29])[0])
             has_odds  = params.get('hasOdds',    ['0']  )[0] in ('1','true','yes')
             overround = float(params.get('overround', ['0.0'])[0])
+            odds_h    = float(params.get('oddsH', ['0.0'])[0])
+            odds_d    = float(params.get('oddsD', ['0.0'])[0])
+            odds_a    = float(params.get('oddsA', ['0.0'])[0])
             elo_h     = float(params.get('eloH', [1500])[0])
             elo_a     = float(params.get('eloA', [1500])[0])
             # Prefer rolling Elo if we have it (updated from graded matches)
@@ -3394,7 +3432,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not hdata or not adata:
             self.send_json({'available': False, 'reason': f'team stats not cached for {comp}'}); return
 
-        feat = _ml_features(hdata, adata, comp, shin_h, shin_d, shin_a, has_odds, overround, elo_diff)
+        feat = _ml_features(hdata, adata, comp, shin_h, shin_d, shin_a,
+                            has_odds, overround, elo_diff, odds_h, odds_d, odds_a)
         try:
             import numpy as np
             proba = _ml_model.predict_proba(np.array([feat], dtype=np.float32))[0]
@@ -3408,7 +3447,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if mt > 0:
                     market = [p / mt for p in market]
                     # Forward time-split testing favours market-anchored RF picks:
-                    # 20% ML / 80% Shin market was best for 1X2 accuracy; raw ML
+                    # expanded RF with 50% ML / 50% Shin market was best for 1X2 accuracy; raw ML
                     # remains exposed for audit, but live probability uses the blend.
                     ml_weight = float(_ml_meta.get('market_anchor_ml_weight') or 0.20)
                     final = [raw[i] * ml_weight + market[i] * (1.0 - ml_weight) for i in range(3)]
