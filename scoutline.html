@@ -3033,7 +3033,11 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   const underdog=favIsHome?aName:hName;
   const udCtx=favIsHome?posCtx(aPos):posCtx(hPos);
   const favOdds=favIsHome?p.bH:p.bA;
-  const isMismatch=Math.abs(hPos-aPos)>=10||Math.abs(p.pH-p.pA)>=30;
+  const probGap=Math.abs(p.pH-p.pA);
+  const scoreGap=Math.abs((p.scoreH||0)-(p.scoreA||0));
+  const lambdaGap=Math.abs((parseFloat(p.hLam)||0)-(parseFloat(p.aLam)||0));
+  const drawLive=p.pD>=24;
+  const isMismatch=Math.abs(hPos-aPos)>=10||probGap>=30||scoreGap>=2||lambdaGap>=0.9;
   const totalLam=(parseFloat(p.hLam)+parseFloat(p.aLam));
   const avoids=[];
 
@@ -3042,6 +3046,8 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
     headline=`${favorite} are strong favourites at ${favProb}% — ${underdog} are ${udCtx} and clearly outmatched on the numbers.`;
   else if(favProb>=60)
     headline=`${favorite} hold a clear ${favProb}% edge, supported by a ${Math.abs(p.hElo-p.aElo)}-point Elo gap and ${favIsHome?p.hFF:p.aFF}% recent form rating.`;
+  else if(probGap>=18||scoreGap>=2||lambdaGap>=0.75)
+    headline=`${favorite} have the model edge — ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%, with a projected ${p.scoreH}–${p.scoreA} scoreline. ${drawLive?'The draw remains possible, but it is secondary to the main pick.':'The draw is not the primary signal.'}`;
   else
     headline=`Tight contest — ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%. Form and strength are closely matched; the draw is live.`;
 
