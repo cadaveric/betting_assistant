@@ -1,13 +1,13 @@
 {
-  "cv_accuracy": 0.5294,
-  "cv_std": 0.0011,
-  "time_split_accuracy": 0.5327,
-  "time_split_std": 0.0145,
+  "cv_accuracy": 0.5302,
+  "cv_std": 0.0016,
+  "time_split_accuracy": 0.5319,
+  "time_split_std": 0.0069,
   "time_split_note": "Forward-chaining validation; safer than shuffled CV for betting use.",
   "market_baseline_accuracy": 0.5296,
-  "market_anchor_accuracy": 0.5338,
-  "market_anchor_ml_weight": 0.55,
-  "market_anchor_note": "Forward time-split sweep: RF with study-style event, pi-rating, and GAP-shot features; 55% model / 45% Shin market gave the best tested 1X2 pick accuracy.",
+  "market_anchor_accuracy": 0.5329,
+  "market_anchor_ml_weight": 0.15,
+  "market_anchor_note": "Global chronological forward split: RF with study-style event, pi-rating, and GAP-shot features; 15% model / 85% Shin market gave the best tested 1X2 pick accuracy.",
   "n_train": 59904,
   "n_features": 52,
   "algorithm": "RandomForest",
@@ -70,5 +70,5 @@
     "D": 15105,
     "A": 17984
   },
-  "built": "2026-05-07T12:25:47.152846+00:00"
+  "built": "2026-05-08T08:17:36.036803+00:00"
 }

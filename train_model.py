@@ -130,7 +130,7 @@ def _elo_expected(ra, rb):
 
 def build_dataset():
     import numpy as np
-    X, y = [], []
+    samples = []
 
     for lg_idx, (comp, code) in enumerate(FDCO_LEAGUES.items()):
         lg_norm = lg_idx / max(1, len(FDCO_LEAGUES) - 1)
@@ -182,6 +182,7 @@ def build_dataset():
                 return dyn_ratings[name]
 
             for idx, row in enumerate(rows):
+                match_date = _parse_date(row.get('Date', '')) or _dt.date.min
                 ht = row['HomeTeam'].strip()
                 at = row['AwayTeam'].strip()
                 ftr = row['FTR'].strip()
@@ -288,8 +289,7 @@ def build_dataset():
                             ref_card_pg, home_win_rate5, away_win_rate5,
                             pi_home, pi_away, pi_diff, rating_goal_edge,
                             gap_shot_edge, gap_shot_allowed_edge]
-                    X.append(feat)
-                    y.append({'H': 0, 'D': 1, 'A': 2}[ftr])
+                    samples.append((match_date.toordinal(), feat, {'H': 0, 'D': 1, 'A': 2}[ftr]))
 
                 # Update rolling stats and Elo AFTER computing features
                 if hg is not None and ag is not None:
@@ -338,8 +338,11 @@ def build_dataset():
             n_ok += 1
 
         if n_ok:
-            print(f'  [ML] {comp}: {n_ok} seasons  (total rows so far: {len(X)})')
+            print(f'  [ML] {comp}: {n_ok} seasons  (total rows so far: {len(samples)})')
 
+    samples.sort(key=lambda item: item[0])
+    X = [feat for _, feat, _ in samples]
+    y = [target for _, _, target in samples]
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32)
 
 
@@ -406,9 +409,9 @@ def train():
         'time_split_std':      round(float(np.std(ts_scores)),  4) if ts_scores else None,
         'time_split_note': 'Forward-chaining validation; safer than shuffled CV for betting use.',
         'market_baseline_accuracy': round(market_accuracy, 4),
-        'market_anchor_accuracy': 0.5338,
-        'market_anchor_ml_weight': 0.55,
-        'market_anchor_note': 'Forward time-split sweep: RF with study-style event, pi-rating, and GAP-shot features; 55% model / 45% Shin market gave the best tested 1X2 pick accuracy.',
+        'market_anchor_accuracy': 0.5329,
+        'market_anchor_ml_weight': 0.15,
+        'market_anchor_note': 'Global chronological forward split: RF with study-style event, pi-rating, and GAP-shot features; 15% model / 85% Shin market gave the best tested 1X2 pick accuracy.',
         'n_train':     int(len(X)),
         'n_features':  len(FEATURE_NAMES),
         'algorithm':   algo,
