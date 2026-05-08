@@ -441,9 +441,25 @@ input[type=number]{background-image:none;padding-right:12px}
 .pred-narrative-icon{font-size:14px;flex-shrink:0;margin-top:1px}
 .pred-narrative-market{font-weight:700;color:var(--tx)}
 .pred-narrative-note{color:var(--tx2)}
+.pred-rec{border-left:1px solid var(--br);border-right:1px solid var(--br);border-bottom:1px solid var(--br);background:linear-gradient(135deg,rgba(15,122,82,.08),rgba(176,96,16,.05));padding:16px 22px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+.pred-rec-title{font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+.pred-rec-main{font-size:20px;font-weight:800;color:var(--tx);line-height:1.2}
+.pred-rec-meta{font-size:12px;color:var(--tx2);line-height:1.45;margin-top:5px}
+.pred-rec-chip{justify-self:end;background:var(--bg2);border:1px solid rgba(15,122,82,.25);border-radius:12px;padding:10px 12px;text-align:right;min-width:132px}
+.pred-rec-chip-val{font-family:var(--mono);font-size:22px;font-weight:800;color:var(--green);line-height:1}
+.pred-rec-chip-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--tx2);margin-top:5px}
+.pred-freshness{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:11px;color:var(--tx2)}
+.pred-freshness span{background:rgba(255,255,255,.38);border:1px solid var(--br);border-radius:999px;padding:4px 9px}
 .pred-mkt-section{margin-bottom:20px}
 .pred-mkt-section-label{font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:12px;display:flex;align-items:center;gap:10px;text-transform:capitalize}
 .pred-mkt-section-label::after{content:'';flex:1;height:1px;background:var(--br)}
+.market-details{border:1px solid var(--br);border-radius:10px;padding:12px;margin-bottom:12px;background:rgba(255,255,255,.22)}
+.market-details>summary{cursor:pointer;list-style:none;margin-bottom:0}
+.market-details>summary::-webkit-details-marker{display:none}
+.market-details>summary::before{content:'+';width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--bg3);color:var(--tx2);font-weight:800;font-size:12px}
+.market-details[open]>summary{margin-bottom:12px}
+.market-details[open]>summary::before{content:'-'}
+.info-dot{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--bg3);border:1px solid var(--br2);font-size:11px;font-weight:800;color:var(--tx2);cursor:help}
 .pred-mkts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 @media(max-width:640px){.pred-mkts{grid-template-columns:repeat(2,1fr)}}
 .pred-mkt{background:var(--bg3);border:1px solid var(--br);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
@@ -454,6 +470,7 @@ input[type=number]{background-image:none;padding-right:12px}
 .pred-mkt.hot .pred-mkt-pct{color:var(--green)}
 .pred-mkt.cold .pred-mkt-pct{color:var(--red)}
 .pred-mkt-sub{font-size:11px;color:var(--tx2);line-height:1.35}
+@media(max-width:640px){.pred-rec{grid-template-columns:1fr}.pred-rec-chip{justify-self:stretch;text-align:left;min-width:0}}
 @media(max-width:700px){.pred-control-strip{flex-direction:column;align-items:stretch}.pred-matchup{flex-direction:column}.pred-options{flex-wrap:wrap}.pred-run-btn{width:100%;justify-content:center;height:44px}.pred-hero{grid-template-columns:1fr;text-align:center;gap:8px}.pred-data-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ─── WARM DARK THEME ──────────────────────────────────────────── */
@@ -1675,7 +1692,7 @@ const TRANSLATIONS={
     'nav.fixtures':'Fixtures','nav.today':'Today','nav.schedule':'Schedule','nav.predictor':'Predictor',
     'today.title':'All matches today','today.loading':'Scanning all leagues…','today.no_odds':'No matches with odds found for this window.',
     'nav.standings':'Standings','nav.results':'Results','nav.teamstats':'Team Stats',
-    'nav.odds':'Odds','nav.advisor':'★ Advisor','nav.history':'History',
+    'nav.odds':'Odds','nav.advisor':'Value Scanner','nav.history':'History',
     'pred.home':'HOME','pred.away':'AWAY','pred.model':'MODEL','pred.homeadv':'HOME ADV',
     'pred.model.balanced':'Balanced','pred.model.form':'Form-heavy',
     'pred.model.elo':'Elo-heavy','pred.model.poisson':'Poisson only',
@@ -1686,11 +1703,31 @@ const TRANSLATIONS={
     'pred.tab.markets':'Markets','pred.tab.matrix':'Score matrix',
     'pred.tab.chart':'Goal dist.','pred.tab.h2h':'H2H',
     'pred.score_label':'PREDICTED SCORELINE','pred.draw':'DRAW',
-    'pred.confidence':'confidence','pred.outcome_pick':'Outcome pick',
+    'pred.confidence':'confidence','pred.bet_confidence':'bet confidence','pred.outcome_pick':'Outcome pick',
     'pred.elo_delta':'Elo Δ','pred.odds_loaded':'odds loaded','pred.learned':'learned',
     'pred.home_win_lbl':'HOME WIN','pred.draw_lbl':'DRAW','pred.away_win_lbl':'AWAY WIN',
     'pred.no_h2h':'No H2H data',
     'pred.matrix_note':'DC-corrected Poisson · {home} goals (rows) × {away} goals (cols)',
+    'pred.help.pred_conf':'Prediction confidence: model certainty from probability gap, form, Elo, xG and data quality.',
+    'pred.help.bet_conf':'Bet confidence: betting quality after odds edge, expected value and market trust. It is separate from the raw prediction.',
+    'pred.help.market_trust':'Market trust reflects how reliable the supporting odds/data sample is',
+    'pred.help.confidence_stack':'Prediction confidence says who is more likely. Bet confidence and market trust say whether that pick is attractive enough to stake.',
+    'pred.rec.title':'Recommended pick',
+    'pred.rec.team':'Back {team}',
+    'pred.rec.draw':'Draw is the main pick',
+    'pred.rec.note_clear':'clear model edge',
+    'pred.rec.note_edge':'modest but playable model edge',
+    'pred.rec.note_draw':'no team has a strong enough edge',
+    'pred.rec.no_market':'No high-quality market',
+    'pred.rec.meta':'Predicted score {score} · {note}. Best supporting market: {best}.',
+    'pred.rec.model_prob':'model probability',
+    'pred.rec.prob_help':'This is the probability for the recommended outcome, not a guarantee.',
+    'pred.fresh.stats':'Stats',
+    'pred.fresh.odds':'Odds',
+    'pred.fresh.model':'Model',
+    'pred.fresh.no_odds':'not loaded',
+    'pred.fresh.rules':'rules model',
+    'pred.secondary_outcomes':'Secondary outcomes',
     'adv.budget':'Budget (€)','adv.risk':'Risk level',
     'adv.risk.conservative':'Conservative (edge ≥12%)','adv.risk.balanced':'Balanced (edge ≥8%)',
     'adv.risk.risky':'Risky (edge ≥5%)','adv.bettype':'Bet type',
@@ -1705,9 +1742,9 @@ const TRANSLATIONS={
     'adv.scanmode.current':'Current league only','adv.scanmode.all':'All leagues (ignore selected league)',
     'adv.timewindow':'Time window','adv.days.1':'Next 24h','adv.days.3':'Next 3 days',
     'adv.days.7':'Next 7 days','adv.days.14':'Next 14 days',
-    'adv.scan':'🔍 Scan value bets',
-    'adv.empty.title':'Enter your budget and click Scan',
-    'adv.empty.sub':'kelly criterion · expected value · dixon-coles · poisson · 30+ leagues',
+    'adv.scan':'Scan value',
+    'adv.empty.title':'Find bets with a real price edge',
+    'adv.empty.sub':'expected value · Kelly stake · market probability · model probability',
     'adv.singles_label':'Individual bets: lower risk, play each match separately',
     'adv.acca_label':'Combined bet: higher return, higher risk because every match must win',
     'adv.acca_title':'{n}-Match Combined Bet',
@@ -1722,8 +1759,8 @@ const TRANSLATIONS={
     'adv.model_minus_market':'model minus market','adv.return_profit':'return, profit €{profit}',
     'adv.stake_return_profit':'return €{ret} · profit €{profit}',
     'adv.acca_stake':'Stake','adv.acca_return':'Potential return','adv.acca_net_profit':'Net profit',
-    'adv.help.title':'How to choose and place bets today',
-    'adv.help.text':'A value bet appears when <strong>our model probability</strong> is higher than the <strong>market probability</strong> implied by the odds. The difference is the <strong>edge</strong>. <strong>EV</strong> estimates long-run value, not a guaranteed profit. The suggested stake uses a cautious Kelly formula, capped to avoid oversized bets.',
+    'adv.help.title':'Value Scanner guide',
+    'adv.help.text':'This tab is not another prediction page. It searches for bets where <strong>our model probability</strong> is higher than the <strong>market probability</strong> implied by the odds. The difference is the <strong>edge</strong>. <strong>EV</strong> estimates long-run value, not guaranteed profit. The suggested stake uses a cautious Kelly formula, capped to avoid oversized bets.',
     'adv.help.safer':'Safer choice','adv.help.safer_text':'Pick the top 2-3 individual bets. Each match is played separately, so one loss does not ruin the others.',
     'adv.help.higher':'Higher return','adv.help.higher_text':'Use the combined bet for 3-5 matches only if you accept more risk. Every leg must win.',
     'adv.help.place':'How to place','adv.help.place_text':'Open the bookmaker, find the match, choose the shown market, enter the suggested stake or less.',
@@ -1881,7 +1918,7 @@ const TRANSLATIONS={
     'nav.fixtures':'Мачове','nav.today':'Днес','nav.schedule':'Програма','nav.predictor':'Предиктор',
     'today.title':'Всички мачове днес','today.loading':'Сканиране на всички лиги…','today.no_odds':'Не са намерени мачове.',
     'nav.standings':'Класиране','nav.results':'Резултати','nav.teamstats':'Статистики',
-    'nav.odds':'Коефициенти','nav.advisor':'★ Съветник','nav.history':'История',
+    'nav.odds':'Коефициенти','nav.advisor':'Скенер стойност','nav.history':'История',
     'pred.home':'ДОМАКИН','pred.away':'ГОСТ','pred.model':'МОДЕЛ','pred.homeadv':'ДОМ. ПРЕДИМСТВО',
     'pred.model.balanced':'Балансиран','pred.model.form':'Акцент форма',
     'pred.model.elo':'Акцент Ело','pred.model.poisson':'Само Поасон',
@@ -1892,11 +1929,31 @@ const TRANSLATIONS={
     'pred.tab.markets':'Пазари','pred.tab.matrix':'Матрица резултати',
     'pred.tab.chart':'Разпр. голове','pred.tab.h2h':'Директни срещи',
     'pred.score_label':'ПРОГНОЗЕН РЕЗУЛТАТ','pred.draw':'РАВЕН',
-    'pred.confidence':'увереност','pred.outcome_pick':'Прогноза',
+    'pred.confidence':'увереност','pred.bet_confidence':'увереност залог','pred.outcome_pick':'Прогноза',
     'pred.elo_delta':'Ело Δ','pred.odds_loaded':'коефициенти заредени','pred.learned':'научен',
     'pred.home_win_lbl':'ДОМАКИН ПЕЧЕЛИ','pred.draw_lbl':'РАВЕН','pred.away_win_lbl':'ГОСТ ПЕЧЕЛИ',
     'pred.no_h2h':'Няма данни за директни срещи',
     'pred.matrix_note':'Поасон с DC корекция · {home} гола (редове) × {away} гола (колони)',
+    'pred.help.pred_conf':'Увереност на прогнозата: сигурност на модела според разликата във вероятностите, форма, Ело, xG и качество на данните.',
+    'pred.help.bet_conf':'Увереност на залога: качество за залог според предимството спрямо коефициентите, очакваната стойност и доверието в пазара.',
+    'pred.help.market_trust':'Доверието в пазара показва колко надеждни са поддържащите коефициенти/данни',
+    'pred.help.confidence_stack':'Увереността на прогнозата показва кой е по-вероятен. Увереността на залога и доверието в пазара показват дали си струва залог.',
+    'pred.rec.title':'Препоръчана прогноза',
+    'pred.rec.team':'Залог за {team}',
+    'pred.rec.draw':'Равният е основната прогноза',
+    'pred.rec.note_clear':'ясно предимство на модела',
+    'pred.rec.note_edge':'умерено, но играемо предимство',
+    'pred.rec.note_draw':'няма отбор с достатъчно силно предимство',
+    'pred.rec.no_market':'Няма пазар с високо качество',
+    'pred.rec.meta':'Прогнозен резултат {score} · {note}. Най-добър подкрепящ пазар: {best}.',
+    'pred.rec.model_prob':'вероятност на модела',
+    'pred.rec.prob_help':'Това е вероятността за препоръчания изход, не гаранция.',
+    'pred.fresh.stats':'Статистики',
+    'pred.fresh.odds':'Коефициенти',
+    'pred.fresh.model':'Модел',
+    'pred.fresh.no_odds':'не са заредени',
+    'pred.fresh.rules':'правилов модел',
+    'pred.secondary_outcomes':'Вторични изходи',
     'adv.budget':'Бюджет (€)','adv.risk':'Ниво на риска',
     'adv.risk.conservative':'Консервативен (предимство ≥12%)','adv.risk.balanced':'Балансиран (предимство ≥8%)',
     'adv.risk.risky':'Рисков (предимство ≥5%)','adv.bettype':'Тип залог',
@@ -1911,9 +1968,9 @@ const TRANSLATIONS={
     'adv.scanmode.current':'Само текущата лига','adv.scanmode.all':'Всички лиги (игнорира избраната)',
     'adv.timewindow':'Времеви прозорец','adv.days.1':'Следващите 24ч','adv.days.3':'Следващите 3 дни',
     'adv.days.7':'Следващите 7 дни','adv.days.14':'Следващите 14 дни',
-    'adv.scan':'🔍 Търси ценни залози',
-    'adv.empty.title':'Въведете бюджет и кликнете Сканиране',
-    'adv.empty.sub':'критерий на Кели · очаквана стойност · диксон-коулс · поасон · 30+ лиги',
+    'adv.scan':'Сканирай стойност',
+    'adv.empty.title':'Намерете залози с реално ценово предимство',
+    'adv.empty.sub':'очаквана стойност · Кели залог · пазарна вероятност · моделна вероятност',
     'adv.singles_label':'Единични залози: по-нисък риск, играйте всеки мач отделно',
     'adv.acca_label':'Комбиниран залог: по-висока печалба, по-висок риск — всеки мач трябва да спечели',
     'adv.acca_title':'Комбинация от {n} мача',
@@ -1928,8 +1985,8 @@ const TRANSLATIONS={
     'adv.model_minus_market':'модел минус пазар','adv.return_profit':'печалба, нетна €{profit}',
     'adv.stake_return_profit':'печалба €{ret} · нетна €{profit}',
     'adv.acca_stake':'Залог','adv.acca_return':'Потенциална печалба','adv.acca_net_profit':'Нетна печалба',
-    'adv.help.title':'Как да изберете и направите залози днес',
-    'adv.help.text':'Ценен залог се появява когато <strong>вероятността на нашия модел</strong> е по-висока от <strong>пазарната вероятност</strong>. Разликата е <strong>предимството</strong>. <strong>ОС</strong> оценява дългосрочна стойност, не гарантирана печалба. Препоръчителният залог използва предпазна формула на Кели.',
+    'adv.help.title':'Ръководство за скенера',
+    'adv.help.text':'Този таб не е втора страница за прогнози. Той търси залози, при които <strong>вероятността на нашия модел</strong> е по-висока от <strong>пазарната вероятност</strong>. Разликата е <strong>предимството</strong>. <strong>ОС</strong> оценява дългосрочна стойност, не гарантирана печалба. Препоръчителният залог използва предпазна формула на Кели.',
     'adv.help.safer':'По-безопасен избор','adv.help.safer_text':'Изберете топ 2-3 единични залога. Всеки мач е отделен, така че една загуба не руинира останалите.',
     'adv.help.higher':'По-висока печалба','adv.help.higher_text':'Използвайте комбинирания залог само ако приемате по-висок риск. Всеки крак трябва да спечели.',
     'adv.help.place':'Как да направите','adv.help.place_text':'Отворете букмейкъра, намерете мача, изберете показания пазар, въведете препоръчителния залог.',
@@ -2315,7 +2372,7 @@ function trustBadge(trust){
   if(!trust)return '';
   const cls=trust.level==='strong'?'tag-green':trust.level==='watch'?'tag-amber':'tag-red';
   const label=trust.level==='strong'?'trusted':trust.level==='watch'?'caution':'low trust';
-  return `<span class="tag ${cls}" title="${trust.reason||''}">${label} ${trust.score??'–'}%</span>`;
+  return `<span class="tag ${cls}" title="${t('pred.help.market_trust')}: ${trust.reason||''}">${label} ${trust.score??'–'}%</span>`;
 }
 
 // ── ELO ──────────────────────────────────────────────────────────────────────
@@ -3103,6 +3160,28 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   return{headline,bets,avoids};
 }
 
+function primaryPredictionSignal(p,hName,aName,narr){
+  const gap=Math.abs((p.pH||0)-(p.pA||0));
+  const homeEdge=(p.pH||0)>(p.pA||0)+5;
+  const awayEdge=(p.pA||0)>(p.pH||0)+5;
+  const isDraw=!homeEdge&&!awayEdge;
+  const team=isDraw?t('pred.draw'):homeEdge?hName:aName;
+  const prob=isDraw?(p.pD||0):homeEdge?(p.pH||0):(p.pA||0);
+  const best=narr?.bets?.find(b=>b.type==='good')||narr?.bets?.[0];
+  const note=isDraw
+    ? t('pred.rec.note_draw')
+    : gap>=18
+      ? t('pred.rec.note_clear')
+      : t('pred.rec.note_edge');
+  return{
+    pick:isDraw?t('pred.rec.draw'):t('pred.rec.team',{team}),
+    team,
+    prob,
+    note,
+    best:best?.market||t('pred.rec.no_market')
+  };
+}
+
 function renderPredResult(p,hName,aName,h2hData){
   const winner=p.pH>p.pA+5?hName:p.pA>p.pH+5?aName:'Draw';
   const wColor=p.pH>p.pA+5?'#1D9E75':p.pA>p.pH+5?'#A32D2D':'#BA7517';
@@ -3115,6 +3194,11 @@ function renderPredResult(p,hName,aName,h2hData){
   const hS=teamStatsMap[hRow?.team?.id];
   const aS=teamStatsMap[aRow?.team?.id];
   const lgAvgStats=teamStatsMeta[lg]?.leagueAverages||{};
+  const narr=generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS);
+  const primary=primaryPredictionSignal(p,hName,aName,narr);
+  const statsFresh=timeAgo(teamStatsMeta[lg]?.updatedAt);
+  const oddsFresh=p.hasOdds?timeAgo(oddsMeta[lg]?.updatedAt):t('pred.fresh.no_odds');
+  const modelFresh=p.mlUsed?`ML ${p.mlAccuracy!=null?Math.round(p.mlAccuracy*100)+'%':''}`:t('pred.fresh.rules');
 
   const oddsHTML=p.hasOdds?`<div class="pred-odds-panel">
     ${[[t('pred.home_win_lbl'),p.bH,p.implH,p.pH,'#1D9E75'],[t('pred.draw_lbl'),p.bD,p.implD,p.pD,'#BA7517'],[t('pred.away_win_lbl'),p.bA,p.implA,p.pA,'#A32D2D']].map(([lbl,odd,impl,mdl,clr])=>`
@@ -3194,15 +3278,31 @@ function renderPredResult(p,hName,aName,h2hData){
         <div class="pred-pb-a" style="width:${p.pA}%"></div>
       </div>
       <div class="pred-conf-row">
-        <span class="pred-conf-badge ${confClass}">${p.conf}% ${t('pred.confidence')}</span>
-        ${p.betConfidence!=null?`<span class="pred-conf-badge ${p.betConfidence>=70?'high':p.betConfidence>=55?'med':''}" title="Requires odds edge. This is separate from raw prediction confidence.">${p.betConfidence}% bet confidence</span>`:''}
+        <span class="pred-conf-badge ${confClass}" title="${t('pred.help.pred_conf')}">${p.conf}% ${t('pred.confidence')}</span>
+        ${p.betConfidence!=null?`<span class="pred-conf-badge ${p.betConfidence>=70?'high':p.betConfidence>=55?'med':''}" title="${t('pred.help.bet_conf')}">${p.betConfidence}% ${t('pred.bet_confidence')}</span>`:''}
         ${trustBadge(p.marketTrust?.oneX2)}
         <span class="pred-winner-pill" style="background:${wColor}22;color:${wColor};border:.5px solid ${wColor}55;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:500">${t('pred.outcome_pick')}: ${winner}</span>
         <span class="pred-conf-badge">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
+        <span class="info-dot" title="${t('pred.help.confidence_stack')}">i</span>
+      </div>
+    </div>
+    <div class="pred-rec">
+      <div>
+        <div class="pred-rec-title">${t('pred.rec.title')}</div>
+        <div class="pred-rec-main">${primary.pick}</div>
+        <div class="pred-rec-meta">${t('pred.rec.meta',{score:p.scoreH+'-'+p.scoreA,note:primary.note,best:primary.best})}</div>
+        <div class="pred-freshness">
+          <span>${t('pred.fresh.stats')}: ${statsFresh}</span>
+          <span>${t('pred.fresh.odds')}: ${oddsFresh}</span>
+          <span>${t('pred.fresh.model')}: ${modelFresh}</span>
+        </div>
+      </div>
+      <div class="pred-rec-chip" title="${t('pred.rec.prob_help')}">
+        <div class="pred-rec-chip-val">${primary.prob}%</div>
+        <div class="pred-rec-chip-lbl">${t('pred.rec.model_prob')}</div>
       </div>
     </div>
     ${(()=>{
-      const narr=generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS);
       if(!narr.bets.length&&!narr.avoids.length)return '';
       const betHTML=narr.bets.map(b=>`
         <div class="pred-narrative-bet pred-narrative-bet-${b.type}">
@@ -3260,24 +3360,26 @@ function renderPredResult(p,hName,aName,h2hData){
           ${mkt(t('mkt.home_cs',{team:hName}),p.pHCS,`${aName} scores 0`)}
           ${mkt(t('mkt.away_cs',{team:aName}),p.pACS,`${hName} scores 0`)}
         </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.halftime_tab')}</div><div class="pred-mkts">
+        <details class="pred-mkt-section market-details"><summary class="pred-mkt-section-label">${t('section.halftime_tab')}</summary><div class="pred-mkts">
           ${mkt(t('mkt.ht_goal'),p.pHT05,t('mkt.sub.ht_goal'))}
           ${mkt(t('mkt.ht_over15'),p.pHT15,t('mkt.sub.ht_over15'))}
           ${mkt(t('mkt.ht_btts'),p.pHT_BTTS,t('mkt.sub.ht_btts'))}
           ${mkt(t('mkt.lead_ht',{team:hName}),p.pHT_H,`${hName} ahead after 45 minutes`)}
           ${mkt(t('mkt.ht_draw'),p.pHT_D,t('mkt.sub.ht_draw'))}
           ${mkt(t('mkt.lead_ht',{team:aName}),p.pHT_A,`${aName} ahead after 45 minutes`)}
-        </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.corners_lbl')} · xTotal ${p.totalCornLam} ${trustBadge(p.marketTrust?.corners)}</div><div class="pred-mkts">
+        </div></details>
+        <details class="pred-mkt-section market-details"><summary class="pred-mkt-section-label">${t('section.corners_lbl')} · xTotal ${p.totalCornLam} ${trustBadge(p.marketTrust?.corners)}</summary><div class="pred-mkts">
           ${mkt(t('mkt.corners_85'),p.pCorn85,t('mkt.sub.corners_85'))}
           ${mkt(t('mkt.corners_105'),p.pCorn105,t('mkt.sub.corners_105'))}
-          ${mkt(t('mkt.home_cs',{team:hName})+' nil',p.pHWnil,`${hName} wins and ${aName} scores 0`)}
-          ${mkt(t('mkt.away_cs',{team:aName})+' nil',p.pAWnil,`${aName} wins and ${hName} scores 0`)}
-        </div></div>
-        <div class="pred-mkt-section"><div class="pred-mkt-section-label">${t('section.cards_lbl')} · xTotal ${p.totalCardLam} ${trustBadge(p.marketTrust?.cards)}</div><div class="pred-mkts">
+        </div></details>
+        <details class="pred-mkt-section market-details"><summary class="pred-mkt-section-label">${t('section.cards_lbl')} · xTotal ${p.totalCardLam} ${trustBadge(p.marketTrust?.cards)}</summary><div class="pred-mkts">
           ${mkt(t('mkt.cards_25'),p.pCard25,t('mkt.sub.cards_25'))}
           ${mkt(t('mkt.cards_35'),p.pCard35,t('mkt.sub.cards_35'))}
-        </div></div>
+        </div></details>
+        <details class="pred-mkt-section market-details"><summary class="pred-mkt-section-label">${t('pred.secondary_outcomes')}</summary><div class="pred-mkts">
+          ${mkt(t('mkt.home_cs',{team:hName})+' nil',p.pHWnil,`${hName} wins and ${aName} scores 0`)}
+          ${mkt(t('mkt.away_cs',{team:aName})+' nil',p.pAWnil,`${aName} wins and ${hName} scores 0`)}
+        </div></details>
       </div>
       <div id="tab-matrix" class="pred-tab-content">
         <div style="font-size:10px;font-family:var(--mono);color:var(--tx3);margin-bottom:10px">${t('pred.matrix_note',{home:hName,away:aName})}</div>
