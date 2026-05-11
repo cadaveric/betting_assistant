@@ -1705,7 +1705,7 @@ const TRANSLATIONS={
     'pred.load_standings':'Load standings first…',
     'pred.tab.markets':'Markets','pred.tab.matrix':'Score matrix',
     'pred.tab.chart':'Goal dist.','pred.tab.h2h':'H2H',
-    'pred.score_label':'PREDICTED SCORELINE','pred.draw':'DRAW',
+    'pred.score_label':'MOST LIKELY SCORE','pred.draw':'DRAW',
     'pred.confidence':'confidence','pred.bet_confidence':'bet confidence','pred.outcome_pick':'Outcome pick',
     'pred.elo_delta':'Elo Δ','pred.odds_loaded':'odds loaded','pred.learned':'learned',
     'pred.home_win_lbl':'HOME WIN','pred.draw_lbl':'DRAW','pred.away_win_lbl':'AWAY WIN',
@@ -1722,7 +1722,7 @@ const TRANSLATIONS={
     'pred.rec.note_edge':'modest but playable model edge',
     'pred.rec.note_draw':'no team has a strong enough edge',
     'pred.rec.no_market':'No high-quality market',
-    'pred.rec.meta':'Predicted score {score} · {note}. Best supporting market: {best}.',
+    'pred.rec.meta':'Most likely score {score} · {note}. Best supporting market: {best}.',
     'pred.rec.model_prob':'model probability',
     'pred.rec.prob_help':'This is the probability for the recommended outcome, not a guarantee.',
     'pred.fresh.stats':'Stats',
@@ -1800,7 +1800,7 @@ const TRANSLATIONS={
     'kpi.avg_brier':'avg brier','kpi.indiv_bets':'individual value bets',
     'kpi.your_budget':'your budget','kpi.top_ev':'top EV','kpi.leagues_scanned':'leagues scanned',
     'kpi.combined_bet':'{n}-match combined bet',
-    'mkt.over15':'Over 1.5 goals','mkt.over25':'Over 2.5 goals','mkt.over35':'Over 3.5 goals',
+    'mkt.over15':'Over 1.5 goals (2+)','mkt.over25':'Over 2.5 goals','mkt.over35':'Over 3.5 goals',
     'mkt.over45':'Over 4.5 goals','mkt.btts':'Both teams score','mkt.nobtts':'Both teams do not score',
     'mkt.ht_goal':'1st-half goal','mkt.ht_over15':'1st-half over 1.5 goals',
     'mkt.ht_btts':'Both score in 1st half','mkt.ht_draw':'Draw at half-time',
@@ -1809,7 +1809,8 @@ const TRANSLATIONS={
     'mkt.clean_sheet':'clean sheet','mkt.win_to_nil':'win to nil',
     'mkt.home_cs':'{team} clean sheet','mkt.away_cs':'{team} clean sheet',
     'mkt.lead_ht':'{team} lead at half-time',
-    'mkt.sub.over15':'2 or more total goals','mkt.sub.over25':'3 or more total goals',
+    'mkt.sub.over15':'Needs 2+ total goals; this combines many scorelines, not just the single most likely score.',
+    'mkt.sub.over25':'3 or more total goals',
     'mkt.sub.over35':'4 or more total goals','mkt.sub.over45':'5 or more total goals',
     'mkt.sub.btts':'each team scores at least once','mkt.sub.nobtts':'at least one team finishes with 0 goals',
     'mkt.sub.ht_goal':'at least 1 goal before half-time','mkt.sub.ht_over15':'2 or more goals before half-time',
@@ -1932,7 +1933,7 @@ const TRANSLATIONS={
     'pred.load_standings':'Заредете класирането първо…',
     'pred.tab.markets':'Пазари','pred.tab.matrix':'Матрица резултати',
     'pred.tab.chart':'Разпр. голове','pred.tab.h2h':'Директни срещи',
-    'pred.score_label':'ПРОГНОЗЕН РЕЗУЛТАТ','pred.draw':'РАВЕН',
+    'pred.score_label':'НАЙ-ВЕРОЯТЕН РЕЗУЛТАТ','pred.draw':'РАВЕН',
     'pred.confidence':'увереност','pred.bet_confidence':'увереност залог','pred.outcome_pick':'Прогноза',
     'pred.elo_delta':'Ело Δ','pred.odds_loaded':'коефициенти заредени','pred.learned':'научен',
     'pred.home_win_lbl':'ДОМАКИН ПЕЧЕЛИ','pred.draw_lbl':'РАВЕН','pred.away_win_lbl':'ГОСТ ПЕЧЕЛИ',
@@ -1949,7 +1950,7 @@ const TRANSLATIONS={
     'pred.rec.note_edge':'умерено, но играемо предимство',
     'pred.rec.note_draw':'няма отбор с достатъчно силно предимство',
     'pred.rec.no_market':'Няма пазар с високо качество',
-    'pred.rec.meta':'Прогнозен резултат {score} · {note}. Най-добър подкрепящ пазар: {best}.',
+    'pred.rec.meta':'Най-вероятен резултат {score} · {note}. Най-добър подкрепящ пазар: {best}.',
     'pred.rec.model_prob':'вероятност на модела',
     'pred.rec.prob_help':'Това е вероятността за препоръчания изход, не гаранция.',
     'pred.fresh.stats':'Статистики',
@@ -2027,7 +2028,7 @@ const TRANSLATIONS={
     'kpi.avg_brier':'ср. Брие','kpi.indiv_bets':'единични ценни залози',
     'kpi.your_budget':'вашият бюджет','kpi.top_ev':'топ ОС','kpi.leagues_scanned':'сканирани лиги',
     'kpi.combined_bet':'комбинация от {n} мача',
-    'mkt.over15':'Над 1.5 гола','mkt.over25':'Над 2.5 гола','mkt.over35':'Над 3.5 гола',
+    'mkt.over15':'Над 1.5 гола (2+)','mkt.over25':'Над 2.5 гола','mkt.over35':'Над 3.5 гола',
     'mkt.over45':'Над 4.5 гола','mkt.btts':'Двата отбора бележат','mkt.nobtts':'Двата отбора не бележат',
     'mkt.ht_goal':'Гол 1-во полувр.','mkt.ht_over15':'1-во полувр. над 1.5 гола',
     'mkt.ht_btts':'ДОА в 1-во полувр.','mkt.ht_draw':'Равен на полувремето',
@@ -2036,7 +2037,8 @@ const TRANSLATIONS={
     'mkt.clean_sheet':'суха мрежа','mkt.win_to_nil':'победа без допуснат',
     'mkt.home_cs':'{team} суха мрежа','mkt.away_cs':'{team} суха мрежа',
     'mkt.lead_ht':'{team} води на полувремето',
-    'mkt.sub.over15':'2 или повече гола общо','mkt.sub.over25':'3 или повече гола общо',
+    'mkt.sub.over15':'Нужни са 2+ гола общо; това събира много резултати, не само най-вероятния резултат.',
+    'mkt.sub.over25':'3 или повече гола общо',
     'mkt.sub.over35':'4 или повече гола общо','mkt.sub.over45':'5 или повече гола общо',
     'mkt.sub.btts':'всеки отбор вкарва поне веднъж','mkt.sub.nobtts':'поне един отбор завършва с 0 гола',
     'mkt.sub.ht_goal':'поне 1 гол преди полувремето','mkt.sub.ht_over15':'2 или повече гола преди полувремето',
@@ -3126,7 +3128,7 @@ function renderMarkets(p,hName,aName){
   return`
   <div><div class="section-label">${t('section.goals')}</div>
     <div class="markets-grid">
-      ${mCard('⚽',t('mkt.over15'),`xG total: ${tLam}`,p.pOver15,t('mkt.sub.btts'),p.hDataBadge==='real SoT')}
+      ${mCard('⚽',t('mkt.over15'),`xG total: ${tLam}`,p.pOver15,t('mkt.sub.over15'),p.hDataBadge==='real SoT')}
       ${mCard('⚽',t('mkt.over25'),`λ: ${tLam}${p.pOver25Raw!==p.pOver25?' (raw '+p.pOver25Raw+'%)':''}`,p.pOver25,t('mkt.sub.over25'),p.hDataBadge==='real SoT',p.over25CalibHint)}
       ${mCard('⚽',t('mkt.over35'),`${hName} λ ${p.hLam}`,p.pOver35,t('mkt.sub.over35'),p.hDataBadge==='real SoT')}
       ${mCard('⚽',t('mkt.over45'),`λ ${tLam}`,p.pOver45,t('mkt.sub.over45'),p.hDataBadge==='real SoT')}
@@ -4501,8 +4503,18 @@ function ensureTeams(){
 }
 
 function findFixtureOdds(hName,aName){
+  const matchName=(a,b)=>{
+    const an=_normName(a),bn=_normName(b);
+    if(!an||!bn)return false;
+    if(an===bn)return true;
+    if(an.length>=5&&bn.includes(an))return true;
+    if(bn.length>=5&&an.includes(bn))return true;
+    const aw=new Set(_teamWords(a)), bw=_teamWords(b);
+    return [...aw].filter(w=>bw.has(w)).length>0;
+  };
   return (oddsCache[lg]||[]).find(g=>
-    (g.home===hName&&g.away===aName)||(g.home===aName&&g.away===hName));
+    (matchName(g.home,hName)&&matchName(g.away,aName))||
+    (matchName(g.home,aName)&&matchName(g.away,hName)));
 }
 
 function predictionPick(p){
@@ -4594,6 +4606,7 @@ async function runDeepPred(){
       document.getElementById('predOut').innerHTML=`<div class="error-state">Team stats are still building for ${lg}. Please retry in a moment; prediction is paused to avoid unstable estimated output.</div>`;
       return;
     }
+    await ensureOddsLoaded();
 
     let h2hData=null,oddsH=0,oddsD=0,oddsA=0,fixtureIntel=null;
     try{
@@ -4887,8 +4900,13 @@ function advisorHelpHtml(){
 async function ensureOddsLoaded(){
   if(oddsCache[lg]&&oddsCache[lg].length) return true;
   try{
-    const r=await fetch('/odds/'+lg); const d=await r.json();
-    if(d.games&&d.games.length){oddsCache[lg]=d.games;return true;}
+    const r=await fetch('/odds/'+lg+'?_ts='+Date.now(),{cache:'no-store'});
+    const d=await r.json();
+    if(d.games&&d.games.length){
+      oddsCache[lg]=d.games;
+      oddsMeta[lg]=d.cache||{};
+      return true;
+    }
   }catch(e){}
   return false;
 }
