@@ -1720,10 +1720,12 @@ const TRANSLATIONS={
     'pred.help.confidence_stack':'Prediction confidence says who is more likely. Bet confidence and market trust say whether that pick is attractive enough to stake.',
     'pred.rec.title':'Recommended pick',
     'pred.rec.team':'Back {team}',
-    'pred.rec.draw':'Draw is the main pick',
+    'pred.rec.draw':'Slight lean: Draw',
+    'pred.rec.no_1x2':'No strong 1X2 bet',
     'pred.rec.note_clear':'clear model edge',
     'pred.rec.note_edge':'modest but playable model edge',
-    'pred.rec.note_draw':'no team has a strong enough edge',
+    'pred.rec.note_draw':'the three outcomes are too close to trust blindly',
+    'pred.rec.note_low_conf':'below 50% confidence: the model sees no reliable outcome edge; use goal/BTTS markets only if their own probability and odds edge are strong',
     'pred.rec.no_market':'No high-quality market',
     'pred.rec.meta':'Most likely score {score} · {note}. Best supporting market: {best}.',
     'pred.rec.model_prob':'model probability',
@@ -1949,10 +1951,12 @@ const TRANSLATIONS={
     'pred.help.confidence_stack':'Увереността на прогнозата показва кой е по-вероятен. Увереността на залога и доверието в пазара показват дали си струва залог.',
     'pred.rec.title':'Препоръчана прогноза',
     'pred.rec.team':'Залог за {team}',
-    'pred.rec.draw':'Равният е основната прогноза',
+    'pred.rec.draw':'Лек наклон: равен',
+    'pred.rec.no_1x2':'Няма силен 1X2 залог',
     'pred.rec.note_clear':'ясно предимство на модела',
     'pred.rec.note_edge':'умерено, но играемо предимство',
-    'pred.rec.note_draw':'няма отбор с достатъчно силно предимство',
+    'pred.rec.note_draw':'трите изхода са твърде близки, за да се доверява сляпо',
+    'pred.rec.note_low_conf':'под 50% увереност: моделът не вижда надеждно предимство за изход; ползвайте пазари за голове/ДОА само ако тяхната вероятност и коефициент дават стойност',
     'pred.rec.no_market':'Няма пазар с високо качество',
     'pred.rec.meta':'Най-вероятен резултат {score} · {note}. Най-добър подкрепящ пазар: {best}.',
     'pred.rec.model_prob':'вероятност на модела',
@@ -3262,17 +3266,23 @@ function primaryPredictionSignal(p,hName,aName,narr){
   const gap=Math.abs((p.pH||0)-(p.pA||0));
   const homeEdge=(p.pH||0)>(p.pA||0)+5;
   const awayEdge=(p.pA||0)>(p.pH||0)+5;
+  const conf=p.conf||Math.max(p.pH||0,p.pD||0,p.pA||0);
+  const sorted=[p.pH||0,p.pD||0,p.pA||0].sort((a,b)=>b-a);
+  const leadGap=(sorted[0]||0)-(sorted[1]||0);
+  const lowTrust=conf<50||leadGap<5;
   const isDraw=!homeEdge&&!awayEdge;
   const team=isDraw?t('pred.draw'):homeEdge?hName:aName;
   const prob=isDraw?(p.pD||0):homeEdge?(p.pH||0):(p.pA||0);
   const best=narr?.bets?.find(b=>b.type==='good')||narr?.bets?.[0];
-  const note=isDraw
+  const note=lowTrust
+    ? t('pred.rec.note_low_conf')
+    : isDraw
     ? t('pred.rec.note_draw')
     : gap>=18
       ? t('pred.rec.note_clear')
       : t('pred.rec.note_edge');
   return{
-    pick:isDraw?t('pred.rec.draw'):t('pred.rec.team',{team}),
+    pick:lowTrust?t('pred.rec.no_1x2'):(isDraw?t('pred.rec.draw'):t('pred.rec.team',{team})),
     team,
     prob,
     note,
