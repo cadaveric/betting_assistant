@@ -1035,6 +1035,31 @@ def _prediction_pick(row):
     vals = {'H': probs.get('home') or 0, 'D': probs.get('draw') or 0, 'A': probs.get('away') or 0}
     return max(vals, key=vals.get)
 
+def _prediction_eval_key(row):
+    """Stable match key used for accuracy so repeated predictor clicks do not over-count."""
+    sport = row.get('sport') or 'football'
+    comp = row.get('competition') or ''
+    fixture_id = row.get('fixtureId')
+    if fixture_id:
+        return sport, comp, f'id:{fixture_id}'
+    kickoff = (row.get('kickoff') or '')
+    day = kickoff[:10] if len(kickoff) >= 10 else ''
+    return (
+        sport, comp, day,
+        _norm_team_name(row.get('homeTeam')),
+        _norm_team_name(row.get('awayTeam')),
+    )
+
+def _dedupe_for_accuracy(rows):
+    """Keep the latest prediction per match for fair public accuracy reporting."""
+    latest = {}
+    for row in rows:
+        key = _prediction_eval_key(row)
+        prev = latest.get(key)
+        if not prev or (row.get('createdAt') or '') >= (prev.get('createdAt') or ''):
+            latest[key] = row
+    return list(latest.values())
+
 def _norm_team_name(name):
     s = (name or '').lower()
     s = _re.sub(r'\b(fc|afc|cf|sc|st|saint|the)\b', ' ', s)
@@ -1230,10 +1255,12 @@ def _score_predictions(rows):
     return changed
 
 def _prediction_summary(rows):
-    graded = [r for r in rows if r.get('status') == 'graded']
-    pending = [r for r in rows if r.get('status') != 'graded']
+    eval_rows = _dedupe_for_accuracy(rows)
+    graded = [r for r in eval_rows if r.get('status') == 'graded']
+    pending = [r for r in eval_rows if r.get('status') != 'graded']
     if not graded:
         return {'total': len(rows), 'graded': 0, 'pending': len(pending),
+                'uniqueTotal': len(eval_rows), 'duplicates': max(0, len(rows) - len(eval_rows)),
                 'outcomeAccuracy': None, 'scoreAccuracy': None, 'avgBrier': None,
                 'calibration': None}
     outcome_ok = sum(1 for r in graded if (r.get('metrics') or {}).get('outcomeCorrect'))
@@ -1269,7 +1296,9 @@ def _prediction_summary(rows):
             results.append((pred_pct >= 50) == happened)
         return round(sum(results) / len(results) * 100, 1) if results else None
     markets_acc = {k: _mkt_acc(k) for k in ('over15', 'over25', 'over35', 'btts', 'htOver05')}
-    return {'total': len(rows), 'graded': len(graded), 'pending': len(pending),
+    return {'total': len(rows), 'uniqueTotal': len(eval_rows),
+            'duplicates': max(0, len(rows) - len(eval_rows)),
+            'graded': len(graded), 'pending': len(pending),
             'outcomeAccuracy': round(outcome_ok / len(graded) * 100, 1),
             'scoreAccuracy': round(score_ok / len(graded) * 100, 1),
             'avgBrier': round(sum(briers) / len(briers), 4) if briers else None,
@@ -1277,7 +1306,7 @@ def _prediction_summary(rows):
             'recAccuracy': round(rec_ok / len(rec_graded) * 100, 1) if rec_graded else None,
             'marketsAcc': markets_acc,
             'calibration': cal,
-            'tuning': _prediction_tuning(rows)}
+            'tuning': _prediction_tuning(eval_rows)}
 
 def _bucket_conf(conf):
     try:
@@ -1291,7 +1320,8 @@ def _bucket_conf(conf):
     return '75+'
 
 def _football_audit_summary(rows):
-    football = [r for r in rows if (r.get('sport') in (None, '', 'football'))]
+    football_all = [r for r in rows if (r.get('sport') in (None, '', 'football'))]
+    football = _dedupe_for_accuracy(football_all)
     graded = [r for r in football if r.get('status') == 'graded']
     def add(group, key, row):
         g = group.setdefault(key or 'unknown', {'n': 0, 'correct': 0, 'brier': [], 'over25_n': 0, 'over25_hit': 0})
@@ -1326,6 +1356,8 @@ def _football_audit_summary(rows):
         return dict(sorted(out.items(), key=lambda item: (-item[1]['n'], item[0])))
     return {
         'footballPredictions': len(football),
+        'rawFootballPredictions': len(football_all),
+        'duplicatesExcluded': max(0, len(football_all) - len(football)),
         'graded': len(graded),
         'pending': len(football) - len(graded),
         'minimumUsefulSample': 100,
@@ -2820,8 +2852,6 @@ class Handler(SimpleHTTPRequestHandler):
         if not isinstance(payload, dict) or any(k not in payload for k in required):
             self.send_json({'error': 'Missing prediction fields'}, 400); return
         conf = payload.get('confidence') or 0
-        if conf < MIN_CONFIDENCE:
-            self.send_json({'skipped': True, 'reason': f'Confidence {conf}% is below the {MIN_CONFIDENCE}% minimum (set MIN_CONFIDENCE in .env to change)'}, 200); return
         now = _dt.datetime.now(_dt.timezone.utc).isoformat()
         row = {
             'createdAt': payload.get('createdAt') or now,
@@ -2843,7 +2873,7 @@ class Handler(SimpleHTTPRequestHandler):
             'odds': payload.get('odds') or {},
             'fixtureIntel': payload.get('fixtureIntel'),
             'dataQuality': payload.get('dataQuality') or {},
-            'tier': 'recommended' if conf >= RECOMMENDED_CONF else 'tracked',
+            'tier': 'recommended' if conf >= RECOMMENDED_CONF else 'tracked' if conf >= MIN_CONFIDENCE else 'low_confidence',
             'status': 'pending',
         }
         row['id'] = payload.get('id') or _prediction_id(row)
