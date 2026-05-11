@@ -3621,7 +3621,18 @@ function renderHistory(el,allRows,s,accuracyData){
   const recCls=recAcc==null?'':recAcc>=55?'kpi-acc-good':recAcc>=40?'kpi-acc-warn':'kpi-acc-bad';
 
   const ma=s.marketsAcc||{};
+  const br=s.betRecommendations||{};
   const mRow=(lbl,key)=>ma[key]==null?'':`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:12px"><span style="color:var(--tx2)">${lbl}</span><span style="font-family:var(--mono);font-weight:700;color:${ma[key]>=55?'var(--green)':ma[key]>=40?'var(--amber)':'var(--red)'}">${ma[key]}%</span></div>`;
+  const betMarketLabel=k=>({
+    '1x2':'1X2 outcome','over25':'Over 2.5 goals','under25':'Under 2.5 goals',
+    'btts_yes':'BTTS yes','btts_no':'BTTS no','home_win_to_nil':'Home win to nil','away_win_to_nil':'Away win to nil',
+    'ht_over05':'HT over 0.5'
+  })[k]||k;
+  const betRows=br.byMarket?Object.entries(br.byMarket).map(([k,v])=>`
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br);font-size:12px">
+      <span style="color:var(--tx2)">${betMarketLabel(k)} <span style="color:var(--tx3);font-family:var(--mono)">n=${v.n}</span></span>
+      <span style="font-family:var(--mono);font-weight:700;color:${v.accuracy>=55?'var(--green)':v.accuracy>=40?'var(--amber)':'var(--red)'}">${v.accuracy}%</span>
+    </div>`).join(''):'';
   const marketsHtml=Object.values(ma).some(v=>v!=null)?`
   <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px 16px;margin-bottom:16px">
     <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Market accuracy (${gradedCount} unique graded)</div>
@@ -3630,6 +3641,14 @@ function renderHistory(el,allRows,s,accuracyData){
     ${mRow('Over 3.5 goals','over35')}
     ${mRow('Both teams score','btts')}
     ${mRow('Over 0.5 HT goals','htOver05')}
+  </div>`:'';
+  const betLedgerHtml=br.graded?`
+  <div style="background:var(--bg2);border:1px solid var(--br);border-radius:10px;padding:12px 16px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em">Recommended bet accuracy</div>
+      <div style="font-family:var(--mono);font-weight:800;color:${br.accuracy>=55?'var(--green)':br.accuracy>=40?'var(--amber)':'var(--red)'}">${br.accuracy}% <span style="font-size:11px;color:var(--tx2)">(${br.graded} graded)</span></div>
+    </div>
+    ${betRows}
   </div>`:'';
 
   const accPanel=accuracyData?(()=>{
@@ -3672,7 +3691,7 @@ function renderHistory(el,allRows,s,accuracyData){
     <div class="kpi"><div class="kpi-val ${accCls}">${pct(acc)}</div><div class="kpi-lbl">${_histShowRec?'≥60% acc':'all acc'}</div></div>
     <div class="kpi"><div class="kpi-val ${recCls}">${pct(recAcc)}</div><div class="kpi-lbl">≥60% acc (${recGraded})</div></div>
     <div class="kpi"><div class="kpi-val">${s.duplicates??0}</div><div class="kpi-lbl">duplicates excluded</div></div>
-  </div>${marketsHtml}`;
+  </div>${betLedgerHtml}${marketsHtml}`;
 
   if(!rows.length){
     el.innerHTML=html+`<div class="error-state">${_histShowRec?'No recommended predictions yet.':t('hist.no_predictions')}</div>`;
@@ -3710,9 +3729,10 @@ function renderHistory(el,allRows,s,accuracyData){
     const rowCls=done?(ok?'hist-row-win':'hist-row-loss'):'';
     const isRec=(r.tier==='recommended')||(r.confidence||0)>=60;
     const tierBadge=isRec?`<span class="tag tag-amber" style="font-size:9px;padding:2px 6px">★ rec</span>`:(r.tier==='low_confidence'?`<span class="tag tag-red" style="font-size:9px;padding:2px 6px">low</span>`:`<span class="tag tag-gray" style="font-size:9px;padding:2px 6px">track</span>`);
+    const betInfo=(r.betRecommendations||[]).length?`<div style="font-size:11px;color:var(--tx3);margin-top:2px">${(r.betRecommendations||[]).length} bet recommendation${(r.betRecommendations||[]).length!==1?'s':''}</div>`:'';
     html+=`<tr class="${rowCls}">
       <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
-      <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div></td>
+      <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div>${betInfo}</td>
       <td>${tierBadge}</td>
       <td>${pickLbl}</td>
       <td style="font-family:var(--mono)">${pickProb??'--'}%</td>
@@ -4366,6 +4386,31 @@ function predictionPick(p){
   return 'D';
 }
 
+function predictionBetRecommendations(p,hName,aName){
+  const bets=[];
+  const favSide=predictionPick(p);
+  const favName=favSide==='H'?hName:favSide==='A'?aName:'Draw';
+  const favProb=favSide==='H'?p.pH:favSide==='A'?p.pA:p.pD;
+  const push=(key,label,prob,extra={})=>bets.push({
+    key,label,probability:Math.round(prob||0),
+    confidence:p.betConfidence??p.conf,
+    trust:extra.trust||p.marketTrust?.goals||p.marketTrust?.oneX2||null,
+    ...extra
+  });
+  if(favProb>=60) push('1x2',`${favName} to win`,favProb,{side:favSide,trust:p.marketTrust?.oneX2});
+  if(p.pOver25>=62) push('over25','Over 2.5 goals',p.pOver25);
+  else if(p.pOver25<=38) push('under25','Under 2.5 goals',100-p.pOver25);
+  if(p.pBTTS>=60) push('btts_yes','Both teams to score - YES',p.pBTTS);
+  else if(p.pBTTS<=35&&favProb>=65) push('btts_no','Both teams to score - NO',100-p.pBTTS);
+  if(p.pHWnil>=45) push('home_win_to_nil',`${hName} win to nil`,p.pHWnil,{side:'H'});
+  if(p.pAWnil>=45) push('away_win_to_nil',`${aName} win to nil`,p.pAWnil,{side:'A'});
+  if((p.cornersReliability||0)>=70&&p.pCorn105>=55) push('corners_over105','Corners over 10.5',p.pCorn105,{trust:p.marketTrust?.corners,requiresStats:true});
+  else if((p.cornersReliability||0)>=70&&p.pCorn85>=65) push('corners_over85','Corners over 8.5',p.pCorn85,{trust:p.marketTrust?.corners,requiresStats:true});
+  if((p.cardsReliability||0)>=70&&p.pCard35>=55) push('cards_over35','Cards over 3.5',p.pCard35,{trust:p.marketTrust?.cards,requiresStats:true});
+  else if((p.cardsReliability||0)>=70&&p.pCard25>=65) push('cards_over25','Cards over 2.5',p.pCard25,{trust:p.marketTrust?.cards,requiresStats:true});
+  return bets;
+}
+
 async function rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,model,ha,fixtureIntel){
   const flipped=fxOdds&&fxOdds.home===aName;
   const quality=dataQuality(hRow.team.id,aRow.team.id,!!fxOdds);
@@ -4388,6 +4433,7 @@ async function rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,model,ha,fixtur
       over15:p.pOver15,over25:p.pOver25,over35:p.pOver35,btts:p.pBTTS,
       htOver05:p.pHT_over05,cornersOver85:p.pCorners_over85,cardsOver25:p.pCards_over25
     },
+    betRecommendations:predictionBetRecommendations(p,hName,aName),
     fixtureIntel:fixtureIntel?{
       injuries:(fixtureIntel.injuries||[]).length,
       lineups:(fixtureIntel.lineups||[]).length,

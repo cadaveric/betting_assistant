@@ -1076,6 +1076,42 @@ def _team_names_match(a, b):
     bw = {w for w in nb.split() if len(w) > 2}
     return bool(aw and bw and len(aw & bw) / max(len(aw), len(bw), 1) >= 0.6)
 
+def _grade_bet_recommendations(row, hg, ag, ht_home=None, ht_away=None):
+    """Grade machine-readable bet recommendations where final score is enough."""
+    out = []
+    total = hg + ag
+    btts = hg > 0 and ag > 0
+    actual = 'H' if hg > ag else 'A' if ag > hg else 'D'
+    ht_total = (ht_home or 0) + (ht_away or 0) if ht_home is not None and ht_away is not None else None
+    for bet in row.get('betRecommendations') or []:
+        key = bet.get('key')
+        result = None
+        reason = None
+        if key == '1x2':
+            result = bet.get('side') == actual
+        elif key == 'over25':
+            result = total > 2
+        elif key == 'under25':
+            result = total < 3
+        elif key == 'btts_yes':
+            result = btts
+        elif key == 'btts_no':
+            result = not btts
+        elif key == 'home_win_to_nil':
+            result = hg > ag and ag == 0
+        elif key == 'away_win_to_nil':
+            result = ag > hg and hg == 0
+        elif key == 'ht_over05':
+            result = ht_total > 0 if ht_total is not None else None
+            reason = 'half-time score unavailable' if result is None else None
+        elif key in ('corners_over85', 'corners_over105', 'cards_over25', 'cards_over35'):
+            reason = 'fixture statistics unavailable for verified grading'
+        else:
+            reason = 'unsupported market'
+        graded = result is not None
+        out.append({**bet, 'graded': graded, 'hit': bool(result) if graded else None, 'reason': reason})
+    return out
+
 def _grade_prediction(row, match):
     ft = ((match.get('score') or {}).get('fullTime') or {})
     hg, ag = ft.get('home'), ft.get('away')
@@ -1111,6 +1147,7 @@ def _grade_prediction(row, match):
         'btts': (hg > 0 and ag > 0) if markets.get('btts') is not None else None,
         'htOver05': (ht_total > 0) if ht_total is not None and markets.get('htOver05') is not None else None,
     }
+    row['betResults'] = _grade_bet_recommendations(row, hg, ag, htg_h, htg_a)
     row['gradedAt'] = _dt.datetime.now(_dt.timezone.utc).isoformat()
     _update_rolling_elo(row.get('homeTeamId'), row.get('awayTeamId'), hg, ag)
     return True
@@ -1296,6 +1333,18 @@ def _prediction_summary(rows):
             results.append((pred_pct >= 50) == happened)
         return round(sum(results) / len(results) * 100, 1) if results else None
     markets_acc = {k: _mkt_acc(k) for k in ('over15', 'over25', 'over35', 'btts', 'htOver05')}
+    bet_results = [b for r in graded for b in (r.get('betResults') or []) if b.get('graded')]
+    bet_hits = sum(1 for b in bet_results if b.get('hit'))
+    bet_by_market = {}
+    for b in bet_results:
+        key = b.get('key') or 'unknown'
+        row = bet_by_market.setdefault(key, {'n': 0, 'hit': 0})
+        row['n'] += 1
+        row['hit'] += 1 if b.get('hit') else 0
+    bet_markets = {
+        k: {'n': v['n'], 'accuracy': round(v['hit'] / v['n'] * 100, 1) if v['n'] else None}
+        for k, v in sorted(bet_by_market.items())
+    }
     return {'total': len(rows), 'uniqueTotal': len(eval_rows),
             'duplicates': max(0, len(rows) - len(eval_rows)),
             'graded': len(graded), 'pending': len(pending),
@@ -1305,6 +1354,12 @@ def _prediction_summary(rows):
             'recGraded': len(rec_graded),
             'recAccuracy': round(rec_ok / len(rec_graded) * 100, 1) if rec_graded else None,
             'marketsAcc': markets_acc,
+            'betRecommendations': {
+                'graded': len(bet_results),
+                'hits': bet_hits,
+                'accuracy': round(bet_hits / len(bet_results) * 100, 1) if bet_results else None,
+                'byMarket': bet_markets,
+            },
             'calibration': cal,
             'tuning': _prediction_tuning(eval_rows)}
 
