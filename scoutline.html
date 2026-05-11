@@ -380,6 +380,8 @@ input[type=number]{background-image:none;padding-right:12px}
 .pred-hero-center{position:relative;z-index:1;text-align:center}
 .pred-score-big{font-family:var(--mono);font-size:64px;font-weight:700;line-height:1;color:var(--amber);letter-spacing:-2px}
 .pred-score-label{font-size:11px;color:rgba(255,255,255,.3);margin-top:6px;font-weight:500}
+.pred-score-help{max-width:420px;margin:8px auto 0;font-size:11px;line-height:1.45;color:rgba(255,255,255,.56)}
+.pred-score-help strong{color:rgba(255,255,255,.82);font-weight:700}
 .pred-lambda-row{display:flex;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap}
 .pred-lam-tag{font-size:11px;padding:3px 9px;border-radius:5px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1)}
 .pred-lam-tag.xg{background:rgba(34,197,94,.15);color:#86EFAC;border-color:rgba(34,197,94,.2)}
@@ -1705,7 +1707,8 @@ const TRANSLATIONS={
     'pred.load_standings':'Load standings first…',
     'pred.tab.markets':'Markets','pred.tab.matrix':'Score matrix',
     'pred.tab.chart':'Goal dist.','pred.tab.h2h':'H2H',
-    'pred.score_label':'MOST LIKELY SCORE','pred.draw':'DRAW',
+    'pred.score_label':'MOST LIKELY EXACT SCORE','pred.draw':'DRAW',
+    'pred.score_help':'Exact score is one low-probability scenario. xG total {total} means the model expects about {total} goals on average; Over/Under markets add up many possible scorelines.',
     'pred.confidence':'confidence','pred.bet_confidence':'bet confidence','pred.outcome_pick':'Outcome pick',
     'pred.elo_delta':'Elo Δ','pred.odds_loaded':'odds loaded','pred.learned':'learned',
     'pred.home_win_lbl':'HOME WIN','pred.draw_lbl':'DRAW','pred.away_win_lbl':'AWAY WIN',
@@ -1933,7 +1936,8 @@ const TRANSLATIONS={
     'pred.load_standings':'Заредете класирането първо…',
     'pred.tab.markets':'Пазари','pred.tab.matrix':'Матрица резултати',
     'pred.tab.chart':'Разпр. голове','pred.tab.h2h':'Директни срещи',
-    'pred.score_label':'НАЙ-ВЕРОЯТЕН РЕЗУЛТАТ','pred.draw':'РАВЕН',
+    'pred.score_label':'НАЙ-ВЕРОЯТЕН ТОЧЕН РЕЗУЛТАТ','pred.draw':'РАВЕН',
+    'pred.score_help':'Точният резултат е само един сценарий с ниска вероятност. xG общо {total} означава, че моделът очаква средно около {total} гола; пазарите Над/Под събират много възможни резултати.',
     'pred.confidence':'увереност','pred.bet_confidence':'увереност залог','pred.outcome_pick':'Прогноза',
     'pred.elo_delta':'Ело Δ','pred.odds_loaded':'коефициенти заредени','pred.learned':'научен',
     'pred.home_win_lbl':'ДОМАКИН ПЕЧЕЛИ','pred.draw_lbl':'РАВЕН','pred.away_win_lbl':'ГОСТ ПЕЧЕЛИ',
@@ -3293,6 +3297,7 @@ function renderPredResult(p,hName,aName,h2hData){
   const statsFresh=timeAgo(teamStatsMeta[lg]?.updatedAt);
   const oddsFresh=p.hasOdds?timeAgo(oddsMeta[lg]?.updatedAt):t('pred.fresh.no_odds');
   const modelFresh=p.mlUsed?`ML ${p.mlAccuracy!=null?Math.round(p.mlAccuracy*100)+'%':''}`:t('pred.fresh.rules');
+  const totalXg=(parseFloat(p.hLam)+parseFloat(p.aLam)).toFixed(2);
 
   const oddsHTML=p.hasOdds?`<div class="pred-odds-panel">
     ${[[t('pred.home_win_lbl'),p.bH,p.implH,p.pH,'#1D9E75'],[t('pred.draw_lbl'),p.bD,p.implD,p.pD,'#BA7517'],[t('pred.away_win_lbl'),p.bA,p.implA,p.pA,'#A32D2D']].map(([lbl,odd,impl,mdl,clr])=>`
@@ -3346,6 +3351,7 @@ function renderPredResult(p,hName,aName,h2hData){
       <div class="pred-hero-center">
         <div class="pred-score-big">${p.scoreH}<span style="opacity:.35;margin:0 6px">–</span>${p.scoreA}</div>
         <div class="pred-score-label">${t('pred.score_label')}</div>
+        <div class="pred-score-help">${t('pred.score_help',{total:totalXg})}</div>
         <div class="pred-lambda-row">
           <span class="pred-lam-tag ${p.hDataBadge==='xG'?'xg':p.hDataBadge==='SoT'?'sot':''}">λ ${p.hLam} ${p.hDataBadge}</span>
           <span class="pred-lam-tag ${p.aDataBadge==='xG'?'xg':p.aDataBadge==='SoT'?'sot':''}">λ ${p.aLam} ${p.aDataBadge}</span>
