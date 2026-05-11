@@ -1876,10 +1876,11 @@ const TRANSLATIONS={
     'ts.sot':'SoT/g','ts.corners':'Corners/g','ts.cards':'Cards/g','ts.fouls':'Fouls/g',
     'ts.poss':'Poss%','ts.data':'Data','ts.real':'real','ts.est':'est.',
     'dq.full':'Full data','dq.strong':'Strong data','dq.stats_only':'Stats only',
-    'dq.odds_only':'Odds only','dq.estimated':'Estimated',
+    'dq.odds_only':'Odds only','dq.basic':'Basic stats','dq.estimated':'Estimated',
     'dq.hint_full':'xG, shots and odds available','dq.hint_strong':'team stats and odds available',
     'dq.hint_stats':'team stats available, odds missing',
     'dq.hint_odds':'market data available, team stats estimated',
+    'dq.hint_basic':'goals, venue splits and form available; shots/xG unavailable',
     'dq.hint_est':'standings/form model with limited rich data',
     'time.not_cached':'not cached','time.just_now':'just now',
     'time.m_ago':'m ago','time.h_ago':'h ago','time.d_ago':'d ago',
@@ -2102,10 +2103,11 @@ const TRANSLATIONS={
     'ts.sot':'Удари/мач','ts.corners':'Ъглови/мач','ts.cards':'Картони/мач','ts.fouls':'Нарушения/мач',
     'ts.poss':'Владение%','ts.data':'Данни','ts.real':'реални','ts.est':'ест.',
     'dq.full':'Пълни данни','dq.strong':'Добри данни','dq.stats_only':'Само статистики',
-    'dq.odds_only':'Само коефициенти','dq.estimated':'Приблизителни',
+    'dq.odds_only':'Само коефициенти','dq.basic':'Основни данни','dq.estimated':'Приблизителни',
     'dq.hint_full':'xG, удари и коефициенти налични','dq.hint_strong':'статистики и коефициенти налични',
     'dq.hint_stats':'статистики налични, коефициенти липсват',
     'dq.hint_odds':'пазарни данни налични, статистики приблизителни',
+    'dq.hint_basic':'налични са голове, домакин/гост и форма; липсват удари/xG',
     'dq.hint_est':'модел на класиране/форма с ограничени данни',
     'time.not_cached':'не е кеширано','time.just_now':'току-що',
     'time.m_ago':'мин. преди','time.h_ago':'ч. преди','time.d_ago':'д. преди',
@@ -2326,10 +2328,12 @@ function dataQuality(homeId,awayId,hasOdds){
   const h=teamStatsMap[homeId]||{}, a=teamStatsMap[awayId]||{};
   const bothXg=h.xgPg!=null&&a.xgPg!=null;
   const bothSot=h.sotPg!=null&&a.sotPg!=null;
+  const bothGoals=h.goalsPg!=null&&a.goalsPg!=null;
   if(bothXg&&bothSot&&hasOdds)return {label:t('dq.full'),cls:'good',hint:t('dq.hint_full')};
   if((bothXg||bothSot)&&hasOdds)return {label:t('dq.strong'),cls:'good',hint:t('dq.hint_strong')};
   if(bothXg||bothSot)return {label:t('dq.stats_only'),cls:'warn',hint:t('dq.hint_stats')};
   if(hasOdds)return {label:t('dq.odds_only'),cls:'warn',hint:t('dq.hint_odds')};
+  if(bothGoals)return {label:t('dq.basic'),cls:'warn',hint:t('dq.hint_basic')};
   return {label:t('dq.estimated'),cls:'weak',hint:t('dq.hint_est')};
 }
 function marketChip(pct,label,help){
@@ -2489,7 +2493,7 @@ async function loadTeamStats(showProgress){
     const r=await fetch('/teamstats/'+reqLeague);
     const d=await r.json();
     if(reqLeague!==lg||reqVersion!==leagueVersion)return false;
-    teamStatsMeta[reqLeague]={...(d.cache||{}),leagueAverages:d.leagueAverages||{},referees:d.referees||{}};
+    teamStatsMeta[reqLeague]={...(d.cache||{}),source:d.source||'',leagueAverages:d.leagueAverages||{},referees:d.referees||{}};
     if(d.teams && Object.keys(d.teams).length>0){
       Object.entries(d.teams).forEach(([tid,s])=>{
         teamStatsMap[tid]={

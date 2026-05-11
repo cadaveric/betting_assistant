@@ -499,6 +499,115 @@ FD_LEAGUE_MAP   = {
 }
 CALIBRATION_SEASONS = [2021, 2022, 2023, 2024]
 
+def _prefer_fd(comp):
+    """Prefer Football-Data for current seasons when API-Football free plans block access."""
+    info = APIF_LEAGUE_MAP.get(comp) or {}
+    return bool(FD_KEY and comp in FD_LEAGUE_MAP and int(info.get('season') or 0) > 2024)
+
+def fd_get(path, params=None):
+    """Fetch Football-Data.org JSON with cache and stale fallback."""
+    if not FD_KEY:
+        return None
+    params = params or {}
+    qs = urllib.parse.urlencode({k: v for k, v in params.items() if v not in (None, '')})
+    cache_key = f'/fd/{path}?{qs}'
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return cached
+    url = f'{FD_BASE}/{path}' + (f'?{qs}' if qs else '')
+    try:
+        req = urllib.request.Request(url, headers={'X-Auth-Token': FD_KEY, 'User-Agent': 'Scoutline/2.0'})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read())
+            set_cache(cache_key, data)
+            return data
+    except Exception as e:
+        stale = get_stale_cache(cache_key)
+        print(f'  [FD] {path} failed: {e}{"; using stale cache" if stale is not None else ""}')
+        return stale
+
+def _fd_to_standings(comp, raw):
+    if not raw or not raw.get('standings'):
+        return None
+    league = raw.get('competition') or {}
+    return {
+        'standings': raw.get('standings') or [],
+        'competition': {'name': league.get('name', comp), 'code': comp},
+        'season': raw.get('season') or {},
+        'source': 'football-data',
+    }
+
+def fd_standings(comp):
+    fd_code = FD_LEAGUE_MAP.get(comp)
+    if not fd_code:
+        return None
+    return _fd_to_standings(comp, fd_get(f'competitions/{fd_code}/standings'))
+
+def fd_matches(comp, status='', date_from=None, date_to=None, home_team=None, away_team=None, limit=None):
+    fd_code = FD_LEAGUE_MAP.get(comp)
+    if not fd_code:
+        return None
+    params = {}
+    if status:
+        params['status'] = status
+    if date_from:
+        params['dateFrom'] = date_from
+    if date_to:
+        params['dateTo'] = date_to
+    raw = fd_get(f'competitions/{fd_code}/matches', params)
+    if not raw:
+        return None
+    matches = raw.get('matches') or []
+    if home_team and away_team:
+        h, a = str(home_team), str(away_team)
+        matches = [m for m in matches if {
+            str(((m.get('homeTeam') or {}).get('id'))),
+            str(((m.get('awayTeam') or {}).get('id'))),
+        } == {h, a}]
+    if status == 'FINISHED':
+        matches = [m for m in matches if m.get('status') == 'FINISHED']
+        matches.sort(key=lambda m: m.get('utcDate') or '')
+        try:
+            n = int(limit) if limit else 100
+            matches = matches[-max(1, min(400, n)):]
+        except (TypeError, ValueError):
+            matches = matches[-100:]
+    elif status == 'SCHEDULED':
+        matches = [m for m in matches if m.get('status') in ('SCHEDULED', 'TIMED')]
+        for m in matches:
+            if m.get('status') == 'TIMED':
+                m['status'] = 'SCHEDULED'
+    for m in matches:
+        m['competition'] = {
+            **(m.get('competition') or {}),
+            'code': comp,
+            'source': 'football-data',
+        }
+    return {
+        'matches': matches,
+        'count': len(matches),
+        'competition': {'code': comp, 'source': 'football-data'},
+        'season': raw.get('season') or {},
+        'source': 'football-data',
+    }
+
+def _fd_matches_to_apif_raw(fd_match_rows):
+    raw = []
+    for m in fd_match_rows or []:
+        ft = ((m.get('score') or {}).get('fullTime') or {})
+        ht = ((m.get('score') or {}).get('halfTime') or {})
+        raw.append({
+            'fixture': {'id': m.get('id'), 'date': m.get('utcDate'), 'status': {'short': 'FT'}},
+            'league': {'id': ((m.get('competition') or {}).get('id')), 'season': ((m.get('season') or {}).get('startDate') or '')[:4]},
+            'teams': {
+                'home': {'id': ((m.get('homeTeam') or {}).get('id')), 'name': ((m.get('homeTeam') or {}).get('name'))},
+                'away': {'id': ((m.get('awayTeam') or {}).get('id')), 'name': ((m.get('awayTeam') or {}).get('name'))},
+            },
+            'goals': {'home': ft.get('home'), 'away': ft.get('away')},
+            'score': {'halftime': {'home': ht.get('home'), 'away': ht.get('away')}},
+        })
+    return raw
+
 # Static historical defaults — used when league_calibration.json is absent or a league is missing.
 # Values derived from multi-season averages across major competitions.
 # homeAdvFactor values reflect post-2021 empirical decline (~20% lower than pre-COVID).
@@ -529,7 +638,10 @@ TODAY_FIXTURES_TTL = 2 * 3600   # 2h — Today tab fixture list
 TODAY_CORE_LEAGUES = [
     'PL', 'ELC', 'L1', 'L2',
     'BL1', 'BL2', 'PD', 'SA', 'FL1',
-    'DED', 'PPL', 'TSL', 'SC1',
+    'DED', 'PPL', 'TSL', 'SP', 'SC1', 'GL', 'BPL', 'AFL', 'PEK',
+    'DSL', 'SSL', 'RUS',
+    'NOR', 'SWE', 'BSA', 'BSB', 'MLS', 'ARG', 'LMX',
+    'SPL', 'JPL', 'KCL',
     'CL', 'EL', 'ECL',
 ]
 
@@ -1728,8 +1840,12 @@ def apif_standings(comp):
     """Fetch standings in football-data.org shape."""
     info = APIF_LEAGUE_MAP.get(comp)
     if not info: return None
+    if _prefer_fd(comp):
+        fd = fd_standings(comp)
+        if fd: return fd
     data = apif_get('standings', {'league': info['id'], 'season': info['season']})
-    if not data: return None
+    if not data:
+        return fd_standings(comp)
     try: rows = data[0]['league']['standings'][0]
     except (IndexError, KeyError, TypeError): return None
     table = []
@@ -1752,16 +1868,22 @@ def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, 
     info = APIF_LEAGUE_MAP.get(comp)
     if not info: return None
     params = {'league': info['id'], 'season': info['season']}
+    if _prefer_fd(comp):
+        fd = fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
+        if fd is not None: return fd
     if home_team and away_team:
         h2h_params = {'h2h': f'{home_team}-{away_team}'}
         if limit: h2h_params['last'] = limit
         data = apif_get('fixtures/headtohead', h2h_params)
-        if data is None: return None
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
         matches = _apif_to_matches(data)
     elif status == 'SCHEDULED':
-        params['next'] = 20
+        if date_from: params['from'] = date_from
+        if date_to:   params['to']   = date_to
+        if not date_from and not date_to:
+            params['next'] = 20
         data = apif_get('fixtures', params)
-        if data is None: return None
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
         matches = [m for m in _apif_to_matches(data) if m['status'] == 'SCHEDULED']
     elif status == 'FINISHED':
         # API Football: 'last' and 'season' are mutually exclusive — use last only
@@ -1769,13 +1891,13 @@ def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, 
         data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': n})
         if not data and n != 50:
             data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': 50})
-        if data is None: return None
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
         matches = _apif_to_matches(data)
     else:
         if date_from: params['from'] = date_from
         if date_to:   params['to']   = date_to
         data = apif_get('fixtures', params)
-        if data is None: return None
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
         matches = _apif_to_matches(data)
     for m in matches:
         m['competition'] = {
@@ -1809,8 +1931,14 @@ def build_teamstats(comp):
         if not std or not std.get('standings'):
             with teamstats_lock: teamstats_status[comp] = 'unavailable'; return
         teams_in_league = ((std.get('standings') or [{}])[0].get('table') or [])
+        stats_source = 'api-football'
         finished = apif_get('fixtures', {'league': info['id'],
                                          'status': 'FT', 'last': APIF_TEAMSTAT_MATCHES}) or []
+        if not finished:
+            fd_finished = fd_matches(comp, status='FINISHED', limit=400) or {}
+            finished = _fd_matches_to_apif_raw(fd_finished.get('matches') or [])
+            if finished:
+                stats_source = 'football-data-basic'
         if not finished:
             with teamstats_lock: teamstats_status[comp] = 'unavailable'; return
 
@@ -1889,7 +2017,7 @@ def build_teamstats(comp):
                 hentry['ht_g'] += ht.get('home') or 0; aentry['ht_g'] += ht.get('away') or 0
                 hentry['ht_n'] += 1;                   aentry['ht_n'] += 1
 
-            stat_rows = apif_get('fixtures/statistics', {'fixture': fixture.get('id')}) or []
+            stat_rows = apif_get('fixtures/statistics', {'fixture': fixture.get('id')}) or [] if stats_source == 'api-football' else []
             stats_by_team = {}
             for row in stat_rows:
                 tid = str((row.get('team') or {}).get('id') or '')
@@ -2110,7 +2238,7 @@ def build_teamstats(comp):
             'matches': len(finished),
         }
 
-        scorers_raw = apif_get('players/topscorers', {'league': info['id'], 'season': info['season']}) or []
+        scorers_raw = apif_get('players/topscorers', {'league': info['id'], 'season': info['season']}) or [] if stats_source == 'api-football' else []
         key_scorers = []
         for item in scorers_raw[:20]:
             pl = item.get('player', {}); st = (item.get('statistics') or [{}])[0]
@@ -2121,7 +2249,7 @@ def build_teamstats(comp):
                                     'teamName': (st.get('team') or {}).get('name', ''), 'goals': g})
 
         set_cache(cp, {'competition': comp, 'teams': summary, 'name_map': name_map,
-                       'matchesProcessed': len(summary), 'source': 'api-football',
+                       'matchesProcessed': len(summary), 'source': stats_source,
                        'leagueAverages': league_averages,
                        'referees': {k: {'games': v['games'], 'cardsPg': round(v['cards']/max(1, v['games']), 2)}
                                     for k, v in referees.items()},
@@ -2517,18 +2645,21 @@ def _start_live_polling():
 def fetch_today_fixtures(comp):
     """Fetch upcoming fixtures for the Today tab. Uses a 2h cache to limit API consumption."""
     info = APIF_LEAGUE_MAP.get(comp)
-    if not info or not APIF_KEY:
+    if not info or (not APIF_KEY and not FD_KEY):
         return []
     cache_key = f'/today_fixtures/{comp}'
     cached = get_cache(cache_key)
     if cached is not None:
         return cached
-    data = apif_get('fixtures', {'league': info['id'], 'season': info['season'], 'next': 15}) or []
+    now = _dt.datetime.now(_dt.timezone.utc)
+    df = now.date().isoformat()
+    dt = (now + _dt.timedelta(days=3)).date().isoformat()
+    data_obj = apif_matches(comp, status='SCHEDULED', date_from=df, date_to=dt) or {}
     matches = []
-    for m in _apif_to_matches(data):
+    for m in data_obj.get('matches') or []:
         if m.get('status') == 'SCHEDULED':
             matches.append({'home': m['homeTeam']['name'], 'away': m['awayTeam']['name'],
-                            'kickoff': m.get('utcDate', '')})
+                            'kickoff': m.get('utcDate', ''), 'source': data_obj.get('source')})
     with cache_lock:
         cache[_key(cache_key)] = {'data': matches, 'ts': time.time(), 'ttl': TODAY_FIXTURES_TTL}
     return matches
@@ -2661,8 +2792,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.handle_prediction_create(payload)
 
     def handle_api(self, api_path):
-        if not APIF_KEY:
-            self.send_json({'error': 'APIFOOTBALL_KEY not set in .env'}, 503); return
+        if not APIF_KEY and not FD_KEY:
+            self.send_json({'error': 'No football data provider key is set'}, 503); return
         m = _re.match(r'/competitions/(\w+)/standings', api_path)
         if m:
             result = apif_standings(m.group(1))
@@ -2729,7 +2860,7 @@ class Handler(SimpleHTTPRequestHandler):
         refresh = params.get('refresh', ['0'])[0].lower() in ('1', 'true', 'yes')
         with prediction_lock:
             rows = _load_predictions()
-            if refresh and APIF_KEY:
+            if refresh and (APIF_KEY or FD_KEY):
                 if _score_predictions(rows):
                     _save_predictions(rows)
             try:
@@ -2746,7 +2877,7 @@ class Handler(SimpleHTTPRequestHandler):
         refresh = params.get('refresh', ['1'])[0].lower() in ('1', 'true', 'yes')
         with prediction_lock:
             rows = _load_predictions()
-            if refresh and APIF_KEY and _score_predictions(rows):
+            if refresh and (APIF_KEY or FD_KEY) and _score_predictions(rows):
                 _save_predictions(rows)
             self.send_json(_football_audit_summary(rows))
 
@@ -2755,13 +2886,13 @@ class Handler(SimpleHTTPRequestHandler):
         refresh = params.get('refresh', ['1'])[0].lower() in ('1', 'true', 'yes')
         with prediction_lock:
             rows = _load_predictions()
-            if refresh and APIF_KEY and _score_predictions(rows):
+            if refresh and (APIF_KEY or FD_KEY) and _score_predictions(rows):
                 _save_predictions(rows)
             self.send_json(_football_accuracy_report(rows))
 
     def handle_teamstats(self, comp):
-        if not APIF_KEY:
-            self.send_json({'error': 'APIFOOTBALL_KEY not set', 'teams': {}}, 503); return
+        if not APIF_KEY and not FD_KEY:
+            self.send_json({'error': 'No football data provider key is set', 'teams': {}}, 503); return
         if comp not in APIF_LEAGUE_MAP:
             self.send_json({'status': 'unavailable', 'competition': comp, 'teams': {},
                             'message': f'{comp} not supported'}); return
