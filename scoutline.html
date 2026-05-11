@@ -2191,7 +2191,9 @@ let clubEloData={};  // normalized_name -> {name, elo, country} from ClubElo API
 
 // ── API ──────────────────────────────────────────────────────────────────────
 async function api(path){
-  const r=await fetch(BASE+path);
+  const sep=path.includes('?')?'&':'?';
+  const url=BASE+path+sep+'_ts='+Date.now();
+  const r=await fetch(url,{cache:'no-store'});
   if(!r.ok) throw new Error('API '+r.status+' '+path);
   return r.json();
 }
@@ -2384,6 +2386,89 @@ function trustBadge(trust){
 
 // ── ELO ──────────────────────────────────────────────────────────────────────
 function _normName(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+
+function _teamWords(s){
+  return (s||'').toLowerCase()
+    .replace(/\b(fc|cf|sc|afc|as|ac|ss|ssc|club|calcio|football|de|la|the)\b/g,' ')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim()
+    .split(/\s+/)
+    .filter(w=>w.length>=3);
+}
+
+function tableTeamLookup(table,name){
+  const target=_normName(name);
+  if(!target)return null;
+  let best=null,bestScore=0;
+  (table||[]).forEach((r,idx)=>{
+    const names=[r.team?.name,r.team?.shortName].filter(Boolean);
+    let score=0;
+    names.forEach(n=>{
+      const nn=_normName(n);
+      if(nn===target)score=Math.max(score,100);
+      else if(nn.length>=5&&target.includes(nn))score=Math.max(score,82);
+      else if(target.length>=5&&nn.includes(target))score=Math.max(score,78);
+      const a=new Set(_teamWords(n)), b=_teamWords(name);
+      const overlap=b.filter(w=>a.has(w)).length;
+      if(overlap)score=Math.max(score,overlap*24);
+    });
+    if(score>bestScore){bestScore=score;best={row:r,idx};}
+  });
+  return bestScore>=24?best:null;
+}
+
+function enrichScheduledMatches(matches,table,reqLeague){
+  return (matches||[]).map(m=>{
+    const h=tableTeamLookup(table,m.homeTeam?.name||m.home||'');
+    const a=tableTeamLookup(table,m.awayTeam?.name||m.away||'');
+    return {
+      ...m,
+      status:m.status||'SCHEDULED',
+      competition:{...(m.competition||{}),code:(m.competition?.code||reqLeague)},
+      homeTeam:{
+        ...(m.homeTeam||{}),
+        id:m.homeTeam?.id??h?.row?.team?.id??null,
+        name:m.homeTeam?.name||m.home||h?.row?.team?.name||'Home',
+        shortName:m.homeTeam?.shortName||h?.row?.team?.shortName||m.homeTeam?.name||m.home||'Home',
+      },
+      awayTeam:{
+        ...(m.awayTeam||{}),
+        id:m.awayTeam?.id??a?.row?.team?.id??null,
+        name:m.awayTeam?.name||m.away||a?.row?.team?.name||'Away',
+        shortName:m.awayTeam?.shortName||a?.row?.team?.shortName||m.awayTeam?.name||m.away||'Away',
+      },
+    };
+  });
+}
+
+async function scheduledFallbackFromToday(reqLeague,hours=48){
+  const r=await fetch(`/today?hours=${Math.max(1,Math.min(48,hours))}&_ts=${Date.now()}`,{cache:'no-store'});
+  if(!r.ok)throw new Error('Today fallback '+r.status);
+  const d=await r.json();
+  const matches=(d.matches||[])
+    .filter(m=>m.comp===reqLeague&&m.sport==='football')
+    .map(m=>({
+      id:m.id||null,
+      utcDate:m.kickoff,
+      status:'SCHEDULED',
+      source:m.source||'today',
+      competition:{code:reqLeague,source:'today-fallback'},
+      homeTeam:{id:null,name:m.home,shortName:m.home},
+      awayTeam:{id:null,name:m.away,shortName:m.away},
+      score:{fullTime:{home:null,away:null},halfTime:{home:null,away:null}},
+    }));
+  return {matches,count:matches.length,competition:{code:reqLeague,source:'today-fallback'}};
+}
+
+async function fetchScheduledMatches(reqLeague,df,dt,hours=48){
+  try{
+    return await api(`/competitions/${reqLeague}/matches?status=SCHEDULED&dateFrom=${df}&dateTo=${dt}`);
+  }catch(primaryErr){
+    const fallback=await scheduledFallbackFromToday(reqLeague,hours);
+    if(fallback.matches?.length)return fallback;
+    throw primaryErr;
+  }
+}
 
 // Fuzzy lookup for external data sources (ClubElo, Understat) that use shortened
 // team names while API-Football uses full names ("AFC Bournemouth" vs "Bournemouth").
@@ -3973,7 +4058,7 @@ async function loadFixtures(){
     const dt=new Date(today.getTime()+7*86400000).toISOString().split('T')[0];
     const [{table,allMatches},mData]=await Promise.all([
       loadCoreData(),
-      api(`/competitions/${reqLeague}/matches?status=SCHEDULED&dateFrom=${df}&dateTo=${dt}`)
+      fetchScheduledMatches(reqLeague,df,dt,48)
     ]);
     if(reqLeague!==lg||reqVersion!==leagueVersion)return;
     const responseLeague=mData?.competition?.code;
@@ -4004,7 +4089,8 @@ async function loadFixtures(){
     }
     const selectedOpt=document.querySelector(`#lgSel option[value="${reqLeague}"]`);
     const selectedLabel=(selectedOpt?.dataset?.baseLabel||selectedOpt?.textContent||reqLeague).replace(' [odds only]','');
-    const leagueMatches=(mData.matches||[]).filter(m=>!m.competition?.code||m.competition.code===reqLeague);
+    const leagueMatches=enrichScheduledMatches(mData.matches||[],table,reqLeague)
+      .filter(m=>!m.competition?.code||m.competition.code===reqLeague);
     const matches=leagueMatches.filter(m=>{ const d=new Date(m.utcDate); return d>=today&&d<=cutoff; }).slice(0,15);
     if(!matches.length){fixEl.innerHTML=`<div class="error-state">${t('err.no_fixtures')}</div>`;return;}
     const standMap={};
@@ -4020,8 +4106,10 @@ async function loadFixtures(){
       <button class="mini-action" onclick="refreshLeague()">${t('fix.refresh')} ${selectedLabel}</button>
     </div>`;
     matches.forEach(m=>{
-      const hI=standMap[m.homeTeam.id]||{pos:10,pts:20,idx:9};
-      const aI=standMap[m.awayTeam.id]||{pos:10,pts:20,idx:9};
+      const hLookup=m.homeTeam.id?null:tableTeamLookup(table,m.homeTeam.name);
+      const aLookup=m.awayTeam.id?null:tableTeamLookup(table,m.awayTeam.name);
+      const hI=standMap[m.homeTeam.id]||(hLookup?{pos:hLookup.row.position,pts:hLookup.row.points,idx:hLookup.idx}:{pos:10,pts:20,idx:9});
+      const aI=standMap[m.awayTeam.id]||(aLookup?{pos:aLookup.row.position,pts:aLookup.row.points,idx:aLookup.idx}:{pos:10,pts:20,idx:9});
       let pred={pH:34,pD:32,pA:34,hLam:'1.20',aLam:'1.10',scoreH:1,scoreA:1,conf:40,pOver25:45,pOver35:25,pBTTS:45,pHT_over05:55,pHT_over15:25,pCorners_over85:50,pCorners_over105:30,pCards_over25:50,pHCS:30,pACS:25,hDataBadge:'est.',aDataBadge:'est.'};
       let fxO=null;
       if(standRows.length>Math.max(hI.idx,aI.idx)){
@@ -4146,16 +4234,53 @@ function scheduleFocusTag(days){
   return `<span class="tag tag-gray">${t('sched.monitor')}</span>`;
 }
 
+function scheduleLabel(dt,days){
+  if(days===0)return t('today.title')||'Today';
+  if(days===1)return t('sched.tomorrow')||'Tomorrow';
+  return dt.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
+}
+
+function buildSchedulePayload(matches,days,reqLeague){
+  const now=new Date();
+  const cutoff=new Date(now.getTime()+days*86400000);
+  const usable=(matches||[])
+    .filter(m=>{
+      const dt=new Date(m.utcDate);
+      return !isNaN(dt)&&dt>=now&&dt<=cutoff;
+    })
+    .sort((a,b)=>new Date(a.utcDate)-new Date(b.utcDate))
+    .map(m=>{
+      const dt=new Date(m.utcDate);
+      const startsInDays=Math.floor((dt.setHours(0,0,0,0)-new Date(now).setHours(0,0,0,0))/86400000);
+      return {...m,startsInDays,bucket:scheduleLabel(new Date(m.utcDate),startsInDays)};
+    });
+  const byBucket=new Map();
+  usable.forEach(m=>{
+    if(!byBucket.has(m.bucket))byBucket.set(m.bucket,[]);
+    byBucket.get(m.bucket).push(m);
+  });
+  const buckets=[...byBucket.entries()].map(([label,items])=>({label,count:items.length,matches:items}));
+  return {matches:usable,buckets,count:usable.length,competition:{code:reqLeague,source:'client-fallback'}};
+}
+
 async function loadSchedule(days=scheduleDays){
   scheduleDays=days;
   const reqLeague=lg, reqVersion=leagueVersion;
   const el=document.getElementById('schedule-body');
   el.innerHTML=`<div class="loading-state">${t('loading.schedule')}</div>`;
   try{
-    const r=await fetch(`/schedule/${reqLeague}?days=${days}`);
-    const d=await r.json();
+    const r=await fetch(`/schedule/${reqLeague}?days=${days}&_ts=${Date.now()}`,{cache:'no-store'});
+    let d=await r.json();
     if(reqLeague!==lg||reqVersion!==leagueVersion)return;
-    if(!r.ok||d.error){el.innerHTML=`<div class="error-state">${d.error||t('err.schedule_unavail')}</div>`;return;}
+    if(!r.ok||d.error){
+      const now=new Date();
+      const df=now.toISOString().split('T')[0];
+      const dt=new Date(now.getTime()+days*86400000).toISOString().split('T')[0];
+      const table=standRows.length?standRows:(await loadCoreData()).table;
+      const fallback=await fetchScheduledMatches(reqLeague,df,dt,48);
+      d=buildSchedulePayload(enrichScheduledMatches(fallback.matches||[],table,reqLeague),Math.max(1,Math.min(days,2)),reqLeague);
+      if(!d.count){el.innerHTML=`<div class="error-state">${fallback.error||d.error||t('err.schedule_unavail')}</div>`;return;}
+    }
     const buckets=d.buckets||[];
     const total=d.count||0;
     const today=(d.matches||[]).filter(m=>m.startsInDays===0).length;

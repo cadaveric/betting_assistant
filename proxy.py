@@ -2754,6 +2754,11 @@ def fetch_today_fixtures(comp):
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+        self.send_header('Pragma', 'no-cache')
+        super().end_headers()
+
     def _require_auth(self) -> bool:
         if _get_session_from_request(self): return True
         self.send_response(302)
@@ -3758,7 +3763,6 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(body)
 
