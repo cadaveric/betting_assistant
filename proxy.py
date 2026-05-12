@@ -1526,7 +1526,8 @@ def _market_trust(label, hdata=None, adata=None, has_odds=False):
 
 def _bet_confidence(edge, ev, model_pct, odds, trust):
     trust_score = (trust or {}).get('score') or 50
-    score = 28 + max(0, edge) * 2.2 + max(0, ev) * 85 + max(0, model_pct - 45) * 0.35
+    # Anchor at 25 (not 45) so draws (model_pct≈28-35) also earn probability credit
+    score = 28 + max(0, edge) * 2.2 + max(0, ev) * 85 + max(0, model_pct - 25) * 0.30
     if odds and odds > 4.5:
         score -= 6
     score = score * 0.72 + trust_score * 0.28
@@ -3180,9 +3181,12 @@ class Handler(SimpleHTTPRequestHandler):
         except ValueError:
             days = 3
         risk_cfg = {
-            'conservative': {'min_edge': 15, 'max_odds': 2.2,  'min_prob': 0.58, 'min_draw_prob': 0.42, 'min_goals_prob': 0.67, 'min_bet_conf': 76},
-            'balanced':     {'min_edge': 10, 'max_odds': 3.2,  'min_prob': 0.55, 'min_draw_prob': 0.40, 'min_goals_prob': 0.65, 'min_bet_conf': 68},
-            'risky':        {'min_edge': 8,  'max_odds': 4.5,  'min_prob': 0.52, 'min_draw_prob': 0.38, 'min_goals_prob': 0.62, 'min_bet_conf': 62},
+            # min_draw_prob aligned with actual draw base rate (0.25-0.29);
+            # previous values (0.38-0.42) made draws unreachable by design.
+            # min_bet_conf lowered slightly to match the corrected _bet_confidence formula.
+            'conservative': {'min_edge': 15, 'max_odds': 2.2,  'min_prob': 0.58, 'min_draw_prob': 0.30, 'min_goals_prob': 0.67, 'min_bet_conf': 74},
+            'balanced':     {'min_edge': 10, 'max_odds': 3.2,  'min_prob': 0.55, 'min_draw_prob': 0.28, 'min_goals_prob': 0.65, 'min_bet_conf': 64},
+            'risky':        {'min_edge': 8,  'max_odds': 4.5,  'min_prob': 0.52, 'min_draw_prob': 0.26, 'min_goals_prob': 0.62, 'min_bet_conf': 58},
         }
         cfg      = risk_cfg.get(risk, risk_cfg['balanced'])
         min_edge = cfg['min_edge']
@@ -3261,9 +3265,14 @@ class Handler(SimpleHTTPRequestHandler):
                     la = la_raw*0.55 + elo_la*0.30 + avg_ag*0.15
                 else:
                     lh, la = lh_raw, la_raw
-                # Cap at 2.2 — prevents tiny CL samples from extreme lambdas
-                lh = max(0.2, min(2.2, lh))
-                la = max(0.2, min(2.2, la))
+                # Form adjustment: teams in/out of form get ±20% lambda shift.
+                # Centered at average home win rate (0.40) and away win rate (0.30).
+                h_form = hdata.get('homeWinRate5') or hdata.get('formPct') or 0.40
+                a_form = adata.get('awayWinRate5') or adata.get('formPct') or 0.30
+                lh_form = _clamp(1.0 + (h_form - 0.40) * 0.50, 0.80, 1.20)
+                la_form = _clamp(1.0 + (a_form - 0.30) * 0.50, 0.80, 1.20)
+                lh = max(0.2, min(2.2, lh * lh_form))
+                la = max(0.2, min(2.2, la * la_form))
                 ph, pd, pa = _match_probs_dc(lh, la, rho=comp_rho)
                 # Blend raw Poisson over2.5 with league prior (same calibration
                 # direction as frontend applyOver25Calib)
@@ -3854,9 +3863,12 @@ if __name__ == '__main__':
                 del cache[k]
         if stale:
             print(f'  [SPORT] Cleared {len(stale)} stale sport cache entries')
-        # Load football ML model
+        # Load football ML model; auto-retrain when algorithm is upgraded
         if os.path.exists(_data_path('data/prediction_model.pkl')):
             _load_ml_model()
+            if _ml_meta.get('algorithm') == 'RandomForest':
+                print('  [ML] Upgrading RF→HistGBT: retraining in background (old model stays active)')
+                _start_ml_training()
         else:
             print('  [ML] Model not found — training in background (takes ~2 min)')
             _start_ml_training()

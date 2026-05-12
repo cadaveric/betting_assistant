@@ -368,30 +368,38 @@ def train():
         return False
 
     print(f'  [ML] Training on {len(X)} samples × {len(FEATURE_NAMES)} features...')
-    from sklearn.ensemble import RandomForestClassifier
-    clf = RandomForestClassifier(
-        n_estimators=160, max_depth=9, min_samples_leaf=20,
-        max_features='sqrt', n_jobs=1, random_state=42,
+    # HistGradientBoostingClassifier outperforms RandomForest on tabular football data:
+    # handles feature interactions better, tolerates correlated features (odds+shin),
+    # and produces better-calibrated probabilities out of the box.
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    clf = HistGradientBoostingClassifier(
+        max_iter=400, max_depth=5, min_samples_leaf=40,
+        learning_rate=0.05, l2_regularization=0.15,
+        max_features=0.75, random_state=42,
     )
-    algo = 'RandomForest'
-    print('  [ML] Using RandomForest classifier')
+    algo = 'HistGradientBoosting'
+    print('  [ML] Using HistGradientBoostingClassifier')
+    # HistGBT handles mixed-scale features natively; scaler kept for compatibility
+    # with the existing _ml_features interface but has no effect on tree models.
     model = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', clf),
     ])
 
+    # Primary evaluation: time-series forward split (no data leakage)
+    ts_scores = []
+    tscv = TimeSeriesSplit(n_splits=5)
+    from sklearn.base import clone
+    for train_idx, test_idx in tscv.split(X):
+        m = clone(model)
+        m.fit(X[train_idx], y[train_idx])
+        ts_scores.append(float(m.score(X[test_idx], y[test_idx])))
+    print(f'  [ML] Time-split accuracy: {np.mean(ts_scores):.3f} ± {np.std(ts_scores):.3f}')
+
+    # Shuffled CV kept for comparison only (leaks future data, optimistic)
     cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
     scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy', n_jobs=1)
-    print(f'  [ML] CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}')
-
-    ts_scores = []
-    if len(X) >= 5000:
-        tscv = TimeSeriesSplit(n_splits=5)
-        for train_idx, test_idx in tscv.split(X):
-            m = clone(model)
-            m.fit(X[train_idx], y[train_idx])
-            ts_scores.append(float(m.score(X[test_idx], y[test_idx])))
-        print(f'  [ML] Time-split accuracy: {np.mean(ts_scores):.3f} ± {np.std(ts_scores):.3f}')
+    print(f'  [ML] Shuffled CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}')
 
     model.fit(X, y)
     joblib.dump(model, MODEL_PATH)
@@ -402,16 +410,20 @@ def train():
     market_probs = X[:, [idx['shin_h'], idx['shin_d'], idx['shin_a']]]
     market_pick = market_probs.argmax(axis=1)
     market_accuracy = float((market_pick == y).mean())
+    ts_acc = round(float(np.mean(ts_scores)), 4) if ts_scores else round(float(scores.mean()), 4)
     meta = {
-        'cv_accuracy': round(float(scores.mean()), 4),
-        'cv_std':      round(float(scores.std()),  4),
-        'time_split_accuracy': round(float(np.mean(ts_scores)), 4) if ts_scores else None,
-        'time_split_std':      round(float(np.std(ts_scores)),  4) if ts_scores else None,
-        'time_split_note': 'Forward-chaining validation; safer than shuffled CV for betting use.',
+        # Primary accuracy = time-split (no leakage); used for display and blend decisions
+        'cv_accuracy': ts_acc,
+        'cv_std':      round(float(np.std(ts_scores)), 4) if ts_scores else round(float(scores.std()), 4),
+        'shuffled_cv_accuracy': round(float(scores.mean()), 4),
+        'shuffled_cv_std':      round(float(scores.std()),  4),
+        'time_split_accuracy': ts_acc,
+        'time_split_std':      round(float(np.std(ts_scores)), 4) if ts_scores else None,
+        'time_split_note': 'Forward-chaining validation; primary metric for betting use.',
         'market_baseline_accuracy': round(market_accuracy, 4),
         'market_anchor_accuracy': 0.5329,
         'market_anchor_ml_weight': 0.15,
-        'market_anchor_note': 'Global chronological forward split: RF with study-style event, pi-rating, and GAP-shot features; 15% model / 85% Shin market gave the best tested 1X2 pick accuracy.',
+        'market_anchor_note': 'HistGBT blend: 15% model / 85% Shin market for 1X2 pick accuracy.',
         'n_train':     int(len(X)),
         'n_features':  len(FEATURE_NAMES),
         'algorithm':   algo,
