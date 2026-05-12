@@ -4527,7 +4527,7 @@ function findFixtureOdds(hName,aName){
     if(an===bn)return true;
     if(an.length>=5&&bn.includes(an))return true;
     if(bn.length>=5&&an.includes(bn))return true;
-    const aw=new Set(_teamWords(a)), bw=_teamWords(b);
+    const aw=new Set(_teamWords(a)), bw=new Set(_teamWords(b));
     return [...aw].filter(w=>bw.has(w)).length>0;
   };
   return (oddsCache[lg]||[]).find(g=>
