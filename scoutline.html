@@ -1650,8 +1650,8 @@ select,input[type=text],input[type=number]{
       <div class="adv-group">
         <div class="adv-label" data-i18n="adv.bettype">Bet type</div>
         <select id="advStrategy" class="pred-opt-sel">
-          <option value="both" selected data-i18n="adv.bettype.both">Individual + combined</option>
-          <option value="singles" data-i18n="adv.bettype.singles">Individual bets only</option>
+          <option value="singles" selected data-i18n="adv.bettype.singles">Individual bets only</option>
+          <option value="both" data-i18n="adv.bettype.both">Individual + combined</option>
           <option value="acca" data-i18n="adv.bettype.acca">Combined bet only</option>
           <option value="portfolio" data-i18n="adv.bettype.portfolio">Portfolio (anchor + value + speculative)</option>
         </select>
@@ -2789,9 +2789,10 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
   const formWgt=hasOdds?Math.max(0.06,0.15-oddsW*0.18):0.15;
   if(modelW==='form'){
     wH=hWinDC*0.35+hFF*0.35+eloExp*0.2+Math.max(0,h2hFactor)*0.1;
-    wA=aWinDC*0.35+(1-hFF)*0.3+(1-eloExp)*0.2+Math.max(0,-h2hFactor)*0.15;
-    const fc=Math.max(0,0.5-Math.abs(hFF-aFF)/100)*2,ec=Math.max(0,0.5-Math.abs(eloExp-0.5))*2;
-    wD=drawDC*0.50+fc*0.09+ec*0.09+(leagueCalibrationData?.[lg]?.drawPct||0.27)*0.35;
+    wA=aWinDC*0.35+aFF*0.35+(1-eloExp)*0.2+Math.max(0,-h2hFactor)*0.1;
+    const fc=Math.max(0,1-Math.abs(hFF-aFF)*2.5);
+    const ec=Math.max(0,1-Math.abs(eloExp-0.5)*4);
+    wD=drawDC*0.55+fc*0.045+ec*0.045+(leagueCalibrationData?.[lg]?.drawPct||0.27)*0.25;
   } else if(modelW==='elo'){
     wH=hWinDC*0.2+eloExp*0.65+hFF*0.1+Math.max(0,h2hFactor)*0.05;
     wA=aWinDC*0.2+(1-eloExp)*0.65+(1-aFF)*0.1+Math.max(0,-h2hFactor)*0.05;
@@ -2800,12 +2801,13 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     wH=hWinDC; wD=drawDC; wA=aWinDC;
   } else {
     // convergence signals: evenly-matched teams → more draws
-    const formConv=Math.max(0,0.5-Math.abs(hFF-aFF)/100)*2;
-    const eloConv=Math.max(0,0.5-Math.abs(eloExp-0.5))*2;
-    const drawConvBoost=formConv*0.09+eloConv*0.09;
+    const formConv=Math.max(0,1-Math.abs(hFF-aFF)*2.5);
+    const eloConv=Math.max(0,1-Math.abs(eloExp-0.5)*4);
+    const lambdaConv=Math.max(0,1-Math.abs(hLam-aLam)/0.85);
+    const drawConvBoost=formConv*0.025+eloConv*0.025+lambdaConv*0.030;
     const leaguePriorDraw=leagueCalibrationData?.[lg]?.drawPct||0.27;
     wH=hWinDC*poisW+eloExp*eloW+hFF*formWgt+Math.max(0,h2hFactor)*0.10+(hasOdds?implH*oddsW:0)+moveH+(tune.bias?.home||0);
-    wA=aWinDC*poisW+(1-eloExp)*(eloW*0.70)+(1-hFF)*formWgt+Math.max(0,-h2hFactor)*0.10+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
+    wA=aWinDC*poisW+(1-eloExp)*(eloW*0.70)+aFF*formWgt+Math.max(0,-h2hFactor)*0.10+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
     wD=drawDC*(hasOdds?0.55:0.45)+drawConvBoost+(hasOdds?implD*oddsW:leaguePriorDraw*0.42)+moveD+(tune.bias?.draw||0);
   }
   const tot=wH+wD+wA;
@@ -3216,7 +3218,7 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   const bets=[];
 
   // Win market
-  if(favProb>=60){
+  if(favProb>=62&&p.conf>=55){
     const short=favOdds&&favOdds<1.50;
     const oddsStr=favOdds?` at odds ${favOdds}`:'';
     const tip=short?'Odds are short — fold into an accumulator only.':'Solid standalone bet.';
@@ -3224,19 +3226,19 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   }
 
   // Asian handicap when odds too short to bet straight
-  if(favProb>=68&&favOdds&&favOdds<1.50)
+  if(favProb>=70&&p.conf>=60&&favOdds&&favOdds<1.50)
     bets.push({type:'good',market:`${favorite} -1 Asian handicap`,note:`Better value than the straight win at ${favOdds}. Win probability supports the -1 line.`});
 
   // Over/Under 2.5
-  if(p.pOver25>=62)
+  if(p.pOver25>=66)
     bets.push({type:'good',market:'Over 2.5 goals',note:`${p.pOver25}% probability. Expected total: λ${totalLam.toFixed(1)} (${hName} λ${p.hLam} / ${aName} λ${p.aLam}).`});
-  else if(p.pOver25<=38)
+  else if(p.pOver25<=34)
     bets.push({type:'good',market:'Under 2.5 goals',note:`Only ${p.pOver25}% for over — ${100-p.pOver25}% for under. Low-scoring game expected (λ${totalLam.toFixed(1)}).`});
 
   // BTTS
-  if(p.pBTTS>=60)
+  if(p.pBTTS>=64)
     bets.push({type:'good',market:'Both teams to score — YES',note:`${p.pBTTS}% probability. Both sides generating chances (λ${p.hLam} / λ${p.aLam}).`});
-  else if(p.pBTTS<=35&&favProb>=65){
+  else if(p.pBTTS<=32&&favProb>=68&&p.conf>=58){
     const csT=favIsHome?hName:aName, csP=favIsHome?p.pHCS:p.pACS;
     bets.push({type:'good',market:'Both teams to score — NO',note:`${100-p.pBTTS}% chance BTTS fails. ${csT} clean sheet probability: ${csP}%.`});
   }
@@ -4544,19 +4546,20 @@ function predictionBetRecommendations(p,hName,aName){
   const favSide=predictionPick(p);
   const favName=favSide==='H'?hName:favSide==='A'?aName:'Draw';
   const favProb=favSide==='H'?p.pH:favSide==='A'?p.pA:p.pD;
+  const oneX2Playable=(p.conf||0)>=55&&(!p.hasOdds||(p.betConfidence||0)>=62);
   const push=(key,label,prob,extra={})=>bets.push({
     key,label,probability:Math.round(prob||0),
     confidence:p.betConfidence??p.conf,
     trust:extra.trust||p.marketTrust?.goals||p.marketTrust?.oneX2||null,
     ...extra
   });
-  if(favProb>=60) push('1x2',`${favName} to win`,favProb,{side:favSide,trust:p.marketTrust?.oneX2});
-  if(p.pOver25>=62) push('over25','Over 2.5 goals',p.pOver25);
-  else if(p.pOver25<=38) push('under25','Under 2.5 goals',100-p.pOver25);
-  if(p.pBTTS>=60) push('btts_yes','Both teams to score - YES',p.pBTTS);
-  else if(p.pBTTS<=35&&favProb>=65) push('btts_no','Both teams to score - NO',100-p.pBTTS);
-  if(p.pHWnil>=45) push('home_win_to_nil',`${hName} win to nil`,p.pHWnil,{side:'H'});
-  if(p.pAWnil>=45) push('away_win_to_nil',`${aName} win to nil`,p.pAWnil,{side:'A'});
+  if(favProb>=62&&oneX2Playable) push('1x2',`${favName} to win`,favProb,{side:favSide,trust:p.marketTrust?.oneX2});
+  if(p.pOver25>=66) push('over25','Over 2.5 goals',p.pOver25);
+  else if(p.pOver25<=34) push('under25','Under 2.5 goals',100-p.pOver25);
+  if(p.pBTTS>=64) push('btts_yes','Both teams to score - YES',p.pBTTS);
+  else if(p.pBTTS<=32&&favProb>=68&&oneX2Playable) push('btts_no','Both teams to score - NO',100-p.pBTTS);
+  if(p.pHWnil>=50&&oneX2Playable) push('home_win_to_nil',`${hName} win to nil`,p.pHWnil,{side:'H'});
+  if(p.pAWnil>=50&&oneX2Playable) push('away_win_to_nil',`${aName} win to nil`,p.pAWnil,{side:'A'});
   if((p.cornersReliability||0)>=70&&p.pCorn105>=55) push('corners_over105','Corners over 10.5',p.pCorn105,{trust:p.marketTrust?.corners,requiresStats:true});
   else if((p.cornersReliability||0)>=70&&p.pCorn85>=65) push('corners_over85','Corners over 8.5',p.pCorn85,{trust:p.marketTrust?.corners,requiresStats:true});
   if((p.cardsReliability||0)>=70&&p.pCard35>=55) push('cards_over35','Cards over 3.5',p.pCard35,{trust:p.marketTrust?.cards,requiresStats:true});
@@ -4719,8 +4722,13 @@ function buildH2HAggregates(matches,hId,aId){
 
 
 // ── BETTING ADVISOR ───────────────────────────────────────────────────────────
-const RISK_EDGE={conservative:12,balanced:8,risky:6};
-const RISK_BET_CONF={conservative:72,balanced:64,risky:56};
+const RISK_EDGE={conservative:15,balanced:10,risky:8};
+const RISK_BET_CONF={conservative:76,balanced:68,risky:62};
+const RISK_MIN_PROB={
+  conservative:{oneX2:58,draw:42,goals:67},
+  balanced:{oneX2:55,draw:40,goals:65},
+  risky:{oneX2:52,draw:38,goals:62},
+};
 
 function kellyFraction(odds,prob){
   if(!odds||odds<=1||prob<=0||prob>=1)return 0;
@@ -5004,6 +5012,13 @@ async function runAdvisorCurrentLeague(el,budget,risk,strategy,days){
     if(g.best_o25){const impl25=g.best_o25>1?Math.round(100/g.best_o25):50;outcomes.push({label:'Over 2.5',odds:g.best_o25,bk:null,modelPct:p.pOver25,implPct:impl25});}
     outcomes.forEach(o=>{
       if(!o.odds||o.odds<=1||!o.modelPct||!o.implPct)return;
+      const minProbCfg=RISK_MIN_PROB[risk]||RISK_MIN_PROB.balanced;
+      const minProb=o.label==='Draw'
+        ? minProbCfg.draw
+        : o.label.includes('Over 2.5')
+          ? minProbCfg.goals
+          : minProbCfg.oneX2;
+      if(o.modelPct<minProb)return;
       const edge=o.modelPct-o.implPct;
       if(edge<minEdge)return;
       const prob=o.modelPct/100;

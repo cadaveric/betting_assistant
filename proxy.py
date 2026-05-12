@@ -3180,9 +3180,9 @@ class Handler(SimpleHTTPRequestHandler):
         except ValueError:
             days = 3
         risk_cfg = {
-            'conservative': {'min_edge': 12, 'max_odds': 2.2,  'min_prob': 0.42, 'min_bet_conf': 72},
-            'balanced':     {'min_edge': 8,  'max_odds': 3.5,  'min_prob': 0.30, 'min_bet_conf': 64},
-            'risky':        {'min_edge': 6,  'max_odds': 5.5,  'min_prob': 0.20, 'min_bet_conf': 56},
+            'conservative': {'min_edge': 15, 'max_odds': 2.2,  'min_prob': 0.58, 'min_draw_prob': 0.42, 'min_goals_prob': 0.67, 'min_bet_conf': 76},
+            'balanced':     {'min_edge': 10, 'max_odds': 3.2,  'min_prob': 0.55, 'min_draw_prob': 0.40, 'min_goals_prob': 0.65, 'min_bet_conf': 68},
+            'risky':        {'min_edge': 8,  'max_odds': 4.5,  'min_prob': 0.52, 'min_draw_prob': 0.38, 'min_goals_prob': 0.62, 'min_bet_conf': 62},
         }
         cfg      = risk_cfg.get(risk, risk_cfg['balanced'])
         min_edge = cfg['min_edge']
@@ -3281,7 +3281,8 @@ class Handler(SimpleHTTPRequestHandler):
                 for label, odds, bk, model_p, impl_p in outcomes:
                     if not odds or odds <= 1 or not model_p or not impl_p: continue
                     if odds > cfg['max_odds']: continue
-                    if model_p < cfg['min_prob']: continue
+                    min_prob = cfg['min_goals_prob'] if label == 'Over 2.5' else cfg['min_draw_prob'] if label == 'Draw' else cfg['min_prob']
+                    if model_p < min_prob: continue
                     edge = round(model_p*100 - impl_p*100, 1)
                     if edge < min_edge: continue
                     ev = model_p*(odds - 1) - (1 - model_p)
