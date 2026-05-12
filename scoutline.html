@@ -3204,16 +3204,36 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   const isMismatch=Math.abs(hPos-aPos)>=10||probGap>=30||scoreGap>=2||lambdaGap>=0.9;
   const totalLam=(parseFloat(p.hLam)+parseFloat(p.aLam));
   const avoids=[];
+  const hLam=parseFloat(p.hLam)||0, aLam=parseFloat(p.aLam)||0;
+  const eloGap=Math.abs((p.hElo||1500)-(p.aElo||1500));
+  const formGap=Math.abs((p.hFF||50)-(p.aFF||50));
+  const xgLeader=hLam>aLam+0.25?hName:aLam>hLam+0.25?aName:null;
+  const formLeader=(p.hFF||0)>(p.aFF||0)+8?hName:(p.aFF||0)>(p.hFF||0)+8?aName:null;
+  const marketLine=p.hasOdds
+    ? `Bookmaker market implies ${hName} ${p.implH}% · Draw ${p.implD}% · ${aName} ${p.implA}%.`
+    : 'No live odds were available for this comparison, so the analysis is model-only.';
+  const goalLean=p.pOver25>=58
+    ? `Goals lean upward: Over 2.5 is ${p.pOver25}% from ${totalLam.toFixed(2)} total xG.`
+    : p.pOver25<=42
+      ? `Goals lean downward: Under 2.5 is ${100-p.pOver25}% from ${totalLam.toFixed(2)} total xG.`
+      : `Goal markets are neutral: Over 2.5 is ${p.pOver25}% from ${totalLam.toFixed(2)} total xG.`;
+  const edgeNotes=[];
+  if(xgLeader) edgeNotes.push(`${xgLeader} create the better chance profile (${hName} λ${p.hLam}, ${aName} λ${p.aLam})`);
+  if(formLeader) edgeNotes.push(`${formLeader} have the stronger recent form (${hName} ${p.hFF}%, ${aName} ${p.aFF}%)`);
+  if(eloGap>=90) edgeNotes.push(`Elo gives a meaningful ${eloGap}-point separation`);
+  if(!edgeNotes.length) edgeNotes.push('xG, form and Elo are all clustered closely');
 
   let headline='';
   if(favProb>=70&&isMismatch)
-    headline=`${favorite} are strong favourites at ${favProb}% — ${underdog} are ${udCtx} and clearly outmatched on the numbers.`;
+    headline=`${favorite} are strong favourites at ${favProb}% — ${underdog} are ${udCtx} and clearly outmatched. ${edgeNotes.slice(0,2).join('; ')}. ${goalLean}`;
   else if(favProb>=60)
-    headline=`${favorite} hold a clear ${favProb}% edge, supported by a ${Math.abs(p.hElo-p.aElo)}-point Elo gap and ${favIsHome?p.hFF:p.aFF}% recent form rating.`;
+    headline=`${favorite} hold a clear ${favProb}% edge. ${edgeNotes.slice(0,2).join('; ')}. ${marketLine} ${goalLean}`;
   else if(probGap>=18||scoreGap>=2||lambdaGap>=0.75)
-    headline=`${favorite} have the model edge — ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%, with a projected ${p.scoreH}–${p.scoreA} scoreline. ${drawLive?'The draw remains possible, but it is secondary to the main pick.':'The draw is not the primary signal.'}`;
+    headline=`${favorite} have the model edge (${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%). ${edgeNotes.slice(0,2).join('; ')}. ${drawLive?'The draw remains possible, but it is secondary to the main pick.':'The draw is not the primary signal.'} ${goalLean}`;
+  else if((p.conf||0)<50)
+    headline=`No strong 1X2 signal: ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%. ${edgeNotes.join('; ')}. ${goalLean} Do not use the outcome pick alone here; only consider a goals/BTTS market if the odds create real value.`;
   else
-    headline=`Tight contest — ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%. Form and strength are closely matched; the draw is live.`;
+    headline=`Balanced match: ${hName} ${p.pH}% · Draw ${p.pD}% · ${aName} ${p.pA}%. ${edgeNotes.join('; ')}. ${marketLine} ${goalLean}`;
 
   const bets=[];
 
@@ -3232,12 +3252,18 @@ function generateMatchNarrative(p,hName,aName,hRow,aRow,hS,aS){
   // Over/Under 2.5
   if(p.pOver25>=66)
     bets.push({type:'good',market:'Over 2.5 goals',note:`${p.pOver25}% probability. Expected total: λ${totalLam.toFixed(1)} (${hName} λ${p.hLam} / ${aName} λ${p.aLam}).`});
+  else if(p.pOver25>=58)
+    bets.push({type:'warn',market:'Watch Over 2.5',note:`${p.pOver25}% probability is a lean, not a strong bet. Play only if bookmaker odds imply a clearly lower chance.`});
   else if(p.pOver25<=34)
     bets.push({type:'good',market:'Under 2.5 goals',note:`Only ${p.pOver25}% for over — ${100-p.pOver25}% for under. Low-scoring game expected (λ${totalLam.toFixed(1)}).`});
+  else if(p.pOver25<=42)
+    bets.push({type:'warn',market:'Watch Under 2.5',note:`${100-p.pOver25}% probability is a lean, not a strong bet. Needs a price edge before staking.`});
 
   // BTTS
   if(p.pBTTS>=64)
     bets.push({type:'good',market:'Both teams to score — YES',note:`${p.pBTTS}% probability. Both sides generating chances (λ${p.hLam} / λ${p.aLam}).`});
+  else if(p.pBTTS>=58)
+    bets.push({type:'warn',market:'Watch BTTS YES',note:`${p.pBTTS}% is only a lean. It should not be combined blindly with a 1X2 pick.`});
   else if(p.pBTTS<=32&&favProb>=68&&p.conf>=58){
     const csT=favIsHome?hName:aName, csP=favIsHome?p.pHCS:p.pACS;
     bets.push({type:'good',market:'Both teams to score — NO',note:`${100-p.pBTTS}% chance BTTS fails. ${csT} clean sheet probability: ${csP}%.`});
