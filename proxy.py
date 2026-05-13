@@ -1177,37 +1177,52 @@ def _match_prediction_to_result(row):
             kickoff = kickoff.replace(tzinfo=_dt.timezone.utc)
     except Exception:
         kickoff = None
-    data = apif_matches(comp, status='FINISHED') or {}
     hid, aid = row.get('homeTeamId'), row.get('awayTeamId')
     hname = (row.get('homeTeam') or '').lower()
     aname = (row.get('awayTeam') or '').lower()
-    for m in data.get('matches', []):
-        mh = m.get('homeTeam') or {}; ma = m.get('awayTeam') or {}
-        ids_match = hid and aid and mh.get('id') == hid and ma.get('id') == aid
-        names_match = hname and aname and _team_names_match(mh.get('name'), hname) and _team_names_match(ma.get('name'), aname)
-        if not (ids_match or names_match):
-            continue
-        if kickoff:
-            try:
-                played = _dt.datetime.fromisoformat((m.get('utcDate') or '').replace('Z', '+00:00'))
-                if played.tzinfo is None:
-                    played = played.replace(tzinfo=_dt.timezone.utc)
-                if abs((played - kickoff).total_seconds()) > 3 * 86400:
-                    continue
-            except Exception:
+
+    def _find_in(matches_list):
+        for m in matches_list:
+            mh = m.get('homeTeam') or {}; ma = m.get('awayTeam') or {}
+            ids_match = hid and aid and mh.get('id') == hid and ma.get('id') == aid
+            names_match = hname and aname and _team_names_match(mh.get('name'), hname) and _team_names_match(ma.get('name'), aname)
+            if not (ids_match or names_match):
                 continue
-        elif predicted_at:
-            try:
-                played = _dt.datetime.fromisoformat((m.get('utcDate') or '').replace('Z', '+00:00'))
-                if played.tzinfo is None:
-                    played = played.replace(tzinfo=_dt.timezone.utc)
-                if played < predicted_at - _dt.timedelta(hours=12):
+            if kickoff:
+                try:
+                    played = _dt.datetime.fromisoformat((m.get('utcDate') or '').replace('Z', '+00:00'))
+                    if played.tzinfo is None:
+                        played = played.replace(tzinfo=_dt.timezone.utc)
+                    if abs((played - kickoff).total_seconds()) > 3 * 86400:
+                        continue
+                except Exception:
                     continue
-                if played > predicted_at + _dt.timedelta(days=14):
+            elif predicted_at:
+                try:
+                    played = _dt.datetime.fromisoformat((m.get('utcDate') or '').replace('Z', '+00:00'))
+                    if played.tzinfo is None:
+                        played = played.replace(tzinfo=_dt.timezone.utc)
+                    if played < predicted_at - _dt.timedelta(hours=12):
+                        continue
+                    if played > predicted_at + _dt.timedelta(days=14):
+                        continue
+                except Exception:
                     continue
-            except Exception:
-                continue
+            return m
+        return None
+
+    data = apif_matches(comp, status='FINISHED') or {}
+    m = _find_in(data.get('matches', []))
+    if m:
         return m
+    # Playoff/cup matches may be absent from football-data.org competition endpoints.
+    # Fall back to a direct API-Football query when FD was the primary source and the
+    # match wasn't found there.
+    if _prefer_fd(comp) and APIF_KEY and hid:
+        info = APIF_LEAGUE_MAP.get(comp)
+        if info:
+            apif_data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': 30}) or []
+            return _find_in(_apif_to_matches(apif_data))
     return None
 
 def _grade_two_way(row, home_score, away_score, kickoff=None):
