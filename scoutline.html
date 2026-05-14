@@ -3419,8 +3419,8 @@ function renderPredResult(p,hName,aName,h2hData){
         <span class="pred-conf-badge ${confClass}" title="${t('pred.help.pred_conf')}">${p.conf}% ${t('pred.confidence')}</span>
         ${p.betConfidence!=null?`<span class="pred-conf-badge ${p.betConfidence>=70?'high':p.betConfidence>=55?'med':''}" title="${t('pred.help.bet_conf')}">${p.betConfidence}% ${t('pred.bet_confidence')}</span>`:''}
         ${trustBadge(p.marketTrust?.oneX2)}
-        <span class="pred-winner-pill" style="background:${wColor}22;color:${wColor};border:.5px solid ${wColor}55;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:500">${t('pred.outcome_pick')}: ${winner}</span>
-        <span class="pred-conf-badge">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
+        <span class="pred-winner-pill" style="background:${wColor}33;color:${wColor};border:1px solid ${wColor}88;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600">${t('pred.outcome_pick')}: ${winner}</span>
+        <span class="pred-conf-badge" title="Elo rating gap between the two teams. Under 50 = evenly matched. 100–200 = clear advantage. Over 200 = strong favourite. Sources used in priority order: ClubElo API → rolling match data → standings formula.">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
         <span class="info-dot" title="${t('pred.help.confidence_stack')}">i</span>
       </div>
     </div>
