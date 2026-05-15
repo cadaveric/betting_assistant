@@ -2198,6 +2198,7 @@ let modelCalibration={
 };
 let leagueCalibrationData={};
 let clubEloData={};  // normalized_name -> {name, elo, country} from ClubElo API
+let stadiumCoords={};  // API-Football team_id -> {lat, lon, name}
 
 // ── API ──────────────────────────────────────────────────────────────────────
 async function api(path){
@@ -2215,10 +2216,11 @@ async function postJson(path,payload){
 function prefetch(comp){ fetch('/prefetch/'+comp).catch(()=>{}); }
 async function loadModelCalibration(){
   try{
-    const [predResp,calResp,ceResp]=await Promise.all([
+    const [predResp,calResp,ceResp,scResp]=await Promise.all([
       fetch('/predictions?refresh=1&limit=500'),
       fetch('/calibration').catch(()=>null),
-      fetch('/clubelo').catch(()=>null)
+      fetch('/clubelo').catch(()=>null),
+      fetch('/data/stadium_coords.json').catch(()=>null)
     ]);
     const d=await predResp.json();
     const tuning=d.summary?.tuning;
@@ -2230,6 +2232,10 @@ async function loadModelCalibration(){
     if(ceResp?.ok){
       const ceData=await ceResp.json().catch(()=>null);
       if(ceData&&Object.keys(ceData).length>0) clubEloData=ceData;
+    }
+    if(scResp?.ok){
+      const scData=await scResp.json().catch(()=>null);
+      if(scData?.teams) stadiumCoords=scData.teams;
     }
   }catch(e){}
 }
@@ -2661,7 +2667,7 @@ const LG_CORN={PL:4.5,ELC:4.6,PD:4.2,BL1:4.8,SA:4.0,FL1:4.1,PPL:4.3,DED:4.7,CL:4
 const LG_CARD={PL:1.4,ELC:1.5,PD:1.7,BL1:1.3,SA:1.6,FL1:1.5,PPL:1.5,DED:1.3,CL:1.3,EL:1.3,EC:1.3,WC:1.3,BSA:1.6};
 
 // ── DEEP PREDICT v2 ───────────────────────────────────────────────────────────
-function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fixtureIntel,oddsNumBooks){
+function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fixtureIntel,oddsNumBooks,weather){
   const h=standRows[hi], a=standRows[ai];
   const tune=activeTune();
   const hElo=eloMap[h.team.id]||1500, aElo=eloMap[a.team.id]||1500;
@@ -2757,6 +2763,12 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
 
   hLam=Math.max(0.2,Math.min(4.5,hLam*h2hLamAdjH));
   aLam=Math.max(0.2,Math.min(4.5,aLam*h2hLamAdjA));
+
+  // Weather adjustments: rain → fewer goals (~8%); strong wind → fewer goals (~5%)
+  let weatherFactor=1.0;
+  if(weather?.isRainy)  weatherFactor*=0.92;
+  if(weather?.isWindy)  weatherFactor*=0.95;
+  if(weatherFactor<1.0){hLam=Math.max(0.2,hLam*weatherFactor);aLam=Math.max(0.2,aLam*weatherFactor);}
 
   const dcRhoDefault=calPrior.suggestedRho||tune.dcRho||-0.13;
   const dcMat=buildDCMatrix(hLam,aLam,dcRhoDefault);
@@ -3024,7 +3036,10 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
       cards:marketTrust('cards',{hasOdds,cornersReliability:cornerTrustScore,cardsReliability:cardTrustScore,hDataBadge,aDataBadge}),
     },
     betConfidence:rawBetConfidence,pickEdge:Math.round(pickEdge),pickEv:Math.round(pickEv*1000)/1000,
-    htScoreH,htScoreA
+    htScoreH,htScoreA,
+    weather:weather||null,
+    apifPred:fixtureIntel?.apifPred||null,
+    weatherFactor:weatherFactor<1?Math.round(weatherFactor*100):null
   };
 }
 
@@ -3424,6 +3439,8 @@ function renderPredResult(p,hName,aName,h2hData){
         ${trustBadge(p.marketTrust?.oneX2)}
         <span class="pred-winner-pill" style="background:${wColor}33;color:${wColor};border:1px solid ${wColor}88;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:600">${t('pred.outcome_pick')}: ${winner}</span>
         <span class="pred-conf-badge" title="Elo rating gap between the two teams. Under 50 = evenly matched. 100–200 = clear advantage. Over 200 = strong favourite. Sources used in priority order: ClubElo API → rolling match data → standings formula.">${t('pred.elo_delta')} ${Math.abs(p.hElo-p.aElo)}</span>
+        ${p.weather?`<span class="pred-conf-badge${p.weather.isRainy?' med':''}" title="Match-time forecast: ${p.weather.precipProb}% rain · ${p.weather.windKmh} km/h wind · ${p.weather.tempC}°C${p.weatherFactor?'. Goals lambda reduced to '+p.weatherFactor+'% of base.':''}">${p.weather.isRainy?'🌧':'☀'} ${p.weather.precipProb}% · ${p.weather.windKmh}km/h</span>`:''}
+        ${p.apifPred?.homeWin?`<span class="pred-conf-badge" title="API-Football model: H ${p.apifPred.homeWin}% · D ${p.apifPred.draw}% · A ${p.apifPred.awayWin}%${p.apifPred.advice?' · '+p.apifPred.advice:''}">APIF ${p.apifPred.winner||'?'}</span>`:''}
         <span class="info-dot" title="${t('pred.help.confidence_stack')}">i</span>
       </div>
     </div>
@@ -4663,6 +4680,7 @@ async function runDeepPred(){
       if(d.matches?.length) h2hData=buildH2HAggregates(d.matches,hRow.team.id,aRow.team.id);
     }catch(e){}
     const fxOdds=findFixtureOdds(hRow.team.name,aRow.team.name);
+    let weather=null;
     if(fxOdds){
       const flipped=fxOdds.home===aRow.team.name;
       oddsH=flipped?fxOdds.best_a:fxOdds.best_h;
@@ -4675,9 +4693,21 @@ async function runDeepPred(){
           if(!d.error)fixtureIntel=d;
         }catch(e){}
       }
+      // Fetch weather for the home team's venue
+      const sc=stadiumCoords[String(hRow.team.id)];
+      const ko=fxOdds.kickoff||fxOdds.utcDate||'';
+      if(sc&&ko){
+        try{
+          const dt=ko.slice(0,10);
+          const hour=ko.length>=13?parseInt(ko.slice(11,13)):20;
+          const wr=await fetch(`/weather?lat=${sc.lat}&lon=${sc.lon}&dt=${dt}&hour=${hour}`);
+          const wd=await wr.json();
+          if(!wd.error) weather=wd;
+        }catch(e){}
+      }
     }
 
-  let p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel,fxOdds?.num_bookmakers||0);
+  let p=deepPredict(hi,ai,mw,ha,h2hData,oddsH,oddsD,oddsA,fxOdds?.odds_movement,fixtureIntel,fxOdds?.num_bookmakers||0,weather);
 
   // ML blend: higher weight when odds are present (Shin probs add strong signal)
   try{

@@ -2818,6 +2818,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path.startswith('/refresh/'):   self.handle_refresh(path.split('/')[-1].upper())
         elif path.startswith('/players/'):   self.handle_players(path.split('/')[-1].upper())
         elif path.startswith('/injuries/'):  self.handle_injuries(path.split('/')[-1])
+        elif path.startswith('/weather'):    self.handle_weather(qs)
         elif path.startswith('/fixture-intel/'): self.handle_fixture_intel(path.split('/')[-1])
         elif path == '/advisor':             self.handle_advisor(qs)
         elif path == '/today':               self.handle_today(qs)
@@ -3041,6 +3042,47 @@ class Handler(SimpleHTTPRequestHandler):
                         'suspensionRisks': c.get('suspensionRisks', []),
                         'keyScorers':      c.get('keyScorers', [])})
 
+    def handle_weather(self, qs):
+        """Fetch match-time weather from Open-Meteo (no API key required)."""
+        p = urllib.parse.parse_qs(qs or '')
+        try:
+            lat  = float(p.get('lat',  [None])[0])
+            lon  = float(p.get('lon',  [None])[0])
+            dt   = p.get('dt', [''])[0][:10]  # YYYY-MM-DD
+            hour = int(p.get('hour', ['20'])[0])  # UTC hour of kickoff
+        except (TypeError, ValueError):
+            self.send_json({'error': 'lat, lon, dt required'}); return
+        ck = f'/weather/{lat:.2f}/{lon:.2f}/{dt}/{hour}'
+        cached = get_cache(ck)
+        if cached is not None:
+            self.send_json(cached); return
+        url = (f'https://api.open-meteo.com/v1/forecast'
+               f'?latitude={lat}&longitude={lon}'
+               f'&hourly=precipitation_probability,windspeed_10m,weathercode,temperature_2m'
+               f'&timezone=UTC&start_date={dt}&end_date={dt}&timeformat=iso8601')
+        try:
+            with urllib.request.urlopen(url, timeout=8) as r:
+                raw = json.loads(r.read())
+            times   = raw['hourly']['time']
+            pp      = raw['hourly']['precipitation_probability']
+            wind    = raw['hourly']['windspeed_10m']
+            wcode   = raw['hourly']['weathercode']
+            temp    = raw['hourly']['temperature_2m']
+            idx     = min(range(len(times)), key=lambda i: abs(int(times[i][11:13]) - hour))
+            result  = {
+                'precipProb': pp[idx],   # 0-100 %
+                'windKmh':    round(wind[idx], 1),
+                'tempC':      temp[idx],
+                'weatherCode': wcode[idx],
+                # simplified flags used by deepPredict
+                'isRainy':    pp[idx] >= 50,
+                'isWindy':    wind[idx] >= 40,
+            }
+            set_cache(ck, result, 3600)
+            self.send_json(result)
+        except Exception as e:
+            self.send_json({'error': str(e)})
+
     def handle_injuries(self, fixture_id):
         if not APIF_KEY:
             self.send_json({'error': 'APIFOOTBALL_KEY not set'}); return
@@ -3067,9 +3109,10 @@ class Handler(SimpleHTTPRequestHandler):
         if comp:
             ts = get_cache(f'/teamstats/{comp}') or get_stale_cache(f'/teamstats/{comp}')
             ref_cards_pg = (((ts or {}).get('referees') or {}).get(referee) or {}).get('cardsPg')
-        injuries = apif_get('injuries', {'fixture': fixture_id}) or []
-        lineups = apif_get('fixtures/lineups', {'fixture': fixture_id}) or []
-        events = apif_get('fixtures/events', {'fixture': fixture_id}) or []
+        injuries  = apif_get('injuries',          {'fixture': fixture_id}) or []
+        lineups   = apif_get('fixtures/lineups',  {'fixture': fixture_id}) or []
+        events    = apif_get('fixtures/events',   {'fixture': fixture_id}) or []
+        apif_preds_raw = apif_get('predictions',  {'fixture': fixture_id}) or []
         out_injuries = []
         for item in injuries:
             player = item.get('player') or {}
@@ -3103,9 +3146,23 @@ class Handler(SimpleHTTPRequestHandler):
             elif etype == 'Card':
                 if 'Red' in detail: row['redCards'] += 1
                 elif 'Yellow' in detail: row['yellowCards'] += 1
+        apif_pred = None
+        if apif_preds_raw:
+            pr = apif_preds_raw[0]
+            pred_block  = pr.get('predictions') or {}
+            winner_block = pred_block.get('winner') or {}
+            apif_pred = {
+                'homeWin': pred_block.get('percent', {}).get('home', '').rstrip('%'),
+                'draw':    pred_block.get('percent', {}).get('draw', '').rstrip('%'),
+                'awayWin': pred_block.get('percent', {}).get('away', '').rstrip('%'),
+                'winner':  winner_block.get('name'),
+                'advice':  pred_block.get('advice'),
+                'underOver': pred_block.get('under_over'),
+            }
         self.send_json({'fixture_id': fixture_id, 'referee': referee, 'refereeCardsPg': ref_cards_pg,
                         'competition': comp, 'injuries': out_injuries,
-                        'lineups': lineups_out, 'events': event_summary})
+                        'lineups': lineups_out, 'events': event_summary,
+                        'apifPred': apif_pred})
 
     def handle_calibration(self):
         cal = _load_calibration()
