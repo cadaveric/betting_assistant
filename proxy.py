@@ -2905,9 +2905,13 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({'error': 'No football data provider key is set'}, 503); return
         m = _re.match(r'/competitions/(\w+)/standings', api_path)
         if m:
-            result = apif_standings(m.group(1))
+            comp_s = m.group(1)
+            result = apif_standings(comp_s)
             if result is not None: self.send_json(result); return
-            self.send_json({'error': f'No standings for {m.group(1)}'}, 404); return
+            if APIF_LEAGUE_MAP.get(comp_s):
+                self.send_json({'standings': [{'table': []}], 'competition': {'code': comp_s},
+                                'notice': 'standings unavailable — data source returned no results'}); return
+            self.send_json({'error': f'No standings for {comp_s}'}, 404); return
         m = _re.match(r'/competitions/(\w+)/matches', api_path)
         if m:
             comp    = m.group(1)
@@ -2921,7 +2925,14 @@ class Handler(SimpleHTTPRequestHandler):
                                    qs.get('awayTeam', [None])[0],
                                    qs.get('limit',    [None])[0])
             if result is not None: self.send_json(result); return  # empty list = valid (no fixtures)
-            self.send_json({'error': f'No fixtures for {comp}'}, 404); return
+            # API unavailable (rate limit, unsupported league, etc.) — return empty so the
+            # frontend shows "no fixtures" rather than an error banner.
+            info = APIF_LEAGUE_MAP.get(comp)
+            if info:
+                self.send_json({'matches': [], 'count': 0,
+                                'competition': {'code': comp}, 'season': {'year': info.get('season')},
+                                'notice': 'fixtures unavailable — data source returned no results'}); return
+            self.send_json({'error': f'Unknown competition: {comp}'}, 404); return
         self.send_json({'error': f'Unknown route: {api_path}'}, 404)
 
     def handle_prediction_create(self, payload):
