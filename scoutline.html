@@ -2804,11 +2804,14 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
     const formConv=Math.max(0,1-Math.abs(hFF-aFF)*2.5);
     const eloConv=Math.max(0,1-Math.abs(eloExp-0.5)*4);
     const lambdaConv=Math.max(0,1-Math.abs(hLam-aLam)/0.85);
-    const drawConvBoost=formConv*0.025+eloConv*0.025+lambdaConv*0.030;
+    // Raised conv boosts: graded data showed draw massively under-predicted for evenly-matched games
+    const drawConvBoost=formConv*0.040+eloConv*0.040+lambdaConv*0.050;
     const leaguePriorDraw=leagueCalibrationData?.[lg]?.drawPct||0.27;
     wH=hWinDC*poisW+eloExp*eloW+hFF*formWgt+Math.max(0,h2hFactor)*0.10+(hasOdds?implH*oddsW:0)+moveH+(tune.bias?.home||0);
-    wA=aWinDC*poisW+(1-eloExp)*(eloW*0.70)+aFF*formWgt+Math.max(0,-h2hFactor)*0.10+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
-    wD=drawDC*(hasOdds?0.55:0.45)+drawConvBoost+(hasOdds?implD*oddsW:leaguePriorDraw*0.42)+moveD+(tune.bias?.draw||0);
+    // Away form uses all-games pct which inflates away picks; discount by 0.80 to reduce away bias
+    wA=aWinDC*poisW+(1-eloExp)*(eloW*0.70)+aFF*formWgt*0.80+Math.max(0,-h2hFactor)*0.10+(hasOdds?implA*oddsW:0)+moveA+(tune.bias?.away||0);
+    // Raised league prior weight 0.42→0.62: league draw base rate was being systematically underweighted
+    wD=drawDC*(hasOdds?0.55:0.45)+drawConvBoost+(hasOdds?implD*oddsW:leaguePriorDraw*0.62)+moveD+(tune.bias?.draw||0);
   }
   const tot=wH+wD+wA;
   let pH=Math.round(wH/tot*100), pD=Math.round(wD/tot*100), pA=100-pH-pD;

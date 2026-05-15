@@ -2763,8 +2763,9 @@ def fetch_today_fixtures(comp):
         if m.get('status') == 'SCHEDULED':
             matches.append({'home': m['homeTeam']['name'], 'away': m['awayTeam']['name'],
                             'kickoff': m.get('utcDate', ''), 'source': data_obj.get('source')})
-    with cache_lock:
-        cache[_key(cache_key)] = {'data': matches, 'ts': time.time(), 'ttl': TODAY_FIXTURES_TTL}
+    if matches:  # don't cache empty — lets next request retry after a transient API failure
+        with cache_lock:
+            cache[_key(cache_key)] = {'data': matches, 'ts': time.time(), 'ttl': TODAY_FIXTURES_TTL}
     return matches
 
 
