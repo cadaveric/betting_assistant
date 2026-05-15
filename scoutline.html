@@ -2857,9 +2857,16 @@ function deepPredict(hi,ai,modelW,haBoost,h2hData,oddsH,oddsD,oddsA,oddsMove,fix
       conf=Math.max(30,conf-penalty);
     }
   }
-  // Find most likely score from DC matrix (mode of bivariate Poisson)
-  let _msBestP=-1,_msH=0,_msA=0;
-  for(let _i=0;_i<=5;_i++)for(let _j=0;_j<=5;_j++){if(dcMat[_i][_j]>_msBestP){_msBestP=dcMat[_i][_j];_msH=_i;_msA=_j;}}
+  // Find most likely score consistent with the outcome pick.
+  // The global DC mode is almost always 1-1 (both lambdas 1-2 → mode=1 for each).
+  // Instead, find the highest-probability cell that matches the pick direction so
+  // the displayed score actually reflects the predicted winner.
+  const _pickBucket=pH>=pA&&pH>=pD?'H':pA>=pD?'A':'D';
+  let _msBestP=-1,_msH=1,_msA=1;
+  for(let _i=0;_i<=5;_i++)for(let _j=0;_j<=5;_j++){
+    const ok=_pickBucket==='H'?_i>_j:_pickBucket==='A'?_j>_i:_i===_j;
+    if(ok&&dcMat[_i][_j]>_msBestP){_msBestP=dcMat[_i][_j];_msH=_i;_msA=_j;}
+  }
   const scoreH=_msH;
   const scoreA=_msA;
 
@@ -4203,7 +4210,7 @@ async function loadFixtures(){
       const fav=pred.pH>pred.pA+5?(m.homeTeam.shortName||m.homeTeam.name):pred.pA>pred.pH+5?(m.awayTeam.shortName||m.awayTeam.name):'Draw';
       const favClass=pred.pH>pred.pA+5?'tag-green':pred.pA>pred.pH+5?'tag-red':'tag-amber';
       const scoreWinner=pred.scoreH>pred.scoreA?(m.homeTeam.shortName||m.homeTeam.name):pred.scoreA>pred.scoreH?(m.awayTeam.shortName||m.awayTeam.name):'Draw';
-      const scoreConflict=scoreWinner!==fav;
+      const scoreConflict=false; // score is now outcome-consistent, badge retired
       const confClass=pred.conf>=60?'tag-green':pred.conf>=45?'tag-amber':'tag-gray';
       const hF=formMap[m.homeTeam.id]?.str?.map(f=>`<span class="fd fd-${f}">${f}</span>`).join('')||'';
       const aF=formMap[m.awayTeam.id]?.str?.map(f=>`<span class="fd fd-${f}">${f}</span>`).join('')||'';
@@ -5417,10 +5424,11 @@ function _probBar(home_win, away_win, home, away, predicted_score, total_pts, sp
 function _fixtureCard(g, sport, onPredict){
   const pred=g.prediction||{};
   const hw=pred.home_win||50, aw=pred.away_win||50;
-  const score = sport==='basketball'?`${Math.round(pred.away_pts||0)}-${Math.round(pred.home_pts||0)}`
-              : sport==='hockey'?`${pred.la||'?'}-${pred.lh||'?'} xG`
-              : sport==='american_football'?`${Math.round(pred.away_pts||0)}-${Math.round(pred.home_pts||0)}`
-              : `${pred.away_runs||'?'}-${pred.home_runs||'?'} runs`;
+  // Score shown as HOME-AWAY to match the prob bar (home on left)
+  const score = sport==='basketball'?`${Math.round(pred.home_pts||0)}-${Math.round(pred.away_pts||0)}`
+              : sport==='hockey'?`${pred.lh||'?'}-${pred.la||'?'} xG`
+              : sport==='american_football'?`${Math.round(pred.home_pts||0)}-${Math.round(pred.away_pts||0)}`
+              : `${pred.home_runs||'?'}-${pred.away_runs||'?'} runs`;
   const total = sport==='basketball'?(pred.total_pts||0)
               : sport==='hockey'?(pred.over_5_5||0)
               : sport==='american_football'?(pred.total_pts||0)
@@ -5430,10 +5438,10 @@ function _fixtureCard(g, sport, onPredict){
   return `<div class="match" style="padding:16px;margin-bottom:8px">
     <div class="match-top" style="margin-bottom:10px">
       <div class="team-side">
-        <div class="badge">${ini(g.away||g.away_team||'?')}</div>
+        <div class="badge">${ini(g.home||g.home_team||'?')}</div>
         <div>
-          <div class="tname">${g.away||g.away_team||'Away'}</div>
-          <div style="font-size:11px;color:var(--tx3)">${g.away_record||g.away_abbr||''}</div>
+          <div class="tname">${g.home||g.home_team||'Home'}</div>
+          <div style="font-size:11px;color:var(--tx3)">${g.home_record||g.home_abbr||''}</div>
         </div>
       </div>
       <div class="center-col" style="text-align:center;padding:8px">
@@ -5442,10 +5450,10 @@ function _fixtureCard(g, sport, onPredict){
       </div>
       <div class="team-side away">
         <div>
-          <div class="tname" style="text-align:right">${g.home||g.home_team||'Home'}</div>
-          <div style="font-size:11px;color:var(--tx3);text-align:right">${g.home_record||g.home_abbr||''}</div>
+          <div class="tname" style="text-align:right">${g.away||g.away_team||'Away'}</div>
+          <div style="font-size:11px;color:var(--tx3);text-align:right">${g.away_record||g.away_abbr||''}</div>
         </div>
-        <div class="badge">${ini(g.home||g.home_team||'?')}</div>
+        <div class="badge">${ini(g.away||g.away_team||'?')}</div>
       </div>
     </div>
     <div class="prob-section">

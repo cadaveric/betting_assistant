@@ -315,10 +315,22 @@ def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
     elo_exp_h = _elo_expected(home_elo + 50, away_elo)  # +50 home court
 
     # Scoring-margin component, using both offense and opponent defense.
-    h_pts = home_stats.get('pts_home_pg', home_stats.get('pts_pg', 110))
-    a_pts = away_stats.get('pts_away_pg', away_stats.get('pts_pg', 110))
-    h_allowed = home_stats.get('pts_allowed_home_pg', home_stats.get('pts_allowed_pg', 110))
-    a_allowed = away_stats.get('pts_allowed_away_pg', away_stats.get('pts_allowed_pg', 110))
+    # When detailed stats are absent fall back to win% as a scoring proxy:
+    # a 70-win team averages ~115 pts, a 30-win team ~105 pts.
+    def _pts_est(stats, venue_key, pg_key, default=110.0):
+        v = stats.get(venue_key) or stats.get(pg_key)
+        if v is not None: return float(v)
+        pct = stats.get('pct') or stats.get('win_pct')
+        return 110.0 + (float(pct) - 0.5) * 20 if pct is not None else default
+    def _allowed_est(stats, venue_key, pg_key, default=110.0):
+        v = stats.get(venue_key) or stats.get(pg_key)
+        if v is not None: return float(v)
+        pct = stats.get('pct') or stats.get('win_pct')
+        return 110.0 - (float(pct) - 0.5) * 20 if pct is not None else default
+    h_pts    = _pts_est(home_stats,    'pts_home_pg',         'pts_pg')
+    a_pts    = _pts_est(away_stats,    'pts_away_pg',         'pts_pg')
+    h_allowed = _allowed_est(home_stats, 'pts_allowed_home_pg', 'pts_allowed_pg')
+    a_allowed = _allowed_est(away_stats, 'pts_allowed_away_pg', 'pts_allowed_pg')
     h_exp = (h_pts + a_allowed) / 2
     a_exp = (a_pts + h_allowed) / 2
     if home_stats.get('pace') and away_stats.get('pace'):
@@ -330,8 +342,8 @@ def predict(home_stats, away_stats, home_elo=1500, away_elo=1500):
     margin_h = max(0.15, min(0.85, margin_h))
 
     # Form component
-    h_form = home_stats.get('form_pct', 0.5)
-    a_form = away_stats.get('form_pct', 0.5)
+    h_form = home_stats.get('form_pct') or home_stats.get('pct') or 0.5
+    a_form = away_stats.get('form_pct') or away_stats.get('pct') or 0.5
     form_h = 0.5 + (h_form - a_form) * 0.5
     form_h = max(0.2, min(0.8, form_h))
 
