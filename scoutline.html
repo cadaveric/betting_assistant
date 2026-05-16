@@ -1069,7 +1069,7 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
 #pg-history .stand-table th:nth-child(6),
 #pg-history .stand-table td:nth-child(6){width:20%;text-align:left}
 #pg-history .stand-table th:nth-child(7),
-#pg-history .stand-table td:nth-child(7){width:15%;text-align:center}
+#pg-history .stand-table td:nth-child(7){width:15%;text-align:left}
 /* Truncate overflowing cells but let Result breathe */
 #pg-history .stand-table td{padding:6px 10px!important;font-size:12px!important;overflow:hidden;text-overflow:ellipsis}
 #pg-history .stand-table td:nth-child(1){white-space:nowrap}
@@ -3921,7 +3921,19 @@ function renderHistory(el,allRows,s,accuracyData){
       <td>${pickCell}</td>
       <td>${predCell}</td>
       <td>${actualCell}</td>
-      <td><span class="tag ${tag}">${result}</span>${done&&mt.scoreCorrect?'<span class="tag tag-blue" style="margin-left:4px">score ✓</span>':''}</td>
+      <td>${done
+        ?`<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
+            <div style="display:flex;align-items:center;gap:4px">
+              <span style="font-size:10px;color:var(--tx3);width:32px">Pick</span>
+              <span class="tag ${ok?'tag-green':'tag-red'}" style="font-size:10px;padding:2px 7px">${ok?'Hit':'Miss'}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <span style="font-size:10px;color:var(--tx3);width:32px">Score</span>
+              <span class="tag ${mt.scoreCorrect?'tag-green':'tag-red'}" style="font-size:10px;padding:2px 7px">${mt.scoreCorrect?'Hit':'Miss'}</span>
+            </div>
+          </div>`
+        :`<span class="tag tag-gray">${result}</span>`
+      }</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
