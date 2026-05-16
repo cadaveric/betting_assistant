@@ -1054,28 +1054,27 @@ a[href="/logout"]:hover{background:rgba(212,92,78,.18)!important;opacity:1!impor
   padding:6px 10px!important;font-size:10px!important;
 }
 /* Percentage-based columns — no single column dominates */
-#pg-history .stand-table{table-layout:fixed;width:100%;min-width:680px}
+#pg-history .stand-table{table-layout:fixed;width:100%;min-width:620px}
+/* 7 columns: Date | Match | Tier | Pick+Prob | Pred Score | Actual | Result */
 #pg-history .stand-table th:nth-child(1),
-#pg-history .stand-table td:nth-child(1){width:11%}
+#pg-history .stand-table td:nth-child(1){width:10%}
 #pg-history .stand-table th:nth-child(2),
-#pg-history .stand-table td:nth-child(2){width:24%}
+#pg-history .stand-table td:nth-child(2){width:22%}
 #pg-history .stand-table th:nth-child(3),
-#pg-history .stand-table td:nth-child(3){width:8%}
+#pg-history .stand-table td:nth-child(3){width:6%}
 #pg-history .stand-table th:nth-child(4),
-#pg-history .stand-table td:nth-child(4){width:15%;text-align:left}
+#pg-history .stand-table td:nth-child(4){width:18%}
 #pg-history .stand-table th:nth-child(5),
-#pg-history .stand-table td:nth-child(5){width:7%;text-align:center}
+#pg-history .stand-table td:nth-child(5){width:9%;text-align:center}
 #pg-history .stand-table th:nth-child(6),
-#pg-history .stand-table td:nth-child(6){width:9%;text-align:center}
+#pg-history .stand-table td:nth-child(6){width:20%;text-align:left}
 #pg-history .stand-table th:nth-child(7),
-#pg-history .stand-table td:nth-child(7){width:11%;text-align:center}
-#pg-history .stand-table th:nth-child(8),
-#pg-history .stand-table td:nth-child(8){width:15%;text-align:center}
-/* Truncate overflowing cells but let the Result column breathe */
-#pg-history .stand-table td{padding:5px 10px!important;font-size:12px!important;overflow:hidden;text-overflow:ellipsis}
+#pg-history .stand-table td:nth-child(7){width:15%;text-align:center}
+/* Truncate overflowing cells but let Result breathe */
+#pg-history .stand-table td{padding:6px 10px!important;font-size:12px!important;overflow:hidden;text-overflow:ellipsis}
 #pg-history .stand-table td:nth-child(1){white-space:nowrap}
 #pg-history .stand-table td:nth-child(2) strong{white-space:nowrap}
-#pg-history .stand-table td:nth-child(8){overflow:visible;text-overflow:clip;white-space:nowrap}
+#pg-history .stand-table td:nth-child(7){overflow:visible;text-overflow:clip;white-space:nowrap}
 /* ─── TAG TOOLTIPS ───────────────────────────────────────── */
 .tag[data-tip]{position:relative;cursor:help}
 .tag[data-tip]:hover::after{
@@ -3877,7 +3876,7 @@ function renderHistory(el,allRows,s,accuracyData){
     ${filterBtn}
   </div><div class="card-body" style="padding:0;overflow-x:auto">
     <table class="stand-table"><thead><tr>
-      <th>${t('hist.date')}</th><th>${t('hist.match')}</th><th>Tier</th><th>${t('hist.pick')}</th><th>${t('hist.prob')}</th><th>${t('hist.score')}</th><th>${t('hist.actual')}</th><th>${t('hist.result')}</th>
+      <th>${t('hist.date')}</th><th>${t('hist.match')}</th><th>Tier</th><th>${t('hist.pick')}</th><th>Pred</th><th>Actual</th><th>${t('hist.result')}</th>
     </tr></thead><tbody>`;
 
   rows.forEach(r=>{
@@ -3897,22 +3896,31 @@ function renderHistory(el,allRows,s,accuracyData){
     const rowCls=done?(ok?'hist-row-win':'hist-row-loss'):'';
     const isRec=(r.tier==='recommended')||(r.confidence||0)>=60;
     const tierBadge=isRec?`<span class="tag tag-amber" style="font-size:9px;padding:2px 6px">★ rec</span>`:(r.tier==='low_confidence'?`<span class="tag tag-red" style="font-size:9px;padding:2px 6px">low</span>`:`<span class="tag tag-gray" style="font-size:9px;padding:2px 6px">track</span>`);
-    const betInfo=(r.betRecommendations||[]).length?`<div style="font-size:11px;color:var(--tx3);margin-top:2px">${(r.betRecommendations||[]).length} bet recommendation${(r.betRecommendations||[]).length!==1?'s':''}</div>`:'';
-    // Outcome letter derived from predicted score (for display clarity)
-    const psOutcome=ps.home!=null&&ps.away!=null?(ps.home>ps.away?'H':ps.home<ps.away?'A':'D'):null;
+    const betInfo=(r.betRecommendations||[]).length?`<div style="font-size:11px;color:var(--tx3);margin-top:2px">${(r.betRecommendations||[]).length} bet recs</div>`:'';
+    // Actual outcome resolution
     const acOutcome=done?(ac.outcome||(ac.home>ac.away?'H':ac.home<ac.away?'A':'D')):null;
-    const outcomeLbl=o=>o==='H'?r.homeTeam:o==='A'?r.awayTeam:'Draw';
-    const acScoreCell=done
-      ?`<span style="font-family:var(--mono)">${ac.home}-${ac.away}</span> <span style="font-size:10px;color:var(--tx3)">${outcomeLbl(acOutcome)}</span>`
-      :'--';
+    const acWinnerLbl=acOutcome==='H'?r.homeTeam:acOutcome==='A'?r.awayTeam:'Draw';
+    // Pick cell: colored green=hit, red=miss, muted=pending
+    const pickColor=done?(ok?'var(--green)':'var(--red)'):'var(--tx2)';
+    const pickIcon=done?(ok?'✓ ':'✗ '):'';
+    const pickCell=`<span style="color:${pickColor};font-weight:700;font-size:12px">${pickIcon}${pickLbl}</span>`
+      +`<div style="font-size:10px;color:var(--tx3);margin-top:1px">${pickProb??'--'}%</div>`;
+    // Predicted score cell
+    const psOutcome=ps.home!=null&&ps.away!=null?(ps.home>ps.away?'H':ps.home<ps.away?'A':'D'):null;
+    const predCell=`<span style="font-family:var(--mono)">${ps.home??'?'}-${ps.away??'?'}</span>`
+      +(psOutcome?`<div style="font-size:10px;color:var(--tx3);margin-top:1px">${psOutcome==='H'?r.homeTeam:psOutcome==='A'?r.awayTeam:'Draw'}</div>`:'');
+    // Actual cell: score + actual winner in green
+    const actualCell=done
+      ?`<span style="font-family:var(--mono);font-weight:600">${ac.home}-${ac.away}</span>`
+        +`<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:1px">${acWinnerLbl}</div>`
+      :'<span style="color:var(--tx3)">--</span>';
     html+=`<tr class="${rowCls}">
       <td style="font-family:var(--mono);white-space:nowrap">${ds}</td>
       <td><strong>${r.homeTeam}</strong> vs <strong>${r.awayTeam}</strong><div style="font-size:11px;color:var(--tx2)">${r.competition||''} · ${r.dataQuality?.label||'saved'}</div>${betInfo}</td>
       <td>${tierBadge}</td>
-      <td>${pickLbl}</td>
-      <td style="font-family:var(--mono)">${pickProb??'--'}%</td>
-      <td style="font-family:var(--mono)">${ps.home??'?'}-${ps.away??'?'}${psOutcome?` <span style="font-size:10px;color:var(--tx3)">(${psOutcome})</span>`:''}</td>
-      <td>${acScoreCell}</td>
+      <td>${pickCell}</td>
+      <td>${predCell}</td>
+      <td>${actualCell}</td>
       <td><span class="tag ${tag}">${result}</span>${done&&mt.scoreCorrect?'<span class="tag tag-blue" style="margin-left:4px">score ✓</span>':''}</td>
     </tr>`;
   });
