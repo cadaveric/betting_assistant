@@ -504,13 +504,15 @@ def _prefer_fd(comp):
     info = APIF_LEAGUE_MAP.get(comp) or {}
     return bool(FD_KEY and comp in FD_LEAGUE_MAP and int(info.get('season') or 0) > 2024)
 
-def fd_get(path, params=None):
+def fd_get(path, params=None, bust_cache=False):
     """Fetch Football-Data.org JSON with cache and stale fallback."""
     if not FD_KEY:
         return None
     params = params or {}
     qs = urllib.parse.urlencode({k: v for k, v in params.items() if v not in (None, '')})
     cache_key = f'/fd/{path}?{qs}'
+    if bust_cache:
+        delete_cache(cache_key)
     cached = get_cache(cache_key)
     if cached is not None:
         return cached
@@ -543,7 +545,7 @@ def fd_standings(comp):
         return None
     return _fd_to_standings(comp, fd_get(f'competitions/{fd_code}/standings'))
 
-def fd_matches(comp, status='', date_from=None, date_to=None, home_team=None, away_team=None, limit=None):
+def fd_matches(comp, status='', date_from=None, date_to=None, home_team=None, away_team=None, limit=None, bust_cache=False):
     fd_code = FD_LEAGUE_MAP.get(comp)
     if not fd_code:
         return None
@@ -554,7 +556,7 @@ def fd_matches(comp, status='', date_from=None, date_to=None, home_team=None, aw
         params['dateFrom'] = date_from
     if date_to:
         params['dateTo'] = date_to
-    raw = fd_get(f'competitions/{fd_code}/matches', params)
+    raw = fd_get(f'competitions/{fd_code}/matches', params, bust_cache=bust_cache)
     if not raw:
         return None
     matches = raw.get('matches') or []
@@ -1152,10 +1154,12 @@ def _grade_prediction(row, match):
     _update_rolling_elo(row.get('homeTeamId'), row.get('awayTeamId'), hg, ag)
     return True
 
-def _match_prediction_to_result(row):
+def _match_prediction_to_result(row, bust_cache=False):
     comp = row.get('competition')
     fixture_id = row.get('fixtureId')
     if fixture_id and APIF_KEY:
+        if bust_cache:
+            delete_cache(f'/apif/fixtures?id={fixture_id}')
         data = apif_get('fixtures', {'id': fixture_id}) or []
         matches = _apif_to_matches(data)
         if matches and matches[0].get('status') == 'FINISHED':
@@ -1211,7 +1215,7 @@ def _match_prediction_to_result(row):
             return m
         return None
 
-    data = apif_matches(comp, status='FINISHED') or {}
+    data = apif_matches(comp, status='FINISHED', bust_cache=bust_cache) or {}
     m = _find_in(data.get('matches', []))
     if m:
         return m
@@ -1291,17 +1295,30 @@ def _try_grade_nhl(row):
 
 def _score_predictions(rows):
     changed = False
+    now = _dt.datetime.now(_dt.timezone.utc)
     for row in rows:
         if row.get('status') == 'graded':
             continue
         sport = row.get('sport', 'football')
+        # Bust the cache for rows whose kickoff was clearly in the past (>2h ago),
+        # so stale FINISHED-match cache never permanently blocks grading.
+        bust = False
+        ko_raw = row.get('kickoff') or ''
+        if ko_raw:
+            try:
+                ko = _dt.datetime.fromisoformat(ko_raw.replace('Z', '+00:00'))
+                if ko.tzinfo is None:
+                    ko = ko.replace(tzinfo=_dt.timezone.utc)
+                bust = (now - ko).total_seconds() > 7200
+            except Exception:
+                pass
         if sport == 'basketball':
             if _try_grade_nba(row): changed = True
         elif sport == 'hockey':
             if _try_grade_nhl(row): changed = True
         else:
             # Default: football grading via API-Football
-            match = _match_prediction_to_result(row)
+            match = _match_prediction_to_result(row, bust_cache=bust)
             if match and _grade_prediction(row, match):
                 changed = True
     return changed
@@ -1966,19 +1983,19 @@ def apif_standings(comp):
             'competition': {'name': league.get('name', comp), 'code': comp},
             'season': {'year': info['season']}}
 
-def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, away_team=None, limit=None):
+def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, away_team=None, limit=None, bust_cache=False):
     """Fetch fixtures in football-data.org matches shape."""
     info = APIF_LEAGUE_MAP.get(comp)
     if not info: return None
     params = {'league': info['id'], 'season': info['season']}
     if _prefer_fd(comp):
-        fd = fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
+        fd = fd_matches(comp, status, date_from, date_to, home_team, away_team, limit, bust_cache=bust_cache)
         if fd is not None: return fd
     if home_team and away_team:
         h2h_params = {'h2h': f'{home_team}-{away_team}'}
         if limit: h2h_params['last'] = limit
         data = apif_get('fixtures/headtohead', h2h_params)
-        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit, bust_cache=bust_cache)
         matches = _apif_to_matches(data)
     elif status == 'SCHEDULED':
         if date_from: params['from'] = date_from
@@ -1986,21 +2003,25 @@ def apif_matches(comp, status='', date_from=None, date_to=None, home_team=None, 
         if not date_from and not date_to:
             params['next'] = 20
         data = apif_get('fixtures', params)
-        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit, bust_cache=bust_cache)
         matches = [m for m in _apif_to_matches(data) if m['status'] == 'SCHEDULED']
     elif status == 'FINISHED':
         # API Football: 'last' and 'season' are mutually exclusive — use last only
         n = max(1, min(100, int(limit or 100)))
-        data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': n})
+        apif_params = {'league': info['id'], 'status': 'FT', 'last': n}
+        if bust_cache:
+            qs_bust = '&'.join(f'{k}={v}' for k, v in sorted(apif_params.items()))
+            delete_cache(f'/apif/fixtures?{qs_bust}')
+        data = apif_get('fixtures', apif_params)
         if not data and n != 50:
             data = apif_get('fixtures', {'league': info['id'], 'status': 'FT', 'last': 50})
-        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit, bust_cache=bust_cache)
         matches = _apif_to_matches(data)
     else:
         if date_from: params['from'] = date_from
         if date_to:   params['to']   = date_to
         data = apif_get('fixtures', params)
-        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit)
+        if data is None: return fd_matches(comp, status, date_from, date_to, home_team, away_team, limit, bust_cache=bust_cache)
         matches = _apif_to_matches(data)
     for m in matches:
         m['competition'] = {

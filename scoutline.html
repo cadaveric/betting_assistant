@@ -298,6 +298,10 @@ input[type=number]{background-image:none;padding-right:12px}
 .adv-scanning-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
 @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+.live-badge{display:inline-flex;align-items:center;gap:4px;background:#ef4444;color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:2px 7px;border-radius:999px;text-transform:uppercase}
+.live-badge::before{content:'';width:6px;height:6px;background:#fff;border-radius:50%;animation:livePulse 1.2s ease-in-out infinite}
+.live-score{font-size:28px;font-weight:900;color:#ef4444;letter-spacing:.02em;line-height:1}
+.live-minute{font-size:11px;color:#ef4444;font-weight:700;margin-top:2px}
 
 /* Betting cards: make stake/return unmistakable */
 .bet-card{
@@ -2191,6 +2195,7 @@ function setLang(l){
 const BASE='/api';
 let lg='PL', leagueVersion=0, standRows=[], eloMap={}, formMap={}, teamStatsMap={}, h2hCache={}, oddsCache={}, playersCache={};
 let teamStatsMeta={}, oddsMeta={};
+let _scheduledFixtures={}; // "homeTeamId|awayTeamId" → utcDate, for kickoff fallback when saving predictions
 let resChart=null, predChart=null;
 let modelCalibration={
   global:{ready:false,graded:0,bias:{home:0,draw:0,away:0},homeAdvMultiplier:1,dcRho:-0.13,oddsWeightScale:1,richDataWeightScale:1,over25Adjustment:0},
@@ -4166,9 +4171,10 @@ async function loadFixtures(){
     const today=new Date();
     const df=today.toISOString().split('T')[0];
     const dt=new Date(today.getTime()+7*86400000).toISOString().split('T')[0];
-    const [{table,allMatches},mData]=await Promise.all([
+    const [{table,allMatches},mData,liveRaw]=await Promise.all([
       loadCoreData(),
-      fetchScheduledMatches(reqLeague,df,dt,48)
+      fetchScheduledMatches(reqLeague,df,dt,48),
+      fetch('/live').then(r=>r.json()).catch(()=>({matches:[]}))
     ]);
     if(reqLeague!==lg||reqVersion!==leagueVersion)return;
     const responseLeague=mData?.competition?.code;
@@ -4201,7 +4207,28 @@ async function loadFixtures(){
     const selectedLabel=(selectedOpt?.dataset?.baseLabel||selectedOpt?.textContent||reqLeague).replace(' [odds only]','');
     const leagueMatches=enrichScheduledMatches(mData.matches||[],table,reqLeague)
       .filter(m=>!m.competition?.code||m.competition.code===reqLeague);
-    const matches=leagueMatches.filter(m=>{ const d=new Date(m.utcDate); return d>=today&&d<=cutoff; }).slice(0,15);
+
+    // Build live-match index for this league (by normalised name pair)
+    const liveMatchesNow=(liveRaw.matches||[]).filter(lm=>lm.comp===reqLeague);
+    const liveMap={};
+    liveMatchesNow.forEach(lm=>{liveMap[`${_normName(lm.home)}|${_normName(lm.away)}`]=lm;});
+
+    // Update scheduled-fixture cache so predictions can pick up kickoff times
+    _scheduledFixtures={};
+    leagueMatches.forEach(m=>{
+      if(m.homeTeam?.id&&m.awayTeam?.id&&m.utcDate)
+        _scheduledFixtures[`${m.homeTeam.id}|${m.awayTeam.id}`]=m.utcDate;
+    });
+
+    // Keep scheduled (future) matches AND any that are currently live or kicked off within 150 min
+    const liveWindow=new Date(today.getTime()-150*60*1000);
+    const matches=leagueMatches.filter(m=>{
+      const d=new Date(m.utcDate);
+      if(d>=today&&d<=cutoff) return true;
+      const lk=`${_normName(m.homeTeam?.name||'')}|${_normName(m.awayTeam?.name||'')}`;
+      if(liveMap[lk]) return true;
+      return d>=liveWindow&&d<today;
+    }).slice(0,15);
     if(!matches.length){fixEl.innerHTML=`<div class="error-state">${t('err.no_fixtures')}</div>`;return;}
     const standMap={};
     table.forEach(r=>standMap[r.team.id]={pos:r.position,pts:r.points,idx:table.indexOf(r)});
@@ -4244,6 +4271,9 @@ async function loadFixtures(){
       }
       const d=new Date(m.utcDate);
       const ds=d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      const lk=`${_normName(m.homeTeam.name)}|${_normName(m.awayTeam.name)}`;
+      const liveEntry=liveMap[lk]||null;
+      const isLive=!!liveEntry;
       const fav=pred.pH>pred.pA+5?(m.homeTeam.shortName||m.homeTeam.name):pred.pA>pred.pH+5?(m.awayTeam.shortName||m.awayTeam.name):'Draw';
       const favClass=pred.pH>pred.pA+5?'tag-green':pred.pA>pred.pH+5?'tag-red':'tag-amber';
       const scoreWinner=pred.scoreH>pred.scoreA?(m.homeTeam.shortName||m.homeTeam.name):pred.scoreA>pred.scoreH?(m.awayTeam.shortName||m.awayTeam.name):'Draw';
@@ -4265,13 +4295,16 @@ async function loadFixtures(){
             </div>
           </div>
           <div class="center-col">
-            <div class="vs-txt">VS</div><!-- keep VS as-is, universal -->
-            <div class="match-dt">${ds}</div>
-            ${isEstimated
-              ? `<div class="pred-score" style="color:var(--tx3);font-size:16px">–</div>
-                 <div class="score-note" style="color:var(--tx3)">loading…</div>`
-              : `<div class="pred-score">${pred.scoreH}–${pred.scoreA}</div>
-                 <div class="score-note">${t('fix.most_likely_score')}</div>`}
+            ${isLive?`<div class="live-badge">LIVE</div>`:`<div class="vs-txt">VS</div>`}
+            <div class="match-dt">${isLive?(liveEntry.minute||liveEntry.status||''):ds}</div>
+            ${isLive
+              ? `<div class="live-score">${liveEntry.score_h??'?'}&ndash;${liveEntry.score_a??'?'}</div>
+                 <div class="live-minute">Live score</div>`
+              : isEstimated
+                ? `<div class="pred-score" style="color:var(--tx3);font-size:16px">–</div>
+                   <div class="score-note" style="color:var(--tx3)">loading…</div>`
+                : `<div class="pred-score">${pred.scoreH}–${pred.scoreA}</div>
+                   <div class="score-note">${t('fix.most_likely_score')}</div>`}
           </div>
           <div class="team-side away">
             <div class="badge">${ini(m.awayTeam.name)}</div>
@@ -4663,7 +4696,7 @@ async function rememberPrediction(p,hRow,aRow,hName,aName,fxOdds,model,ha,fixtur
   const payload={
     competition:lg,
     fixtureId:fxOdds?.id||null,
-    kickoff:fxOdds?.commence_time||null,
+    kickoff:fxOdds?.commence_time||_scheduledFixtures[`${hRow.team.id}|${aRow.team.id}`]||null,
     homeTeamId:hRow.team.id,
     awayTeamId:aRow.team.id,
     homeTeam:hName,
