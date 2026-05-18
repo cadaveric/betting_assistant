@@ -4242,7 +4242,7 @@ async function loadFixtures(){
       <span>${t('fix.stats_updated')} ${timeAgo(teamStatsMeta[reqLeague]?.updatedAt)}</span>
       <button class="mini-action" onclick="refreshLeague()">${t('fix.refresh')} ${selectedLabel}</button>
     </div>`;
-    matches.forEach(m=>{
+    const _fixCards=await Promise.all(matches.map(async m=>{
       const hLookup=m.homeTeam.id?null:tableTeamLookup(table,m.homeTeam.name);
       const aLookup=m.awayTeam.id?null:tableTeamLookup(table,m.awayTeam.name);
       const hI=standMap[m.homeTeam.id]||(hLookup?{pos:hLookup.row.position,pts:hLookup.row.points,idx:hLookup.idx}:{pos:10,pts:20,idx:9});
@@ -4254,6 +4254,21 @@ async function loadFixtures(){
         fxO=(oddsCache[lg]||[]).find(g=>g.home===m.homeTeam.name||g.away===m.awayTeam.name||g.home===m.awayTeam.name||g.away===m.homeTeam.name);
         if(fxO){const fl=fxO.home===m.awayTeam.name;fxH=fl?fxO.best_a:fxO.best_h;fxD=fxO.best_d;fxA=fl?fxO.best_h:fxO.best_a;}
         pred=deepPredict(hI.idx,aI.idx,'balanced','1.1',null,fxH,fxD,fxA,fxO?.odds_movement);
+        // ML blend — same logic as Predictor tab so both surfaces show consistent predictions
+        try{
+          const _or=(fxH>1&&fxD>1&&fxA>1)?(1/fxH+1/fxD+1/fxA):0;
+          const _ml=await fetchMLPredict(m.homeTeam.id,m.awayTeam.id,reqLeague,
+            pred.implH/100,pred.implD/100,pred.implA/100,pred.hasOdds,
+            pred.hElo,pred.aElo,_or,fxH,fxD,fxA);
+          if(_ml?.home!=null){
+            const _wML=_ml.blendWeight??(pred.hasOdds?0.65:0.42);
+            const _bH=Math.round(_ml.home*_wML+pred.pH*(1-_wML));
+            const _bD=Math.round(_ml.draw*_wML+pred.pD*(1-_wML));
+            const _bA=Math.max(0,100-_bH-_bD);
+            pred={...pred,pH:_bH,pD:_bD,pA:_bA,conf:Math.max(_bH,_bD,_bA),
+                  mlUsed:true,mlAccuracy:_ml.ensembleAccuracy||_ml.accuracy};
+          }
+        }catch(_e){}
       }
       const quality=dataQuality(m.homeTeam.id,m.awayTeam.id,!!fxO);
       const isEstimated = quality.cls==='weak';
@@ -4284,7 +4299,7 @@ async function loadFixtures(){
       const eloGap=Math.abs((eloMap[m.homeTeam.id]||1500)-(eloMap[m.awayTeam.id]||1500));
       const hHasSot=teamStatsMap[m.homeTeam.id]?.sotPg!=null;
       const aHasSot=teamStatsMap[m.awayTeam.id]?.sotPg!=null;
-      html+=`<div class="match">
+      return `<div class="match">
         <div class="match-top">
           <div class="team-side">
             <div class="badge">${ini(m.homeTeam.name)}</div>
@@ -4357,7 +4372,8 @@ async function loadFixtures(){
           `}
         </div>
       </div>`;
-    });
+    }));
+    html+=_fixCards.join('');
     fixEl.innerHTML=html;
   }catch(e){
     if(e.message&&e.message.includes('429')){
