@@ -296,6 +296,8 @@ APIF_LEAGUE_MAP = {
     'SC1': {'id': 180, 'season': 2025},  # Scottish Championship
     'GL':  {'id': 197, 'season': 2025}, 'BPL': {'id': 144, 'season': 2025},
     'AFL': {'id': 218, 'season': 2025}, 'PEK': {'id': 106, 'season': 2025},
+    # Romania / Bulgaria
+    'ROU': {'id': 283, 'season': 2025}, 'BUL': {'id': 172, 'season': 2025},
     # Denmark / Switzerland / Russia
     'DSL': {'id': 119, 'season': 2025}, 'SSL': {'id': 207, 'season': 2025},
     'RUS': {'id': 235, 'season': 2025},
@@ -629,6 +631,8 @@ _LEAGUE_CAL_DEFAULTS = {
     'ECL': {'homeWinPct':0.40,'drawPct':0.29,'awayWinPct':0.31,'avgHomeGoals':1.26,'avgAwayGoals':1.11,'avgTotalGoals':2.37,'homeAdvFactor':1.13,'over25Rate':0.50,'bttsRate':0.50,'suggestedRho':-0.12},
     'DED': {'homeWinPct':0.43,'drawPct':0.26,'awayWinPct':0.31,'avgHomeGoals':1.68,'avgAwayGoals':1.27,'avgTotalGoals':2.95,'homeAdvFactor':1.25,'over25Rate':0.59,'bttsRate':0.57,'suggestedRho':-0.16},
     'PPL': {'homeWinPct':0.43,'drawPct':0.28,'awayWinPct':0.29,'avgHomeGoals':1.40,'avgAwayGoals':1.17,'avgTotalGoals':2.57,'homeAdvFactor':1.20,'over25Rate':0.54,'bttsRate':0.53,'suggestedRho':-0.13},
+    'ROU': {'homeWinPct':0.44,'drawPct':0.27,'awayWinPct':0.29,'avgHomeGoals':1.42,'avgAwayGoals':1.12,'avgTotalGoals':2.54,'homeAdvFactor':1.22,'over25Rate':0.52,'bttsRate':0.50,'suggestedRho':-0.12},
+    'BUL': {'homeWinPct':0.43,'drawPct':0.28,'awayWinPct':0.29,'avgHomeGoals':1.35,'avgAwayGoals':1.10,'avgTotalGoals':2.45,'homeAdvFactor':1.20,'over25Rate':0.50,'bttsRate':0.49,'suggestedRho':-0.13},
 }
 
 
@@ -641,7 +645,7 @@ TODAY_CORE_LEAGUES = [
     'PL', 'ELC', 'L1', 'L2',
     'BL1', 'BL2', 'PD', 'SA', 'FL1',
     'DED', 'PPL', 'TSL', 'SP', 'SC1', 'GL', 'BPL', 'AFL', 'PEK',
-    'DSL', 'SSL', 'RUS',
+    'ROU', 'BUL', 'DSL', 'SSL', 'RUS',
     'NOR', 'SWE', 'BSA', 'BSB', 'MLS', 'ARG', 'LMX',
     'SPL', 'JPL', 'KCL',
     'CL', 'EL', 'ECL',

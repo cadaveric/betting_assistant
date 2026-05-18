@@ -1455,6 +1455,8 @@ select,input[type=text],input[type=number]{
         <option value="BPL">First Division A (Belgium) [odds only]</option>
         <option value="AFL">Bundesliga (Austria) [odds only]</option>
         <option value="PEK">Ekstraklasa (Poland) [odds only]</option>
+        <option value="ROU">Liga 1 (Romania) [odds only]</option>
+        <option value="BUL">First Pro League (Bulgaria) [odds only]</option>
         <option value="DSL">Superliga (Denmark) [odds only]</option>
         <option value="SSL">Super League (Switzerland) [odds only]</option>
         <option value="NOR">Eliteserien (Norway) [odds only]</option>
@@ -2655,7 +2657,7 @@ async function ensureTeamStatsReady(showProgress, timeoutMs=22000){
 
 // ── LEAGUE BASELINES ─────────────────────────────────────────────────────────
 // Baselines — overridden by live fdco data when available
-const LG_AVG={PL:1.36,ELC:1.38,PD:1.28,BL1:1.55,SA:1.25,FL1:1.22,PPL:1.30,DED:1.58,CL:1.40,EL:1.35,EC:1.20,WC:1.18,BSA:1.32};
+const LG_AVG={PL:1.36,ELC:1.38,PD:1.28,BL1:1.55,SA:1.25,FL1:1.22,PPL:1.30,DED:1.58,CL:1.40,EL:1.35,EC:1.20,WC:1.18,BSA:1.32,ROU:1.28,BUL:1.22};
 let liveLgAvg=null, liveLgSot=null;
 function computeLiveBaselines(){
   const vals=Object.values(teamStatsMap);
@@ -2666,8 +2668,8 @@ function computeLiveBaselines(){
   if(xgV.length>=8) liveLgAvg=xgV.reduce((a,b)=>a+b,0)/xgV.length;
   if(liveLgAvg)console.log('[Baselines] live xG/g:'+liveLgAvg.toFixed(2)+' SoT/g:'+liveLgSot?.toFixed(1));
 }
-const LG_SOT={PL:4.8,ELC:4.5,PD:4.2,BL1:5.1,SA:4.0,FL1:4.2,PPL:4.3,DED:5.0,CL:4.6,EL:4.3,EC:3.9,WC:3.7,BSA:4.1};
-const LG_CONV={PL:0.285,ELC:0.30,PD:0.30,BL1:0.30,SA:0.31,FL1:0.29,PPL:0.30,DED:0.31,CL:0.30,EL:0.31,EC:0.31,WC:0.32,BSA:0.32};
+const LG_SOT={PL:4.8,ELC:4.5,PD:4.2,BL1:5.1,SA:4.0,FL1:4.2,PPL:4.3,DED:5.0,CL:4.6,EL:4.3,EC:3.9,WC:3.7,BSA:4.1,ROU:4.0,BUL:3.8};
+const LG_CONV={PL:0.285,ELC:0.30,PD:0.30,BL1:0.30,SA:0.31,FL1:0.29,PPL:0.30,DED:0.31,CL:0.30,EL:0.31,EC:0.31,WC:0.32,BSA:0.32,ROU:0.31,BUL:0.32};
 const LG_CORN={PL:4.5,ELC:4.6,PD:4.2,BL1:4.8,SA:4.0,FL1:4.1,PPL:4.3,DED:4.7,CL:4.4,EL:4.3,EC:4.0,WC:3.8,BSA:4.2};
 const LG_CARD={PL:1.4,ELC:1.5,PD:1.7,BL1:1.3,SA:1.6,FL1:1.5,PPL:1.5,DED:1.3,CL:1.3,EL:1.3,EC:1.3,WC:1.3,BSA:1.6};
 
