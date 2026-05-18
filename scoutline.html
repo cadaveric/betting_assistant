@@ -4243,16 +4243,29 @@ async function loadFixtures(){
       <button class="mini-action" onclick="refreshLeague()">${t('fix.refresh')} ${selectedLabel}</button>
     </div>`;
     const _fixCards=await Promise.all(matches.map(async m=>{
-      const hLookup=m.homeTeam.id?null:tableTeamLookup(table,m.homeTeam.name);
-      const aLookup=m.awayTeam.id?null:tableTeamLookup(table,m.awayTeam.name);
-      const hI=standMap[m.homeTeam.id]||(hLookup?{pos:hLookup.row.position,pts:hLookup.row.points,idx:hLookup.idx}:{pos:10,pts:20,idx:9});
-      const aI=standMap[m.awayTeam.id]||(aLookup?{pos:aLookup.row.position,pts:aLookup.row.points,idx:aLookup.idx}:{pos:10,pts:20,idx:9});
+      // Resolve team index: ID lookup first, then name lookup if ID misses (cross-API ID mismatch)
+      const _hById=standMap[m.homeTeam.id], _aById=standMap[m.awayTeam.id];
+      const hLookup=_hById?null:tableTeamLookup(table,m.homeTeam.name);
+      const aLookup=_aById?null:tableTeamLookup(table,m.awayTeam.name);
+      const hI=_hById||(hLookup?{pos:hLookup.row.position,pts:hLookup.row.points,idx:hLookup.idx}:{pos:10,pts:20,idx:9});
+      const aI=_aById||(aLookup?{pos:aLookup.row.position,pts:aLookup.row.points,idx:aLookup.idx}:{pos:10,pts:20,idx:9});
       let pred={pH:34,pD:32,pA:34,hLam:'1.20',aLam:'1.10',scoreH:1,scoreA:1,conf:40,pOver25:45,pOver35:25,pBTTS:45,pHT_over05:55,pHT_over15:25,pCorners_over85:50,pCorners_over105:30,pCards_over25:50,pHCS:30,pACS:25,hDataBadge:'est.',aDataBadge:'est.'};
       let fxO=null;
       if(standRows.length>Math.max(hI.idx,aI.idx)){
         let fxH=0,fxD=0,fxA=0;
-        fxO=(oddsCache[lg]||[]).find(g=>g.home===m.homeTeam.name||g.away===m.awayTeam.name||g.home===m.awayTeam.name||g.away===m.homeTeam.name);
-        if(fxO){const fl=fxO.home===m.awayTeam.name;fxH=fl?fxO.best_a:fxO.best_h;fxD=fxO.best_d;fxA=fl?fxO.best_h:fxO.best_a;}
+        // Use fuzzy-match odds lookup (same as predictor tab) so name variants don't lose odds
+        fxO=findFixtureOdds(m.homeTeam.name,m.awayTeam.name);
+        if(fxO){
+          // Use same word-level fuzzy check as findFixtureOdds to detect home/away swap
+          const _oddsHomeMatchesFixtureHome=(()=>{
+            const an=_normName(fxO.home),bn=_normName(m.homeTeam.name);
+            if(an===bn||an.includes(bn)||bn.includes(an))return true;
+            const aw=new Set(_teamWords(fxO.home)),bw=new Set(_teamWords(m.homeTeam.name));
+            return [...aw].filter(w=>bw.has(w)).length>0;
+          })();
+          const fl=!_oddsHomeMatchesFixtureHome;
+          fxH=fl?fxO.best_a:fxO.best_h;fxD=fxO.best_d;fxA=fl?fxO.best_h:fxO.best_a;
+        }
         pred=deepPredict(hI.idx,aI.idx,'balanced','1.1',null,fxH,fxD,fxA,fxO?.odds_movement);
         // ML blend — same logic as Predictor tab so both surfaces show consistent predictions
         try{
